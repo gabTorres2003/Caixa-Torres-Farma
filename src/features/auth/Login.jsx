@@ -1,45 +1,51 @@
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { LogIn } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../core/hooks/useAuth';
+import React, { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { LogIn } from 'lucide-react'
+import { useAuth } from '../../core/hooks/useAuth'
 
-import { Card } from '../../shared/components/cards/Card';
-import { FormInput } from '../../shared/components/forms/FormInput';
-import { FormError } from '../../shared/components/forms/FormError';
-import { Button } from '../../shared/components/buttons/Button';
+import { Card } from '../../shared/components/cards/Card'
+import { FormInput } from '../../shared/components/forms/FormInput'
+import { FormError } from '../../shared/components/forms/FormError'
+import { Button } from '../../shared/components/buttons/Button'
 
 export const Login = () => {
   // 1. Agrupamento de todos os Hooks no topo
-  const navigate = useNavigate();
-  const { login } = useAuth();
-  const { register, handleSubmit, formState: { errors } } = useForm();
-  
-  const [isLoading, setIsLoading] = useState(false);
-  const [authError, setAuthError] = useState('');
+  const { login } = useAuth()
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm()
+
+  const [isLoading, setIsLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
 
   // 2. Função de submissão
   const onSubmit = async (data) => {
-    setIsLoading(true);
-    setAuthError('');
-    
+    setIsLoading(true)
+    setAuthError('')
+
     try {
-      await login(data.email, data.password);
-      // Se deu certo, redireciona para o Dashboard
-      navigate('/dashboard'); 
+      await login(data.email, data.password)
     } catch (error) {
-      console.error(error);
-      setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.');
+      console.error(error)
+      setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.')
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   // 3. Renderização
   return (
     <Card style={{ width: '100%', maxWidth: '420px' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <h2 style={{ color: 'var(--color-primary)', fontSize: '1.75rem', fontWeight: 'bold' }}>
+        <h2
+          style={{
+            color: 'var(--color-primary)',
+            fontSize: '1.75rem',
+            fontWeight: 'bold',
+          }}
+        >
           Torres Farma
         </h2>
         <p style={{ color: 'var(--color-text-muted)', marginTop: '4px' }}>
@@ -47,8 +53,10 @@ export const Login = () => {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+      >
         {/* Componente Modular de Erro */}
         <FormError message={authError} />
 
@@ -58,12 +66,12 @@ export const Login = () => {
           type="email"
           placeholder="operador@torresfarma.com.br"
           autoComplete="username"
-          register={register('email', { 
+          register={register('email', {
             required: 'O e-mail é obrigatório',
             pattern: {
               value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-              message: 'E-mail inválido'
-            }
+              message: 'E-mail inválido',
+            },
           })}
           error={errors.email}
         />
@@ -74,9 +82,12 @@ export const Login = () => {
           type="password"
           placeholder="••••••••"
           autoComplete="current-password"
-          register={register('password', { 
+          register={register('password', {
             required: 'A senha é obrigatória',
-            minLength: { value: 6, message: 'A senha deve ter no mínimo 6 caracteres' }
+            minLength: {
+              value: 6,
+              message: 'A senha deve ter no mínimo 6 caracteres',
+            },
           })}
           error={errors.password}
         />
@@ -88,5 +99,5 @@ export const Login = () => {
         </div>
       </form>
     </Card>
-  );
-};
+  )
+}

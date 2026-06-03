@@ -8,10 +8,9 @@ export const AuthLayout = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'var(--color-primary)', 
+      backgroundColor: 'var(--color-primary)',
       padding: '20px'
     }}>
-      {/* O Outlet é onde a tela de Login será renderizada */}
       <Outlet />
     </div>
   );
