@@ -7,7 +7,8 @@ export const FormInput = ({
   type = 'text', 
   placeholder, 
   register, 
-  error 
+  error,
+  ...props // 1. Captura todas as propriedades extras
 }) => {
   return (
     <Input
@@ -15,8 +16,9 @@ export const FormInput = ({
       id={id}
       type={type}
       placeholder={placeholder}
-      error={error?.message} // Extrai apenas a mensagem de erro do objeto
-      {...register} // Espalha as funções onChange, onBlur e name 
+      error={error?.message} 
+      {...register} 
+      {...props} // 2. Repassa para o componente base
     />
   );
 };

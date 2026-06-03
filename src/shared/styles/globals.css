@@ -189,3 +189,19 @@ body {
 .modal-close-btn:hover {
   color: var(--color-text-main);
 }
+
+/* --- Form Alerts --- */
+.form-alert-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #fef2f2;
+  color: var(--color-error);
+  border: 1px solid #fca5a5;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
