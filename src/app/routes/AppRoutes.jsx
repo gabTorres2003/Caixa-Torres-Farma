@@ -5,6 +5,7 @@ import { MainLayout } from '../../shared/components/layouts/MainLayout';
 import { Login } from '../../features/auth/Login';
 import { Dashboard } from '../../features/dashboard/Dashboard';
 import { ShiftHandover } from '../../features/shift-handover/ShiftHandover';
+import { Deposits } from '../../features/deposits/Deposits';
 
 const PrivateRoute = ({ children }) => {
   const { user, isLoading } = useAuth();
@@ -47,7 +48,7 @@ export const AppRoutes = () => {
         }>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="troca-turno" element={<ShiftHandover />} />
-          <Route path="depositos" element={<div style={{padding: '20px'}}>Módulo Depósitos em construção...</div>} />
+          <Route path="depositos" element={<Deposits />} />
           <Route path="pre-fechamento" element={<div style={{padding: '20px'}}>Módulo Pré-Fechamento em construção...</div>} />
           <Route path="divergencias" element={<div style={{padding: '20px'}}>Módulo Divergências em construção...</div>} />
           <Route path="relatorios" element={<div style={{padding: '20px'}}>Módulo Relatórios em construção...</div>} />
