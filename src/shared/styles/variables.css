@@ -1,0 +1,24 @@
+:root {
+  /* Identidade Visual - Drogaria Torres Farma */
+  --color-primary: #1e3a8a;     /* Azul escuro institucional */
+  --color-primary-hover: #172554;
+  --color-secondary: #3b82f6;   /* Azul médio */
+  --color-secondary-hover: #2563eb;
+  
+  /* Cores Complementares e Neutras */
+  --color-background: #f3f4f6;  /* Cinza claro (fundo do sistema) */
+  --color-surface: #ffffff;     /* Branco (fundo de cards e modais) */
+  --color-border: #d1d5db;
+  
+  /* Textos */
+  --color-text-main: #1f2937;
+  --color-text-muted: #6b7280;
+  
+  /* Feedbacks (Erros e Sucesso) */
+  --color-error: #ef4444;
+  --color-success: #10b981;
+  
+  /* Espaçamentos e Bordas */
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
