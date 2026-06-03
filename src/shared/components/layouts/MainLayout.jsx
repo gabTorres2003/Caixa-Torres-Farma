@@ -19,11 +19,11 @@ export const MainLayout = () => {
   const menuItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
-    { path: '/depositos', label: 'Depósitos', icon: Banknotes },
+    { path: '/depositos', label: 'Depósitos', icon: Banknote }, 
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
     { path: '/divergencias', label: 'Divergências', icon: AlertTriangle },
     { path: '/relatorios', label: 'Relatórios', icon: FileText },
-  ]
+  ];
 
   return (
     <div
