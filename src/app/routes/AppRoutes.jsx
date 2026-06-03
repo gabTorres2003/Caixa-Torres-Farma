@@ -8,6 +8,7 @@ import { ShiftHandover } from '../../features/shift-handover/ShiftHandover';
 import { Deposits } from '../../features/deposits/Deposits';
 import { PreClosing } from '../../features/pre-closing/PreClosing';
 import { Divergences } from '../../features/divergences/Divergences';
+import { Reports } from '../../features/reports/Reports';
 
 const PrivateRoute = ({ children }) => {
   const { user, isLoading } = useAuth();
@@ -53,7 +54,7 @@ export const AppRoutes = () => {
           <Route path="depositos" element={<Deposits />} />
           <Route path="pre-fechamento" element={<PreClosing />} />
           <Route path="divergencias" element={<Divergences />} />
-          <Route path="relatorios" element={<div style={{padding: '20px'}}>Módulo Relatórios em construção...</div>} />
+          <Route path="relatorios" element={<Reports />} />
           
           {/* Se acessar apenas "/", joga direto pro dashboard */}
           <Route index element={<Navigate to="/dashboard" replace />} />
