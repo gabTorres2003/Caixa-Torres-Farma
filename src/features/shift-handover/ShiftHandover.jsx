@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../../core/hooks/useAuth';
-import { supabase } from '../../infrastructure/supabaseClient'; 
+import { supabase } from '../../infrastructure/supabase'; 
 import { 
   Plus, FileText, CheckCircle, AlertCircle, 
   DollarSign, Printer, Eye, Loader2 
