@@ -16,14 +16,18 @@ export const MainLayout = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
 
-  const menuItems = [
+  const baseMenuItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
-    { path: '/depositos', label: 'Depósitos', icon: Banknote }, 
+    { path: '/depositos', label: 'Depósitos', icon: Banknote },
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
     { path: '/divergencias', label: 'Divergências', icon: AlertTriangle },
     { path: '/relatorios', label: 'Relatórios', icon: FileText },
   ];
+
+  const menuItems = user?.role === 'ADMIN' 
+    ? [...baseMenuItems, { path: '/gerenciar-usuarios', label: 'Gerenciar Usuários', icon: User }]
+    : baseMenuItems;
 
   return (
     <div

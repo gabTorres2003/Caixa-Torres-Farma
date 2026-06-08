@@ -9,6 +9,7 @@ import { Deposits } from '../../features/deposits/Deposits';
 import { PreClosing } from '../../features/pre-closing/PreClosing';
 import { Divergences } from '../../features/divergences/Divergences';
 import { Reports } from '../../features/reports/Reports';
+import { UserManagement } from '../../features/auth/UserManagement';
 
 const PrivateRoute = ({ children }) => {
   const { user, isLoading } = useAuth();
@@ -55,6 +56,9 @@ export const AppRoutes = () => {
           <Route path="pre-fechamento" element={<PreClosing />} />
           <Route path="divergencias" element={<Divergences />} />
           <Route path="relatorios" element={<Reports />} />
+          <Route path="gerenciar-usuarios" element={
+            user?.role === 'ADMIN' ? <UserManagement /> : <Navigate to="/dashboard" replace />
+          } />
           
           {/* Se acessar apenas "/", joga direto pro dashboard */}
           <Route index element={<Navigate to="/dashboard" replace />} />
