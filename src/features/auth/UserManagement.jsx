@@ -16,6 +16,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const detachedAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { 
     persistSession: false,
+    storageKey: 'torres-farma-detached-auth',
     autoRefreshToken: false,
     detectSessionInUrl: false
   }
