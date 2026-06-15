@@ -14,7 +14,11 @@ import { Table } from '../../shared/components/tables/Table';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const detachedAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: false }
+  auth: { 
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  }
 });
 
 export const UserManagement = () => {

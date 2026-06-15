@@ -11,22 +11,33 @@ import { Divergences } from '../../features/divergences/Divergences';
 import { Reports } from '../../features/reports/Reports';
 import { UserManagement } from '../../features/auth/UserManagement';
 
+// Guardião de Rotas Privadas
 const PrivateRoute = ({ children }) => {
   const { user, isLoading } = useAuth();
-  
   if (isLoading) {
     return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Carregando sistema...</div>;
   }
-  
   if (!user) return <Navigate to="/login" replace />;
   return children;
 };
 
+// Guardião de Rotas Públicas
 const PublicRoute = ({ children }) => {
   const { user, isLoading } = useAuth();
-  
   if (isLoading) return null;
   if (user) return <Navigate to="/dashboard" replace />;
+  return children;
+};
+
+// Guardião de Rotas Administrativas (Proteção Escopada)
+const AdminRoute = ({ children }) => {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Validando credenciais de Admin...</div>;
+  }
+  if (!user || user.role !== 'ADMIN') {
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 };
 
@@ -56,15 +67,17 @@ export const AppRoutes = () => {
           <Route path="pre-fechamento" element={<PreClosing />} />
           <Route path="divergencias" element={<Divergences />} />
           <Route path="relatorios" element={<Reports />} />
+          
+          {/* Rota Administrativa protegida pelo novo Guardião */}
           <Route path="gerenciar-usuarios" element={
-            user?.role === 'ADMIN' ? <UserManagement /> : <Navigate to="/dashboard" replace />
+            <AdminRoute>
+              <UserManagement />
+            </AdminRoute>
           } />
           
-          {/* Se acessar apenas "/", joga direto pro dashboard */}
           <Route index element={<Navigate to="/dashboard" replace />} />
         </Route>
 
-        {/* Catch-all: qualquer URL inventada joga pro login (que redirecionará pro dashboard se estiver logado) */}
         <Route path="*" element={<Navigate to="/login" replace />} />
         
       </Routes>
