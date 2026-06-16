@@ -35,13 +35,6 @@ export const ShiftHandover = () => {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
-  } = useForm()
-
-  const {
-    register,
-    handleSubmit,
-    reset,
     setValue,
     formState: { errors },
   } = useForm()
