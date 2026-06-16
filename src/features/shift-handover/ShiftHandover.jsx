@@ -4,7 +4,7 @@ import { useAuth } from '../../core/hooks/useAuth';
 import { supabase } from '../../infrastructure/supabase/supabaseClient'; 
 import { 
   Plus, FileText, CheckCircle, AlertCircle, 
-  DollarSign, Printer, Eye, Loader2, Clock 
+  Loader2, Clock 
 } from 'lucide-react';
 
 import { Card } from '../../shared/components/cards/Card';
@@ -23,7 +23,7 @@ export const ShiftHandover = () => {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
-  // --- FUNÇÃO AUXILIAR: Formata o timestamp do banco para o padrão HH:MM local ---
+  // Função auxiliar para formatar o timestamp do banco para o padrão HH:MM local da drogaria
   const formatarHora = (timestamp) => {
     if (!timestamp) return '--:--';
     return new Date(timestamp).toLocaleTimeString('pt-BR', {
@@ -32,7 +32,7 @@ export const ShiftHandover = () => {
     });
   };
 
-  // --- BUSCA REAL DE DADOS (Apenas do dia atual e da loja do usuário) ---
+  // --- BUSCA REAL DE DADOS (Dia atual e Filial correspondente) ---
   const carregarEntregasDoDia = useCallback(async () => {
     if (!user?.store_id) return;
     setIsPageLoading(true);
@@ -59,7 +59,7 @@ export const ShiftHandover = () => {
     carregarEntregasDoDia();
   }, [carregarEntregasDoDia]);
 
-  // --- OPERAÇÃO: CAIXA DA MANHÃ (INSERT REAL SEM O CAMPO ROTA) ---
+  // --- OPERAÇÃO: CAIXA DA MANHÃ (INSERT) ---
   const onAdicionarEntrega = async (data) => {
     setIsActionLoading(true);
     try {
@@ -69,13 +69,13 @@ export const ShiftHandover = () => {
           comanda: data.comanda,
           valor: parseFloat(data.valor),
           tipo_saida: data.tipo,
-          forma_pagamento_real: data.tipo, // Inicialmente igual à saída
+          forma_pagamento_real: data.tipo, 
           store_id: user.store_id,
           created_by: user.id
         }]);
 
       if (error) throw error;
-      reset({ comanda: '', valor: '' }); // Limpeza de campos otimizada sem rota
+      reset({ comanda: '', valor: '' }); // Reset limpo sem rota
       await carregarEntregasDoDia();
     } catch (err) {
       alert('Erro ao salvar comanda: ' + err.message);
@@ -84,7 +84,7 @@ export const ShiftHandover = () => {
     }
   };
 
-  // --- OPERAÇÃO: CAIXA DA TARDE (UPDATE REAL DE CONFERÊNCIA) ---
+  // --- OPERAÇÃO: CAIXA DA TARDE (UPDATES) ---
   const handleToggleCheck = async (id, statusAtual) => {
     try {
       const { error } = await supabase
@@ -123,7 +123,7 @@ export const ShiftHandover = () => {
         .eq('conferido', false);
 
       if (error) throw error;
-      alert('Turno vespertino consolidado com sucesso no banco!');
+      alert('Turno vespertino consolidado com sucesso!');
       await carregarEntregasDoDia();
     } catch (err) {
       alert('Erro ao encerrar turno: ' + err.message);
@@ -132,7 +132,6 @@ export const ShiftHandover = () => {
     }
   };
 
-  // --- CÁLCULO DE TOTAIS REAIS ---
   const totalDinheiro = entregas.filter(e => e.tipo_saida === 'D').reduce((acc, curr) => acc + curr.valor, 0);
   const totalCartao = entregas.filter(e => e.tipo_saida === 'C').reduce((acc, curr) => acc + curr.valor, 0);
 
@@ -148,7 +147,6 @@ export const ShiftHandover = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* Estilo embutido para otimização de impressão */}
       <style>{`
         @media print {
           aside, nav, button, .no-print { display: none !important; }
@@ -168,9 +166,7 @@ export const ShiftHandover = () => {
         </p>
       </div>
 
-      {/* =========================================================
-          INTERFACE: CAIXA DA MANHÃ (Lançamentos em Colunas Dinâmicas)
-          ========================================================= */}
+      {/* VISÃO: CAIXA DA MANHÃ */}
       {role === 'CAIXA_MANHA' && (
         <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '24px', alignItems: 'start' }}>
           
@@ -180,7 +176,7 @@ export const ShiftHandover = () => {
                 <FormInput
                   label="Nome do Cliente / Nº Comanda"
                   id="comanda"
-                  placeholder="Ex: Fernanda"
+                  placeholder="Ex: Luiz"
                   register={register('comanda', { required: 'Identificador da comanda é obrigatório' })}
                   error={errors.comanda}
                 />
@@ -244,15 +240,9 @@ export const ShiftHandover = () => {
         </div>
       )}
 
-      {/* =========================================================
-          INTERFACE: CAIXA DA TARDE (Checklist de Cestinha & Divergência)
-          ========================================================= */}
+      {/* VISÃO: CAIXA DA TARDE */}
       {role === 'CAIXA_TARDE' && (
         <Card title="Conferência de Comandas Físicas (Cestinha)" icon={CheckCircle}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginBottom: '20px' }}>
-            Retire as comandas físicas trazidas pelos motoboys e marque o checklist. Se a forma de pagamento final divergiu do caderno, altere na coluna correspondente.
-          </p>
-
           <Table
             columns={[
               {
@@ -266,13 +256,10 @@ export const ShiftHandover = () => {
                   />
                 )
               },
-              { header: 'Hora Lançamento', render: (row) => formatarHora(row.created_at) },
+              { header: 'Hora Cadastro', render: (row) => formatarHora(row.created_at) },
               { header: 'Comanda / Cliente', accessorKey: 'comanda' },
               { header: 'Valor', render: (row) => `R$ ${row.valor.toFixed(2).replace('.', ',')}` },
-              { 
-                header: 'Coluna Origem', 
-                render: (row) => row.tipo_saida === 'D' ? 'Dinheiro (D)' : 'Cartão (C)' 
-              },
+              { header: 'Lançado Como', render: (row) => row.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão / Outros' },
               {
                 header: 'Forma Real Recebida',
                 render: (row) => (
@@ -322,11 +309,9 @@ export const ShiftHandover = () => {
         </Card>
       )}
 
-      {/* =========================================================
-          INTERFACE: ADMINISTRADOR (Auditoria Geral)
-          ========================================================= */}
+      {/* VISÃO: ADMINISTRADOR */}
       {role === 'ADMIN' && (
-        <Card title="Espelho de Auditoria Geral dos Caixas" icon={Eye}>
+        <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText}>
           <div style={{ padding: '16px', backgroundColor: 'var(--color-background)', borderRadius: '8px', marginBottom: '20px' }}>
             <p style={{ fontSize: '0.95rem' }}>Total Geral em Dinheiro Declarado: <strong>R$ {totalDinheiro.toFixed(2).replace('.', ',')}</strong></p>
             <p style={{ fontSize: '0.95rem', marginTop: '4px' }}>Total Geral em Cartões Declarado: <strong>R$ {totalCartao.toFixed(2).replace('.', ',')}</strong></p>
