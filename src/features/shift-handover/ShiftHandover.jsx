@@ -4,7 +4,7 @@ import { useAuth } from '../../core/hooks/useAuth';
 import { supabase } from '../../infrastructure/supabase/supabaseClient'; 
 import { 
   Plus, FileText, CheckCircle, AlertCircle, 
-  DollarSign, Printer, Eye, Loader2 
+  DollarSign, Printer, Eye, Loader2, Clock 
 } from 'lucide-react';
 
 import { Card } from '../../shared/components/cards/Card';
@@ -22,6 +22,15 @@ export const ShiftHandover = () => {
   const [obsTarde, setObsTarde] = useState('');
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
+
+  // --- FUNÇÃO AUXILIAR: Formata o timestamp do banco para o padrão HH:MM local ---
+  const formatarHora = (timestamp) => {
+    if (!timestamp) return '--:--';
+    return new Date(timestamp).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   // --- BUSCA REAL DE DADOS (Apenas do dia atual e da loja do usuário) ---
   const carregarEntregasDoDia = useCallback(async () => {
@@ -50,7 +59,7 @@ export const ShiftHandover = () => {
     carregarEntregasDoDia();
   }, [carregarEntregasDoDia]);
 
-  // --- OPERAÇÃO: CAIXA DA MANHÃ (INSERT REAL) ---
+  // --- OPERAÇÃO: CAIXA DA MANHÃ (INSERT REAL SEM O CAMPO ROTA) ---
   const onAdicionarEntrega = async (data) => {
     setIsActionLoading(true);
     try {
@@ -58,7 +67,6 @@ export const ShiftHandover = () => {
         .from('pending_deliveries')
         .insert([{
           comanda: data.comanda,
-          rota: data.rota || 'Balcão',
           valor: parseFloat(data.valor),
           tipo_saida: data.tipo,
           forma_pagamento_real: data.tipo, // Inicialmente igual à saída
@@ -67,7 +75,7 @@ export const ShiftHandover = () => {
         }]);
 
       if (error) throw error;
-      reset({ comanda: '', valor: '', rota: '' });
+      reset({ comanda: '', valor: '' }); // Limpeza de campos otimizada sem rota
       await carregarEntregasDoDia();
     } catch (err) {
       alert('Erro ao salvar comanda: ' + err.message);
@@ -177,12 +185,6 @@ export const ShiftHandover = () => {
                   error={errors.comanda}
                 />
                 <FormInput
-                  label="Rota / Bairro"
-                  id="rota"
-                  placeholder="Ex: Rosário"
-                  register={register('rota')}
-                />
-                <FormInput
                   label="Valor Real (R$)"
                   id="valor"
                   type="number"
@@ -192,10 +194,10 @@ export const ShiftHandover = () => {
                   error={errors.valor}
                 />
                 <div className="input-wrapper">
-                  <label className="input-label">Coluna do Caderno</label>
+                  <label className="input-label">Forma de Pagamento</label>
                   <select id="tipo" className="input-field" {...register('tipo')}>
-                    <option value="D">Coluna Q (Dinheiro)</option>
-                    <option value="C">Coluna E (Cartão / Outros)</option>
+                    <option value="D">Dinheiro</option>
+                    <option value="C">Cartão / Outros</option>
                   </select>
                 </div>
                 <Button type="submit" isLoading={isActionLoading}>Gravar na Tabela</Button>
@@ -213,19 +215,27 @@ export const ShiftHandover = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               <div>
                 <h4 style={{ backgroundColor: '#fee2e2', padding: '10px', borderRadius: '6px', color: '#991b1b', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
-                  COLUNA D (Dinheiro) — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}
+                  Dinheiro — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}
                 </h4>
                 <Table 
-                  columns={[{ header: 'Comanda (Rota)', render: (r) => `${r.comanda} (${r.rota})` }, { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` }]} 
+                  columns={[
+                    { header: 'Hora', render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)' }}><Clock size={12}/>{formatarHora(r.created_at)}</span> },
+                    { header: 'Comanda', accessorKey: 'comanda' }, 
+                    { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` }
+                  ]} 
                   data={entregas.filter(e => e.tipo_saida === 'D')}
                 />
               </div>
               <div>
                 <h4 style={{ backgroundColor: '#e0e7ff', padding: '10px', borderRadius: '6px', color: '#1e40af', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
-                  COLUNA C (Cartão) — Total: R$ {totalCartao.toFixed(2).replace('.', ',')}
+                  Cartão / Outros — Total: R$ {totalCartao.toFixed(2).replace('.', ',')}
                 </h4>
                 <Table 
-                  columns={[{ header: 'Comanda (Rota)', render: (r) => `${r.comanda} (${r.rota})` }, { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` }]} 
+                  columns={[
+                    { header: 'Hora', render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)' }}><Clock size={12}/>{formatarHora(r.created_at)}</span> },
+                    { header: 'Comanda', accessorKey: 'comanda' }, 
+                    { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` }
+                  ]} 
                   data={entregas.filter(e => e.tipo_saida === 'C')}
                 />
               </div>
@@ -256,8 +266,8 @@ export const ShiftHandover = () => {
                   />
                 )
               },
+              { header: 'Hora Lançamento', render: (row) => formatarHora(row.created_at) },
               { header: 'Comanda / Cliente', accessorKey: 'comanda' },
-              { header: 'Rota Lançada', accessorKey: 'rota' },
               { header: 'Valor', render: (row) => `R$ ${row.valor.toFixed(2).replace('.', ',')}` },
               { 
                 header: 'Coluna Origem', 
@@ -312,9 +322,9 @@ export const ShiftHandover = () => {
         </Card>
       )}
 
-      {/* ===========================
-          INTERFACE: ADMINISTRADOR 
-          =========================== */}
+      {/* =========================================================
+          INTERFACE: ADMINISTRADOR (Auditoria Geral)
+          ========================================================= */}
       {role === 'ADMIN' && (
         <Card title="Espelho de Auditoria Geral dos Caixas" icon={Eye}>
           <div style={{ padding: '16px', backgroundColor: 'var(--color-background)', borderRadius: '8px', marginBottom: '20px' }}>
@@ -323,8 +333,8 @@ export const ShiftHandover = () => {
           </div>
           <Table 
             columns={[
+              { header: 'Hora', render: (r) => formatarHora(r.created_at) },
               { header: 'Comanda', accessorKey: 'comanda' },
-              { header: 'Rota', accessorKey: 'rota' },
               { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` },
               { header: 'Lançado Manhã', render: (r) => r.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão' },
               { header: 'Pago Real Tarde', render: (r) => r.forma_pagamento_real },
