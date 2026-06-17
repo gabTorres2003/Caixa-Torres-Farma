@@ -7,14 +7,12 @@ import {
   FileText,
   CheckCircle,
   AlertCircle,
-  DollarSign,
-  Printer,
-  Eye,
   Loader2,
   Clock,
   Pencil,
   Trash2,
   X,
+  MessageSquare,
 } from 'lucide-react'
 
 import { Card } from '../../shared/components/cards/Card'
@@ -29,7 +27,12 @@ export const ShiftHandover = () => {
   const [entregas, setEntregas] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
+
+  // Estado para anotações gerais da folha impressa e controle do PDF
   const [obsTarde, setObsTarde] = useState('')
+  const [turnoEncerrado, setTurnoEncerrado] = useState(false)
+
+  const [editingId, setEditingId] = useState(null)
 
   const {
     register,
@@ -38,9 +41,8 @@ export const ShiftHandover = () => {
     setValue,
     formState: { errors },
   } = useForm()
-  const [editingId, setEditingId] = useState(null)
 
-  // Função auxiliar para formatar o timestamp do banco para o padrão HH:MM local da drogaria
+  // --- FUNÇÕES AUXILIARES ---
   const formatarHora = (timestamp) => {
     if (!timestamp) return '--:--'
     return new Date(timestamp).toLocaleTimeString('pt-BR', {
@@ -49,7 +51,14 @@ export const ShiftHandover = () => {
     })
   }
 
-  // --- BUSCA REAL DE DADOS (Dia atual e Filial correspondente) ---
+  const getNomePagamento = (sigla) => {
+    if (sigla === 'D') return 'Dinheiro'
+    if (sigla === 'C') return 'Cartão'
+    if (sigla === 'PX') return 'Pix'
+    return sigla
+  }
+
+  // --- BUSCA REAL DE DADOS ---
   const carregarEntregasDoDia = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
@@ -76,8 +85,7 @@ export const ShiftHandover = () => {
     carregarEntregasDoDia()
   }, [carregarEntregasDoDia])
 
-  // --- OPERAÇÃO: CAIXA DA MANHÃ (DELETE / UPDATE) ---
-
+  // --- CONTROLES DA MANHÃ (INSERT/UPDATE/DELETE) ---
   const handleIniciarEdicao = (entrega) => {
     setEditingId(entrega.id)
     setValue('comanda', entrega.comanda)
@@ -91,16 +99,12 @@ export const ShiftHandover = () => {
   }
 
   const handleExcluirEntrega = async (id) => {
-    if (
-      !window.confirm('Tem certeza que deseja excluir esta comanda da folha?')
-    )
-      return
+    if (!window.confirm('Tem certeza que deseja excluir esta comanda?')) return
     try {
       const { error } = await supabase
         .from('pending_deliveries')
         .delete()
         .eq('id', id)
-
       if (error) throw error
       if (editingId === id) handleCancelarEdicao()
       await carregarEntregasDoDia()
@@ -109,12 +113,10 @@ export const ShiftHandover = () => {
     }
   }
 
-  // --- OPERAÇÃO: CAIXA DA MANHÃ (INSERT/UPDATE) ---
   const onAdicionarEntrega = async (data) => {
     setIsActionLoading(true)
     try {
       if (editingId) {
-        // Fluxo de Atualização (UPDATE)
         const { error } = await supabase
           .from('pending_deliveries')
           .update({
@@ -124,11 +126,9 @@ export const ShiftHandover = () => {
             forma_pagamento_real: data.tipo,
           })
           .eq('id', editingId)
-
         if (error) throw error
         setEditingId(null)
       } else {
-        // Fluxo de Novo Registro (INSERT)
         const { error } = await supabase.from('pending_deliveries').insert([
           {
             comanda: data.comanda,
@@ -139,10 +139,8 @@ export const ShiftHandover = () => {
             created_by: user.id,
           },
         ])
-
         if (error) throw error
       }
-
       reset({ comanda: '', valor: '', tipo: 'D' })
       await carregarEntregasDoDia()
     } catch (err) {
@@ -152,14 +150,13 @@ export const ShiftHandover = () => {
     }
   }
 
-  // --- OPERAÇÃO: CAIXA DA TARDE (UPDATES) ---
+  // --- CONTROLES DA TARDE (UPDATES E OBSERVAÇÕES) ---
   const handleToggleCheck = async (id, statusAtual) => {
     try {
       const { error } = await supabase
         .from('pending_deliveries')
         .update({ conferido: !statusAtual })
         .eq('id', id)
-
       if (error) throw error
       setEntregas((prev) =>
         prev.map((e) => (e.id === id ? { ...e, conferido: !statusAtual } : e)),
@@ -175,7 +172,6 @@ export const ShiftHandover = () => {
         .from('pending_deliveries')
         .update({ forma_pagamento_real: novaForma })
         .eq('id', id)
-
       if (error) throw error
       setEntregas((prev) =>
         prev.map((e) =>
@@ -183,21 +179,45 @@ export const ShiftHandover = () => {
         ),
       )
     } catch (err) {
-      alert('Erro ao mutar forma de pagamento: ' + err.message)
+      alert('Erro ao alterar forma de pagamento: ' + err.message)
+    }
+  }
+
+  const handleAnotarObservacao = async (id, obsAtual) => {
+    const nota = window.prompt(
+      'Digite uma anotação para esta comanda específica:',
+      obsAtual || '',
+    )
+    if (nota !== null) {
+      try {
+        const { error } = await supabase
+          .from('pending_deliveries')
+          .update({ observacoes: nota })
+          .eq('id', id)
+        if (error) throw error
+        setEntregas((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, observacoes: nota } : e)),
+        )
+      } catch (err) {
+        alert('Erro ao salvar anotação: ' + err.message)
+      }
     }
   }
 
   const handleFinalizarTurnoTarde = async () => {
     setIsActionLoading(true)
     try {
+      // Atualiza o status geral sem subscrever as observações individuais
       const { error } = await supabase
         .from('pending_deliveries')
-        .update({ conferido: true, observacoes: obsTarde })
+        .update({ conferido: true })
         .eq('store_id', user.store_id)
         .eq('conferido', false)
 
       if (error) throw error
+
       alert('Turno vespertino consolidado com sucesso!')
+      setTurnoEncerrado(true) // Libera o botão de PDF
       await carregarEntregasDoDia()
     } catch (err) {
       alert('Erro ao encerrar turno: ' + err.message)
@@ -206,12 +226,117 @@ export const ShiftHandover = () => {
     }
   }
 
+  // --- CÁLCULO DE TOTAIS ---
   const totalDinheiro = entregas
     .filter((e) => e.tipo_saida === 'D')
     .reduce((acc, curr) => acc + curr.valor, 0)
   const totalCartao = entregas
     .filter((e) => e.tipo_saida === 'C')
     .reduce((acc, curr) => acc + curr.valor, 0)
+
+  // --- DEFINIÇÃO DAS COLUNAS DA TARDE ---
+  const colunasTarde = [
+    {
+      header: 'Conf.',
+      render: (row) => (
+        <input
+          type="checkbox"
+          checked={row.conferido}
+          onChange={() => handleToggleCheck(row.id, row.conferido)}
+          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+        />
+      ),
+    },
+    {
+      header: 'Hora',
+      render: (row) => (
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+          <Clock size={12} /> {formatarHora(row.created_at)}
+        </span>
+      ),
+    },
+    { header: 'Comanda', accessorKey: 'comanda' },
+    {
+      header: 'Valor',
+      render: (row) => `R$ ${row.valor.toFixed(2).replace('.', ',')}`,
+    },
+    {
+      header: 'Forma Real',
+      className: 'no-print',
+      render: (row) => (
+        <select
+          value={row.forma_pagamento_real || row.tipo_saida}
+          onChange={(e) => handleAlterarFormaReal(row.id, e.target.value)}
+          className="input-field"
+          style={{ padding: '2px 4px', fontSize: '0.85rem' }}
+        >
+          <option value="D">Dinheiro</option>
+          <option value="C">Cartão (POS)</option>
+          <option value="PX">Pix (QR)</option>
+        </select>
+      ),
+    },
+    {
+      header: 'Inconsistência',
+      render: (row) =>
+        row.tipo_saida !== row.forma_pagamento_real ? (
+          <span
+            style={{
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '0.8rem',
+              fontWeight: '600',
+            }}
+          >
+            <AlertCircle size={14} /> Alterado para{' '}
+            {getNomePagamento(row.forma_pagamento_real)}
+          </span>
+        ) : (
+          <span style={{ color: 'var(--color-success)', fontSize: '0.8rem' }}>
+            Bate com Caderno
+          </span>
+        ),
+    },
+    {
+      header: 'Obs.',
+      className: 'no-print',
+      render: (row) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            onClick={() => handleAnotarObservacao(row.id, row.observacoes)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: row.observacoes
+                ? 'var(--color-primary)'
+                : 'var(--color-text-muted)',
+              cursor: 'pointer',
+            }}
+            title={row.observacoes || 'Adicionar Anotação'}
+          >
+            <MessageSquare size={16} />
+          </button>
+          {row.observacoes && (
+            <span
+              style={{
+                fontSize: '0.75rem',
+                color: '#666',
+                maxWidth: '80px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {row.observacoes}
+            </span>
+          )}
+        </div>
+      ),
+    },
+  ]
 
   if (isPageLoading) {
     return (
@@ -238,7 +363,7 @@ export const ShiftHandover = () => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <style>{`
         @media print {
-          aside, nav, button, .no-print { display: none !important; }
+          aside, nav, button, .no-print, .actions-cell { display: none !important; }
           main { padding: 0 !important; }
           .print-card { border: none !important; box-shadow: none !important; }
         }
@@ -261,7 +386,9 @@ export const ShiftHandover = () => {
         </p>
       </div>
 
-      {/* VISÃO: CAIXA DA MANHÃ */}
+      {/* ==============================================
+          VISÃO: CAIXA DA MANHÃ 
+          ============================================== */}
       {role === 'CAIXA_MANHA' && (
         <div
           style={{
@@ -290,9 +417,7 @@ export const ShiftHandover = () => {
                   label="Nome do Cliente / Nº Comanda"
                   id="comanda"
                   placeholder="Ex: Luiz"
-                  register={register('comanda', {
-                    required: 'Identificador da comanda é obrigatório',
-                  })}
+                  register={register('comanda', { required: 'Obrigatório' })}
                   error={errors.comanda}
                 />
                 <FormInput
@@ -301,9 +426,7 @@ export const ShiftHandover = () => {
                   type="number"
                   step="0.01"
                   placeholder="0,00"
-                  register={register('valor', {
-                    required: 'O valor da venda é obrigatório',
-                  })}
+                  register={register('valor', { required: 'Obrigatório' })}
                   error={errors.valor}
                 />
                 <div className="input-wrapper">
@@ -317,6 +440,7 @@ export const ShiftHandover = () => {
                     <option value="C">Cartão / Outros</option>
                   </select>
                 </div>
+
                 <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                   <Button type="submit" isLoading={isActionLoading}>
                     {editingId ? 'Salvar Alterações' : 'Gravar na Tabela'}
@@ -348,19 +472,13 @@ export const ShiftHandover = () => {
               }}
               className="no-print"
             >
-              <div style={{ width: 'auto' }}>
-                <Button variant="secondary" onClick={() => window.print()}>
-                  Exportar PDF da Folha
-                </Button>
-              </div>
+              <Button variant="secondary" onClick={() => window.print()}>
+                Exportar PDF da Folha
+              </Button>
             </div>
 
             <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '20px',
-              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
             >
               <div>
                 <h4
@@ -415,7 +533,6 @@ export const ShiftHandover = () => {
                               color: 'var(--color-primary)',
                               cursor: 'pointer',
                             }}
-                            title="Editar"
                           >
                             <Pencil size={16} />
                           </button>
@@ -428,7 +545,6 @@ export const ShiftHandover = () => {
                               color: '#dc2626',
                               cursor: 'pointer',
                             }}
-                            title="Excluir"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -439,6 +555,7 @@ export const ShiftHandover = () => {
                   data={entregas.filter((e) => e.tipo_saida === 'D')}
                 />
               </div>
+
               <div>
                 <h4
                   style={{
@@ -492,7 +609,6 @@ export const ShiftHandover = () => {
                               color: 'var(--color-primary)',
                               cursor: 'pointer',
                             }}
-                            title="Editar"
                           >
                             <Pencil size={16} />
                           </button>
@@ -505,7 +621,6 @@ export const ShiftHandover = () => {
                               color: '#dc2626',
                               cursor: 'pointer',
                             }}
-                            title="Excluir"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -521,101 +636,76 @@ export const ShiftHandover = () => {
         </div>
       )}
 
-      {/* VISÃO: CAIXA DA TARDE */}
+      {/* ==============================================
+          VISÃO: CAIXA DA TARDE 
+          ============================================== */}
       {role === 'CAIXA_TARDE' && (
         <Card
           title="Conferência de Comandas Físicas (Cestinha)"
           icon={CheckCircle}
+          className="print-card"
         >
-          <Table
-            columns={[
-              {
-                header: 'Conferido',
-                render: (row) => (
-                  <input
-                    type="checkbox"
-                    checked={row.conferido}
-                    onChange={() => handleToggleCheck(row.id, row.conferido)}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
-                ),
-              },
-              {
-                header: 'Hora Cadastro',
-                render: (row) => formatarHora(row.created_at),
-              },
-              { header: 'Comanda / Cliente', accessorKey: 'comanda' },
-              {
-                header: 'Valor',
-                render: (row) => `R$ ${row.valor.toFixed(2).replace('.', ',')}`,
-              },
-              {
-                header: 'Lançado Como',
-                render: (row) =>
-                  row.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão / Outros',
-              },
-              {
-                header: 'Forma Real Recebida',
-                render: (row) => (
-                  <select
-                    value={row.forma_pagamento_real || row.tipo_saida}
-                    onChange={(e) =>
-                      handleAlterarFormaReal(row.id, e.target.value)
-                    }
-                    className="input-field"
-                    style={{ padding: '4px', fontSize: '0.85rem' }}
-                  >
-                    <option value="D">Dinheiro</option>
-                    <option value="C">Cartão (POS)</option>
-                    <option value="PX">Pix (QR)</option>
-                  </select>
-                ),
-              },
-              {
-                header: 'Inconsistência',
-                render: (row) =>
-                  row.tipo_saida !== row.forma_pagamento_real ? (
-                    <span
-                      style={{
-                        color: '#d97706',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.85rem',
-                        fontWeight: '600',
-                      }}
-                    >
-                      <AlertCircle size={14} /> Alterado para{' '}
-                      {row.forma_pagamento_real}
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        color: 'var(--color-success)',
-                        fontSize: '0.85rem',
-                      }}
-                    >
-                      Bate com o Caderno
-                    </span>
-                  ),
-              },
-            ]}
-            data={entregas}
-          />
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
+          >
+            {/* Tabela Dinheiro */}
+            <div>
+              <h4
+                style={{
+                  backgroundColor: '#fee2e2',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  color: '#991b1b',
+                  marginBottom: '12px',
+                  textAlign: 'center',
+                  fontWeight: 'bold',
+                }}
+              >
+                Conferência Dinheiro — Total: R${' '}
+                {totalDinheiro.toFixed(2).replace('.', ',')}
+              </h4>
+              <Table
+                columns={colunasTarde}
+                data={entregas.filter((e) => e.tipo_saida === 'D')}
+              />
+            </div>
+
+            {/* Tabela Cartão */}
+            <div>
+              <h4
+                style={{
+                  backgroundColor: '#e0e7ff',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  color: '#1e40af',
+                  marginBottom: '12px',
+                  textAlign: 'center',
+                  fontWeight: 'bold',
+                }}
+              >
+                Conferência Cartão / Outros — Total: R${' '}
+                {totalCartao.toFixed(2).replace('.', ',')}
+              </h4>
+              <Table
+                columns={colunasTarde}
+                data={entregas.filter((e) => e.tipo_saida === 'C')}
+              />
+            </div>
+          </div>
 
           <div style={{ marginTop: '24px' }}>
             <label
               className="input-label"
               style={{ marginBottom: '8px', display: 'block' }}
             >
-              Observações do Turno Vespertino
+              Anotações Gerais do Turno Vespertino (Impressão)
             </label>
             <textarea
               className="input-field"
-              rows="3"
+              rows="2"
               value={obsTarde}
               onChange={(e) => setObsTarde(e.target.value)}
-              placeholder="Digite aqui ocorrências de notas rasgadas, pendências de motoboys ou detalhes do fechamento..."
+              placeholder="Digite aqui um resumo das inconsistências do caixa para sair no PDF final..."
               style={{ width: '100%', resize: 'none' }}
             />
           </div>
@@ -625,8 +715,16 @@ export const ShiftHandover = () => {
               marginTop: '20px',
               display: 'flex',
               justifyContent: 'flex-end',
+              gap: '12px',
             }}
+            className="no-print"
           >
+            {turnoEncerrado && (
+              <Button variant="secondary" onClick={() => window.print()}>
+                <Printer size={16} style={{ marginRight: '6px' }} /> Exportar
+                Relatório PDF
+              </Button>
+            )}
             <div style={{ width: '250px' }}>
               <Button
                 onClick={handleFinalizarTurnoTarde}
@@ -639,7 +737,9 @@ export const ShiftHandover = () => {
         </Card>
       )}
 
-      {/* VISÃO: ADMINISTRADOR */}
+      {/* ==============================================
+          VISÃO: ADMINISTRADOR 
+          ============================================== */}
       {role === 'ADMIN' && (
         <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText}>
           <div
@@ -673,12 +773,20 @@ export const ShiftHandover = () => {
               },
               {
                 header: 'Pago Real Tarde',
-                render: (r) => r.forma_pagamento_real,
+                render: (r) => getNomePagamento(r.forma_pagamento_real),
               },
               {
                 header: 'Status',
                 render: (r) =>
                   r.conferido ? '✅ Conferido' : '⏳ Aguardando Caixa Tarde',
+              },
+              {
+                header: 'Obs.',
+                render: (r) => (
+                  <span style={{ fontSize: '0.8rem', color: '#666' }}>
+                    {r.observacoes || '-'}
+                  </span>
+                ),
               },
             ]}
             data={entregas}
