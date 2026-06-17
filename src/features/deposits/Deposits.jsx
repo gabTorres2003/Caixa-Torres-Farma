@@ -9,6 +9,14 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
+import {
+  Banknote,
+  Plus,
+  Calendar,
+  FileText,
+  Loader2,
+  Printer,
+} from 'lucide-react'
 
 export const Deposits = () => {
   const { user } = useAuth()
@@ -104,20 +112,43 @@ export const Deposits = () => {
       ),
     },
     {
-      header: 'Status',
-      render: () => (
+      header: 'Categoria',
+      render: (row) => (
         <span
           style={{
             padding: '4px 8px',
-            backgroundColor: '#ecfdf5',
-            color: 'var(--color-success)',
+            backgroundColor:
+              row.categoria === 'Troca (Caixa de Troco)'
+                ? '#eff6ff'
+                : '#ecfdf5',
+            color:
+              row.categoria === 'Troca (Caixa de Troco)'
+                ? '#1d4ed8'
+                : 'var(--color-success)',
             borderRadius: '12px',
             fontSize: '0.75rem',
             fontWeight: '600',
           }}
         >
-          Confirmado
+          {row.categoria || 'Depósito'}
         </span>
+      ),
+    },
+    {
+      header: 'Ações',
+      render: (row) => (
+        <button
+          onClick={() => imprimirComprovante(row)}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--color-primary)',
+          }}
+          title="Imprimir Comprovante"
+        >
+          <Printer size={20} />
+        </button>
       ),
     },
   ]
@@ -133,6 +164,7 @@ export const Deposits = () => {
           value: parseFloat(data.valor),
           origin: data.origem,
           origem: data.origem,
+          categoria: data.categoria,
           data_caixa: data.data_caixa,
           store_id: user.store_id,
           created_by: user.id,
@@ -149,6 +181,50 @@ export const Deposits = () => {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // --- FUNÇÃO DE IMPRESSÃO (BOBINA 80mm) ---
+  const imprimirComprovante = (registro) => {
+    const dataFormatada = new Date(registro.created_at).toLocaleString('pt-BR')
+    const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
+    const nomeOperador = registro.profiles?.nome || user?.nome || 'Operador'
+
+    const conteudoCupom = `
+      <html>
+        <head>
+          <style>
+            body { font-family: monospace; width: 80mm; margin: 0; padding: 10px; font-size: 12px; }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .divisor { border-top: 1px dashed #000; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 14px;">TORRES FARMA</div>
+          <div class="center">COMPROVANTE DE MOVIMENTACAO</div>
+          <div class="divisor"></div>
+          <div><span class="bold">Data/Hora:</span> ${dataFormatada}</div>
+          <div><span class="bold">Categoria:</span> ${registro.categoria || 'Depósito'}</div>
+          <div><span class="bold">Origem:</span> ${registro.origem}</div>
+          <div><span class="bold">Operador:</span> ${nomeOperador}</div>
+          <div class="divisor"></div>
+          <div class="bold" style="font-size: 14px;">VALOR: ${valorFormatado}</div>
+          <div class="divisor"></div>
+          <br><br>
+          <div class="center">_________________________________</div>
+          <div class="center">Assinatura do Responsável</div>
+        </body>
+      </html>
+    `
+
+    const janelaImpressao = window.open('', '', 'width=300,height=400')
+    janelaImpressao.document.write(conteudoCupom)
+    janelaImpressao.document.close()
+    janelaImpressao.focus()
+    setTimeout(() => {
+      janelaImpressao.print()
+      janelaImpressao.close()
+    }, 250)
   }
 
   if (isPageLoading) {
@@ -190,7 +266,7 @@ export const Deposits = () => {
               fontWeight: 'bold',
             }}
           >
-            Depósitos & Sangrias
+            Depósito / Movimentações
           </h1>
           <p style={{ color: 'var(--color-text-muted)' }}>
             Controle de retiradas de valores da gaveta para o cofre seguro.
@@ -199,7 +275,7 @@ export const Deposits = () => {
 
         <div style={{ width: 'auto' }}>
           <Button onClick={() => setIsModalOpen(true)} icon={Plus}>
-            Nova Sangria
+            Novo Registro
           </Button>
         </div>
       </div>
@@ -229,7 +305,7 @@ export const Deposits = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Registrar Nova Sangria de Caixa"
+        title="Registrar Nova Movimentação"
       >
         <form
           onSubmit={handleSubmit(onSubmit)}
@@ -323,6 +399,38 @@ export const Deposits = () => {
                 }}
               >
                 {errors.data_caixa.message}
+              </span>
+            )}
+          </div>
+
+          <div className="input-wrapper">
+            <label htmlFor="categoria" className="input-label">
+              Categoria
+            </label>
+            <select
+              id="categoria"
+              className={`input-field ${errors.categoria ? 'error' : ''}`}
+              style={{ width: '100%' }}
+              {...register('categoria', {
+                required: 'A categoria é obrigatória',
+              })}
+            >
+              <option value="">Selecione...</option>
+              <option value="Depósito">Depósito</option>
+              <option value="Troca (Caixa de Troco)">
+                Troca (Caixa de Troco)
+              </option>
+            </select>
+            {errors.categoria && (
+              <span
+                className="input-error-text"
+                style={{
+                  color: 'var(--color-error)',
+                  fontSize: '0.75rem',
+                  marginTop: '4px',
+                }}
+              >
+                {errors.categoria.message}
               </span>
             )}
           </div>
