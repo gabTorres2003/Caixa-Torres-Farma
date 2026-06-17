@@ -65,6 +65,10 @@ export const Deposits = () => {
     carregarDepositos()
   }, [carregarDepositos])
 
+  const totalDepositos = depositsList
+    .filter((d) => d.categoria === 'Depósito' || !d.categoria)
+    .reduce((acc, curr) => acc + Number(curr.valor), 0)
+
   // --- DEFINIÇÃO DAS COLUNAS DA TABELA ---
   const columns = [
     {
@@ -100,7 +104,7 @@ export const Deposits = () => {
     },
     {
       header: 'Responsável',
-      render: (row) => row.responsavel_nome || row.users?.nome || 'Operador'
+      render: (row) => row.responsavel_nome || row.users?.nome || 'Operador',
     },
     {
       header: 'Valor Retirado',
@@ -240,6 +244,62 @@ export const Deposits = () => {
     }, 250)
   }
 
+  // --- FUNÇÃO DE IMPRESSÃO DO TOTAL DO DIA (BOBINA 80mm) ---
+  const imprimirFechamentoDiario = () => {
+    const dataFormatada = new Date().toLocaleString('pt-BR')
+    const valorFormatado = `R$ ${totalDepositos.toFixed(2).replace('.', ',')}`
+    const nomeOperador = user?.nome || 'Operador'
+
+    const conteudoCupom = `
+      <html>
+        <head>
+          <style>
+            @page { margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 76mm; 
+              margin: 0; 
+              padding: 5mm; 
+              font-size: 15px; 
+              color: #000;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .title { font-size: 16px; font-weight: bold; }
+            .divisor { border-top: 1px dashed #000; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="center title">MARCIO GABRIEL TORRES DROGARIA EIRELI</div>
+          <div class="center">CNPJ: 23.584.239/0001-51</div>
+          <br>
+          <div class="center bold">FECHAMENTO DE DEPOSITOS</div>
+          <div class="divisor"></div>
+          <div><span class="bold">Data/Hora:</span> ${dataFormatada}</div>
+          <div><span class="bold">Operador:</span> ${nomeOperador}</div>
+          <div class="divisor"></div>
+          <div class="center bold" style="font-size: 18px; margin: 10px 0;">
+            TOTAL: ${valorFormatado}
+          </div>
+          <div class="divisor"></div>
+          <br><br><br>
+          <div class="center">_________________________________</div>
+          <div class="center">Assinatura do Responsável</div>
+          <br><br>
+        </body>
+      </html>
+    `
+
+    const janelaImpressao = window.open('', '', 'width=300,height=400')
+    janelaImpressao.document.write(conteudoCupom)
+    janelaImpressao.document.close()
+    janelaImpressao.focus()
+    setTimeout(() => {
+      janelaImpressao.print()
+      janelaImpressao.close()
+    }, 250)
+  }
+
   if (isPageLoading) {
     return (
       <div
@@ -279,7 +339,7 @@ export const Deposits = () => {
               fontWeight: 'bold',
             }}
           >
-            Depósito / Movimentações
+            Depósito / Trocas Financeiras
           </h1>
           <p style={{ color: 'var(--color-text-muted)' }}>
             Controle de retiradas de valores da gaveta para o cofre seguro.
@@ -296,20 +356,79 @@ export const Deposits = () => {
       {/* Grid com Resumo e Listagem */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
         <Card title="Retiradas Realizadas (Turno Atual)" icon={Banknote}>
-          <p
+          <div
             style={{
-              color: 'var(--color-text-muted)',
-              fontSize: '0.875rem',
-              marginBottom: '16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
             }}
           >
-            Abaixo estão listados todos os valores movimentados para fora do
-            caixa para fins de auditoria.
-          </p>
+            <p
+              style={{
+                color: 'var(--color-text-muted)',
+                fontSize: '0.875rem',
+                margin: 0,
+                maxWidth: '60%',
+              }}
+            >
+              Abaixo estão listados todos os valores movimentados para fora do
+              caixa para fins de auditoria.
+            </p>
+
+            {/* Bloco do Total e Impressão */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                backgroundColor: '#f8fafc',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-muted)',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Total em Depósitos
+                </span>
+                <span
+                  style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 'bold',
+                    color: 'var(--color-primary)',
+                  }}
+                >
+                  R$ {totalDepositos.toFixed(2).replace('.', ',')}
+                </span>
+              </div>
+              <Button
+                onClick={imprimirFechamentoDiario}
+                icon={Printer}
+                type="button"
+              >
+                Imprimir Total
+              </Button>
+            </div>
+          </div>
+
           <Table
             columns={columns}
             data={depositsList}
-            emptyMessage="Nenhuma sangria realizada neste turno."
+            emptyMessage="Nenhum depósito realizado neste turno."
           />
         </Card>
       </div>
