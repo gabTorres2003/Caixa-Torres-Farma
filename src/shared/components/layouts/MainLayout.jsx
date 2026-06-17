@@ -19,7 +19,7 @@ export const MainLayout = () => {
   // 1. Menus Básicos 
   const baseMenuItems = [
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
-    { path: '/depositos', label: 'Depósitos/Movimentações', icon: Banknote },
+    { path: '/depositos', label: 'Depósito', icon: Banknote },
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
   ]
 
