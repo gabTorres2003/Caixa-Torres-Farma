@@ -205,12 +205,15 @@ export const Deposits = () => {
             body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .title { font-size: 18px; font-weight: bold; }
+            .title { font-size: 16px; font-weight: bold; }
             .divisor { border-top: 1px dashed #000; margin: 10px 0; }
           </style>
         </head>
         <body>
-          <div class="center title">TORRES FARMA</div>
+          <div class="center title">MARCIO GABRIEL TORRES</div>
+          <div class="center title">DROGARIA EIRELI</div>
+          <div class="center">CNPJ: 23.584.239/0001-51</div>
+          <br>
           <div class="center bold">COMPROVANTE DE MOVIMENTACAO</div>
           <div class="divisor"></div>
           <div><span class="bold">Data:</span> ${dataApenas}</div>
@@ -261,8 +264,9 @@ export const Deposits = () => {
           </style>
         </head>
         <body>
-          <div class="center title">DROGARIA TORRES FARMA LTDA</div>
-          <div class="center">CNPJ: 00.000.000/0001-00</div>
+          <div class="center title">MARCIO GABRIEL TORRES</div>
+          <div class="center title">DROGARIA EIRELI</div>
+          <div class="center">CNPJ: 23.584.239/0001-51</div>
           <br>
           <div class="center bold">FECHAMENTO DE DEPOSITOS</div>
           <div class="divisor"></div>
@@ -348,54 +352,67 @@ export const Deposits = () => {
       {/* Grid com Resumo e Listagem */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
         <Card title="Retiradas Realizadas (Turno Atual)" icon={Banknote}>
-          {/* justify-content flex-end joga o bloco para a direita */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'flex-end',
-              alignItems: 'center',
-              marginBottom: '20px',
+              marginBottom: '24px',
             }}
           >
-            {/* Bloco do Total e Impressão */}
+            {/* Bloco do Total e Impressão Melhorado */}
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '16px',
+                gap: '24px',
                 backgroundColor: '#f8fafc',
-                padding: '12px 16px',
-                borderRadius: '8px',
+                padding: '16px 24px',
+                borderRadius: '12px',
                 border: '1px solid #e2e8f0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
               }}
             >
               <div
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'flex-end',
+                  alignItems: 'flex-start',
                 }}
               >
                 <span
                   style={{
                     fontSize: '0.75rem',
                     color: 'var(--color-text-muted)',
-                    fontWeight: 'bold',
+                    fontWeight: '700',
                     textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: '4px',
                   }}
                 >
                   Total em Depósitos
                 </span>
                 <span
                   style={{
-                    fontSize: '1.5rem',
-                    fontWeight: 'bold',
+                    fontSize: '1.875rem',
+                    fontWeight: '800',
                     color: 'var(--color-primary)',
+                    lineHeight: '1',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   R$ {totalDepositos.toFixed(2).replace('.', ',')}
                 </span>
               </div>
+
+              {/* Linha divisória vertical para separar o valor do botão */}
+              <div
+                style={{
+                  width: '1px',
+                  height: '48px',
+                  backgroundColor: '#cbd5e1',
+                }}
+              ></div>
+
               <Button
                 onClick={imprimirFechamentoDiario}
                 icon={Printer}
