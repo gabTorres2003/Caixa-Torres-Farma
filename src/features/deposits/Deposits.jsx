@@ -189,7 +189,10 @@ export const Deposits = () => {
 
   // --- FUNÇÃO DE IMPRESSÃO (BOBINA 80mm) ---
   const imprimirComprovante = (registro) => {
-    const dataFormatada = new Date(registro.created_at).toLocaleString('pt-BR')
+    const dataObj = new Date(registro.created_at)
+    const dataApenas = dataObj.toLocaleDateString('pt-BR')
+    const horaApenas = dataObj.toLocaleTimeString('pt-BR')
+
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador =
       registro.responsavel_nome || registro.users?.nome || 'Operador'
@@ -198,17 +201,8 @@ export const Deposits = () => {
       <html>
         <head>
           <style>
-            @page { 
-              margin: 0;
-            }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 76mm; /* Margem de segurança para bobina de 80mm */
-              margin: 0; 
-              padding: 5mm; 
-              font-size: 15px; /* Fonte maior e mais legível */
-              color: #000;
-            }
+            @page { margin: 0; }
+            body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
             .title { font-size: 18px; font-weight: bold; }
@@ -219,7 +213,8 @@ export const Deposits = () => {
           <div class="center title">TORRES FARMA</div>
           <div class="center bold">COMPROVANTE DE MOVIMENTACAO</div>
           <div class="divisor"></div>
-          <div><span class="bold">Data/Hora:</span> ${dataFormatada}</div>
+          <div><span class="bold">Data:</span> ${dataApenas}</div>
+          <div><span class="bold">Hora:</span> ${horaApenas}</div>
           <div><span class="bold">Categoria:</span> ${registro.categoria || 'Depósito'}</div>
           <div><span class="bold">Origem:</span> ${registro.origem}</div>
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
@@ -246,7 +241,10 @@ export const Deposits = () => {
 
   // --- FUNÇÃO DE IMPRESSÃO DO TOTAL DO DIA (BOBINA 80mm) ---
   const imprimirFechamentoDiario = () => {
-    const dataFormatada = new Date().toLocaleString('pt-BR')
+    const dataAtual = new Date()
+    const dataApenas = dataAtual.toLocaleDateString('pt-BR')
+    const horaApenas = dataAtual.toLocaleTimeString('pt-BR')
+
     const valorFormatado = `R$ ${totalDepositos.toFixed(2).replace('.', ',')}`
     const nomeOperador = user?.nome || 'Operador'
 
@@ -255,14 +253,7 @@ export const Deposits = () => {
         <head>
           <style>
             @page { margin: 0; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 76mm; 
-              margin: 0; 
-              padding: 5mm; 
-              font-size: 15px; 
-              color: #000;
-            }
+            body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
             .title { font-size: 16px; font-weight: bold; }
@@ -270,12 +261,13 @@ export const Deposits = () => {
           </style>
         </head>
         <body>
-          <div class="center title">MARCIO GABRIEL TORRES DROGARIA EIRELI</div>
-          <div class="center">CNPJ: 23.584.239/0001-51</div>
+          <div class="center title">DROGARIA TORRES FARMA LTDA</div>
+          <div class="center">CNPJ: 00.000.000/0001-00</div>
           <br>
           <div class="center bold">FECHAMENTO DE DEPOSITOS</div>
           <div class="divisor"></div>
-          <div><span class="bold">Data/Hora:</span> ${dataFormatada}</div>
+          <div><span class="bold">Data:</span> ${dataApenas}</div>
+          <div><span class="bold">Hora:</span> ${horaApenas}</div>
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
           <div class="center bold" style="font-size: 18px; margin: 10px 0;">
@@ -356,26 +348,15 @@ export const Deposits = () => {
       {/* Grid com Resumo e Listagem */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
         <Card title="Retiradas Realizadas (Turno Atual)" icon={Banknote}>
+          {/* justify-content flex-end joga o bloco para a direita */}
           <div
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
               marginBottom: '20px',
             }}
           >
-            <p
-              style={{
-                color: 'var(--color-text-muted)',
-                fontSize: '0.875rem',
-                margin: 0,
-                maxWidth: '60%',
-              }}
-            >
-              Abaixo estão listados todos os valores movimentados para fora do
-              caixa para fins de auditoria.
-            </p>
-
             {/* Bloco do Total e Impressão */}
             <div
               style={{
