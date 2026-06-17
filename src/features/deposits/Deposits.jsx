@@ -130,6 +130,7 @@ export const Deposits = () => {
       const { error } = await supabase.from('deposits').insert([
         {
           valor: parseFloat(data.valor),
+          value: parseFloat(data.valor),
           origem: data.origem,
           data_caixa: data.data_caixa,
           store_id: user.store_id,
