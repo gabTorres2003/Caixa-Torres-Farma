@@ -2,10 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../core/hooks/useAuth'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
-import { 
-  Plus, FileText, CheckCircle, AlertCircle, 
-  Loader2, Clock, Pencil, Trash2, X, MessageSquare, Printer 
-} from 'lucide-react';
+import {
+  Plus,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Clock,
+  Pencil,
+  Trash2,
+  X,
+  MessageSquare,
+  Printer,
+  Calendar,
+} from 'lucide-react'
 
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
@@ -20,11 +30,16 @@ export const ShiftHandover = () => {
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
 
-  // Estado para anotações gerais da folha impressa e controle do PDF
+  // Estado para anotações do caixa da tarde e impressão
   const [obsTarde, setObsTarde] = useState('')
   const [turnoEncerrado, setTurnoEncerrado] = useState(false)
-
   const [editingId, setEditingId] = useState(null)
+
+  // NOVO: Estado para a data do filtro (Começa com o dia de hoje no fuso local)
+  const [dataFiltro, setDataFiltro] = useState(() => {
+    const tzOffset = new Date().getTimezoneOffset() * 60000
+    return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
+  })
 
   const {
     register,
@@ -50,18 +65,26 @@ export const ShiftHandover = () => {
     return sigla
   }
 
-  // --- BUSCA REAL DE DADOS ---
+  // --- BUSCA REAL DE DADOS (COM SUPORTE A HISTÓRICO PARA ADMIN) ---
   const carregarEntregasDoDia = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
     try {
-      const hoje = new Date().toISOString().split('T')[0]
+      // Se for ADMIN, pesquisa a data selecionada no calendário. Se for CAIXA, força o dia de hoje.
+      let dataConsulta = dataFiltro
+      if (role !== 'ADMIN') {
+        const tzOffset = new Date().getTimezoneOffset() * 60000
+        dataConsulta = new Date(Date.now() - tzOffset)
+          .toISOString()
+          .split('T')[0]
+      }
 
       const { data, error } = await supabase
         .from('pending_deliveries')
         .select('*')
         .eq('store_id', user.store_id)
-        .gte('created_at', `${hoje}T00:00:00Z`)
+        .gte('created_at', `${dataConsulta}T00:00:00-03:00`) // Trava o início do dia no fuso BR
+        .lte('created_at', `${dataConsulta}T23:59:59-03:00`) // Trava o fim do dia no fuso BR
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -71,8 +94,9 @@ export const ShiftHandover = () => {
     } finally {
       setIsPageLoading(false)
     }
-  }, [user?.store_id])
+  }, [user?.store_id, role, dataFiltro])
 
+  // Refaz a busca sempre que o Admin mudar a data no calendário
   useEffect(() => {
     carregarEntregasDoDia()
   }, [carregarEntregasDoDia])
@@ -199,7 +223,6 @@ export const ShiftHandover = () => {
   const handleFinalizarTurnoTarde = async () => {
     setIsActionLoading(true)
     try {
-      // Atualiza o status geral sem subscrever as observações individuais
       const { error } = await supabase
         .from('pending_deliveries')
         .update({ conferido: true })
@@ -209,7 +232,7 @@ export const ShiftHandover = () => {
       if (error) throw error
 
       alert('Turno vespertino consolidado com sucesso!')
-      setTurnoEncerrado(true) // Libera o botão de PDF
+      setTurnoEncerrado(true)
       await carregarEntregasDoDia()
     } catch (err) {
       alert('Erro ao encerrar turno: ' + err.message)
@@ -730,10 +753,61 @@ export const ShiftHandover = () => {
       )}
 
       {/* ==============================================
-          VISÃO: ADMINISTRADOR 
+          VISÃO: ADMINISTRADOR (COM FILTRO DE DATA)
           ============================================== */}
       {role === 'ADMIN' && (
         <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText}>
+          {/* HEADER DO ADMIN COM CALENDÁRIO */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px',
+              paddingBottom: '16px',
+              borderBottom: '1px solid #e2e8f0',
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  fontSize: '1.1rem',
+                  color: 'var(--color-text-main)',
+                  marginBottom: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Calendar size={18} color="var(--color-primary)" /> Data da
+                Operação
+              </h3>
+              <p
+                style={{
+                  fontSize: '0.85rem',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
+                Selecione um dia para auditar o histórico de caixas.
+              </p>
+            </div>
+            <div>
+              <input
+                type="date"
+                className="input-field"
+                style={{
+                  width: 'auto',
+                  padding: '10px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  color: 'var(--color-primary)',
+                }}
+                value={dataFiltro}
+                onChange={(e) => setDataFiltro(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div
             style={{
               padding: '16px',
@@ -751,6 +825,7 @@ export const ShiftHandover = () => {
               <strong>R$ {totalCartao.toFixed(2).replace('.', ',')}</strong>
             </p>
           </div>
+
           <Table
             columns={[
               { header: 'Hora', render: (r) => formatarHora(r.created_at) },
@@ -769,8 +844,7 @@ export const ShiftHandover = () => {
               },
               {
                 header: 'Status',
-                render: (r) =>
-                  r.conferido ? '✅ Conferido' : '⏳ Aguardando Caixa Tarde',
+                render: (r) => (r.conferido ? '✅ Conferido' : '⏳ Pendente'),
               },
               {
                 header: 'Obs.',
