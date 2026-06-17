@@ -132,7 +132,6 @@ export const Deposits = () => {
           valor: parseFloat(data.valor),
           origem: data.origem,
           data_caixa: data.data_caixa,
-          observacoes: data.observacoes,
           store_id: user.store_id,
           created_by: user.id,
         },
@@ -325,13 +324,6 @@ export const Deposits = () => {
               </span>
             )}
           </div>
-
-          <FormInput
-            label="Observações / Identificador do Envelope"
-            id="observacoes"
-            placeholder="Ex: Envelope nº 402 - Notas de R$ 50 e R$ 100"
-            register={register('observacoes')}
-          />
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
             <Button
