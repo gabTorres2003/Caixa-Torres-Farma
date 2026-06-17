@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { LogIn } from 'lucide-react'
-import { useNavigate } from 'react-router-dom' 
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../core/hooks/useAuth'
 
 import { Card } from '../../shared/components/cards/Card'
@@ -11,7 +11,7 @@ import { Button } from '../../shared/components/buttons/Button'
 
 export const Login = () => {
   const { login } = useAuth()
-  const navigate = useNavigate() 
+  const navigate = useNavigate()
 
   const {
     register,
@@ -28,6 +28,7 @@ export const Login = () => {
 
     try {
       await login(data.email, data.password)
+      // Envia para a rota raiz ('/'), e o AppRoutes decide para onde ir baseado no cargo
       navigate('/', { replace: true })
     } catch (error) {
       console.error(error)

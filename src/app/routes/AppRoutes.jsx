@@ -1,12 +1,12 @@
 import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '../../core/hooks/useAuth'
 
 // Layouts
 import { MainLayout } from '../../shared/components/layouts/MainLayout'
 import { AuthLayout } from '../../shared/components/layouts/AuthLayout'
 
-// Telas (Features)
+// Telas
 import { Login } from '../../features/auth/Login'
 import { Dashboard } from '../../features/dashboard/Dashboard'
 import { ShiftHandover } from '../../features/shift-handover/ShiftHandover'
@@ -16,7 +16,7 @@ import { Divergences } from '../../features/divergences/Divergences'
 import { Reports } from '../../features/reports/Reports'
 import { UserManagement } from '../../features/auth/UserManagement'
 
-// --- COMPONENTE DE BLINDAGEM (ROUTE GUARD) ---
+// --- GUARDAS DE ROTA ---
 const AdminRoute = ({ children }) => {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" replace />
@@ -24,7 +24,6 @@ const AdminRoute = ({ children }) => {
   return children
 }
 
-// Impede que quem já está logado veja a tela de login
 const PublicRoute = ({ children }) => {
   const { user } = useAuth()
   if (user) return <Navigate to="/" replace />
@@ -35,74 +34,78 @@ export const AppRoutes = () => {
   const { user } = useAuth()
 
   return (
-    <Routes>
-      {/* Rota Pública com o Fundo Azul */}
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <AuthLayout />
-          </PublicRoute>
-        }
-      >
-        <Route index element={<Login />} />
-      </Route>
+    <BrowserRouter>
+      <Routes>
+        {/* Rota Pública com Fundo Azul (AuthLayout) */}
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <AuthLayout />
+            </PublicRoute>
+          }
+        >
+          <Route index element={<Login />} />
+        </Route>
 
-      {/* Rotas Privadas (Exigem Login e usam o MainLayout) */}
-      <Route element={user ? <MainLayout /> : <Navigate to="/login" replace />}>
-        {/* Redirecionamento Dinâmico ao acessar a raiz '/' */}
+        {/* Rotas Privadas */}
         <Route
-          path="/"
-          element={
-            <Navigate
-              to={user?.role === 'ADMIN' ? '/dashboard' : '/troca-turno'}
-              replace
-            />
-          }
-        />
+          element={user ? <MainLayout /> : <Navigate to="/login" replace />}
+        >
+          {/* A Raiz faz a triagem: Admin vai pro Dashboard, Caixas vão pra Troca de Turno */}
+          <Route
+            path="/"
+            element={
+              <Navigate
+                to={user?.role === 'ADMIN' ? '/dashboard' : '/troca-turno'}
+                replace
+              />
+            }
+          />
 
-        {/* 🟢 ROTAS COMUNS (Todos os logados acessam) */}
-        <Route path="/troca-turno" element={<ShiftHandover />} />
-        <Route path="/depositos" element={<Deposits />} />
-        <Route path="/pre-fechamento" element={<PreClosing />} />
+          {/* 🟢 ROTAS COMUNS */}
+          <Route path="/troca-turno" element={<ShiftHandover />} />
+          <Route path="/depositos" element={<Deposits />} />
+          <Route path="/pre-fechamento" element={<PreClosing />} />
 
-        {/* 🔴 ROTAS RESTRITAS (Apenas ADMIN acessa) */}
-        <Route
-          path="/dashboard"
-          element={
-            <AdminRoute>
-              <Dashboard />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/divergencias"
-          element={
-            <AdminRoute>
-              <Divergences />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/relatorios"
-          element={
-            <AdminRoute>
-              <Reports />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/gerenciar-usuarios"
-          element={
-            <AdminRoute>
-              <UserManagement />
-            </AdminRoute>
-          }
-        />
-      </Route>
+          {/* 🔴 ROTAS RESTRITAS (Protegidas pelo AdminRoute) */}
+          <Route
+            path="/dashboard"
+            element={
+              <AdminRoute>
+                <Dashboard />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/divergencias"
+            element={
+              <AdminRoute>
+                <Divergences />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/relatorios"
+            element={
+              <AdminRoute>
+                <Reports />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/gerenciar-usuarios"
+            element={
+              <AdminRoute>
+                <UserManagement />
+              </AdminRoute>
+            }
+          />
+        </Route>
 
-      {/* Rota de captura (Qualquer URL não mapeada joga pro início) */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Qualquer URL não mapeada cai aqui */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
