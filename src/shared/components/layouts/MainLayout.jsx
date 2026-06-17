@@ -4,7 +4,7 @@ import { useAuth } from '../../../core/hooks/useAuth'
 import {
   LayoutDashboard,
   ArrowLeftRight,
-  Banknote, // Corrigido para Banknote (sem o S)
+  Banknote,
   Calculator,
   AlertTriangle,
   FileText,
@@ -16,18 +16,28 @@ export const MainLayout = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
 
+  // 1. Menus Básicos 
   const baseMenuItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
     { path: '/depositos', label: 'Depósitos', icon: Banknote },
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
-    { path: '/divergencias', label: 'Divergências', icon: AlertTriangle },
-    { path: '/relatorios', label: 'Relatórios', icon: FileText },
-  ];
+  ]
 
-  const menuItems = user?.role === 'ADMIN' 
-    ? [...baseMenuItems, { path: '/gerenciar-usuarios', label: 'Gerenciar Usuários', icon: User }]
-    : baseMenuItems;
+  // 2. Montagem Inteligente do Menu
+  const menuItems =
+    user?.role === 'ADMIN'
+      ? [
+          { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+          ...baseMenuItems,
+          { path: '/divergencias', label: 'Divergências', icon: AlertTriangle },
+          { path: '/relatorios', label: 'Relatórios', icon: FileText },
+          {
+            path: '/gerenciar-usuarios',
+            label: 'Gerenciar Usuários',
+            icon: User,
+          },
+        ]
+      : baseMenuItems
 
   return (
     <div
