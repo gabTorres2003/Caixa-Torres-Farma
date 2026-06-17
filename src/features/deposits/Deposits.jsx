@@ -163,7 +163,7 @@ export const Deposits = () => {
           value: parseFloat(data.valor),
           origin: data.origem,
           origem: data.origem,
-          categoria: data.categoria,
+          categoria: 'Depósito',
           data_caixa: data.data_caixa,
           responsavel_nome: user?.nome || 'Operador',
           store_id: user.store_id,
@@ -288,7 +288,7 @@ export const Deposits = () => {
 
         <div style={{ width: 'auto' }}>
           <Button onClick={() => setIsModalOpen(true)} icon={Plus}>
-            Novo Registro
+            Depósito
           </Button>
         </div>
       </div>
@@ -318,7 +318,7 @@ export const Deposits = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Registrar Nova Movimentação"
+        title="Registrar Novo Depósito"
       >
         <form
           onSubmit={handleSubmit(onSubmit)}
@@ -412,38 +412,6 @@ export const Deposits = () => {
                 }}
               >
                 {errors.data_caixa.message}
-              </span>
-            )}
-          </div>
-
-          <div className="input-wrapper">
-            <label htmlFor="categoria" className="input-label">
-              Categoria
-            </label>
-            <select
-              id="categoria"
-              className={`input-field ${errors.categoria ? 'error' : ''}`}
-              style={{ width: '100%' }}
-              {...register('categoria', {
-                required: 'A categoria é obrigatória',
-              })}
-            >
-              <option value="">Selecione...</option>
-              <option value="Depósito">Depósito</option>
-              <option value="Troca (Caixa de Troco)">
-                Troca (Caixa de Troco)
-              </option>
-            </select>
-            {errors.categoria && (
-              <span
-                className="input-error-text"
-                style={{
-                  color: 'var(--color-error)',
-                  fontSize: '0.75rem',
-                  marginTop: '4px',
-                }}
-              >
-                {errors.categoria.message}
               </span>
             )}
           </div>
