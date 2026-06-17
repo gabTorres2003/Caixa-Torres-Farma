@@ -2,18 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../core/hooks/useAuth'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
-import {
-  Plus,
-  FileText,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  Clock,
-  Pencil,
-  Trash2,
-  X,
-  MessageSquare,
-} from 'lucide-react'
+import { 
+  Plus, FileText, CheckCircle, AlertCircle, 
+  Loader2, Clock, Pencil, Trash2, X, MessageSquare, Printer 
+} from 'lucide-react';
 
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
