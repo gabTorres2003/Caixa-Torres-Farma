@@ -45,7 +45,7 @@ export const Deposits = () => {
         .select(
           `
           *,
-          profiles:created_by (nome)
+          users:created_by (nome)
         `,
         )
         .eq('store_id', user.store_id)
