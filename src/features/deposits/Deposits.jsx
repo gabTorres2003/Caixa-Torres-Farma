@@ -100,7 +100,7 @@ export const Deposits = () => {
     },
     {
       header: 'Responsável',
-      render: (row) => row.profiles?.nome || user?.nome || 'Operador',
+      render: (row) => row.responsavel_nome || row.profiles?.nome || 'Operador'
     },
     {
       header: 'Valor Retirado',
@@ -165,6 +165,7 @@ export const Deposits = () => {
           origem: data.origem,
           categoria: data.categoria,
           data_caixa: data.data_caixa,
+          responsavel_nome: user?.nome || 'Operador',
           store_id: user.store_id,
           created_by: user.id,
         },
@@ -186,32 +187,45 @@ export const Deposits = () => {
   const imprimirComprovante = (registro) => {
     const dataFormatada = new Date(registro.created_at).toLocaleString('pt-BR')
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
-    const nomeOperador = registro.profiles?.nome || user?.nome || 'Operador'
+    const nomeOperador =
+      registro.responsavel_nome || registro.profiles?.nome || 'Operador'
 
     const conteudoCupom = `
       <html>
         <head>
           <style>
-            body { font-family: monospace; width: 80mm; margin: 0; padding: 10px; font-size: 12px; }
+            @page { 
+              margin: 0;
+            }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 76mm; /* Margem de segurança para bobina de 80mm */
+              margin: 0; 
+              padding: 5mm; 
+              font-size: 15px; /* Fonte maior e mais legível */
+              color: #000;
+            }
             .center { text-align: center; }
             .bold { font-weight: bold; }
+            .title { font-size: 18px; font-weight: bold; }
             .divisor { border-top: 1px dashed #000; margin: 10px 0; }
           </style>
         </head>
         <body>
-          <div class="center bold" style="font-size: 14px;">TORRES FARMA</div>
-          <div class="center">COMPROVANTE DE MOVIMENTACAO</div>
+          <div class="center title">TORRES FARMA</div>
+          <div class="center bold">COMPROVANTE DE MOVIMENTACAO</div>
           <div class="divisor"></div>
           <div><span class="bold">Data/Hora:</span> ${dataFormatada}</div>
           <div><span class="bold">Categoria:</span> ${registro.categoria || 'Depósito'}</div>
           <div><span class="bold">Origem:</span> ${registro.origem}</div>
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
-          <div class="bold" style="font-size: 14px;">VALOR: ${valorFormatado}</div>
+          <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
           <div class="divisor"></div>
-          <br><br>
+          <br><br><br>
           <div class="center">_________________________________</div>
           <div class="center">Assinatura do Responsável</div>
+          <br><br>
         </body>
       </html>
     `
