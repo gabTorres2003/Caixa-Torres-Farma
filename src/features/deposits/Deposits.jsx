@@ -131,6 +131,7 @@ export const Deposits = () => {
         {
           valor: parseFloat(data.valor),
           value: parseFloat(data.valor),
+          origin: data.origem,
           origem: data.origem,
           data_caixa: data.data_caixa,
           store_id: user.store_id,
