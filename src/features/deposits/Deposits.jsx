@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
-import { Banknote, Plus, Calendar, FileText, Loader2 } from 'lucide-react'
 import { useAuth } from '../../core/hooks/useAuth'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
 
