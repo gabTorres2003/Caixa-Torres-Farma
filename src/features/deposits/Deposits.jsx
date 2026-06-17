@@ -100,7 +100,7 @@ export const Deposits = () => {
     },
     {
       header: 'Responsável',
-      render: (row) => row.responsavel_nome || row.profiles?.nome || 'Operador'
+      render: (row) => row.responsavel_nome || row.users?.nome || 'Operador'
     },
     {
       header: 'Valor Retirado',
@@ -188,7 +188,7 @@ export const Deposits = () => {
     const dataFormatada = new Date(registro.created_at).toLocaleString('pt-BR')
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador =
-      registro.responsavel_nome || registro.profiles?.nome || 'Operador'
+      registro.responsavel_nome || registro.users?.nome || 'Operador'
 
     const conteudoCupom = `
       <html>
