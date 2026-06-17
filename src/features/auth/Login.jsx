@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { LogIn } from 'lucide-react'
+import { useNavigate } from 'react-router-dom' 
 import { useAuth } from '../../core/hooks/useAuth'
 
 import { Card } from '../../shared/components/cards/Card'
@@ -9,8 +10,9 @@ import { FormError } from '../../shared/components/forms/FormError'
 import { Button } from '../../shared/components/buttons/Button'
 
 export const Login = () => {
-  // 1. Agrupamento de todos os Hooks no topo
   const { login } = useAuth()
+  const navigate = useNavigate() 
+
   const {
     register,
     handleSubmit,
@@ -20,13 +22,13 @@ export const Login = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [authError, setAuthError] = useState('')
 
-  // 2. Função de submissão
   const onSubmit = async (data) => {
     setIsLoading(true)
     setAuthError('')
 
     try {
       await login(data.email, data.password)
+      navigate('/', { replace: true })
     } catch (error) {
       console.error(error)
       setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.')
@@ -35,7 +37,6 @@ export const Login = () => {
     }
   }
 
-  // 3. Renderização
   return (
     <Card style={{ width: '100%', maxWidth: '420px' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
@@ -57,7 +58,6 @@ export const Login = () => {
         onSubmit={handleSubmit(onSubmit)}
         style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
       >
-        {/* Componente Modular de Erro */}
         <FormError message={authError} />
 
         <FormInput
