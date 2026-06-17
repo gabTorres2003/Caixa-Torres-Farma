@@ -1,86 +1,108 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '../../core/hooks/useAuth';
-import { AuthLayout } from '../../shared/components/layouts/AuthLayout';
-import { MainLayout } from '../../shared/components/layouts/MainLayout';
-import { Login } from '../../features/auth/Login';
-import { Dashboard } from '../../features/dashboard/Dashboard';
-import { ShiftHandover } from '../../features/shift-handover/ShiftHandover';
-import { Deposits } from '../../features/deposits/Deposits';
-import { PreClosing } from '../../features/pre-closing/PreClosing';
-import { Divergences } from '../../features/divergences/Divergences';
-import { Reports } from '../../features/reports/Reports';
-import { UserManagement } from '../../features/auth/UserManagement';
+import React from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from '../../core/hooks/useAuth'
 
-// Guardião de Rotas Privadas
-const PrivateRoute = ({ children }) => {
-  const { user, isLoading } = useAuth();
-  if (isLoading) {
-    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Carregando sistema...</div>;
-  }
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
-};
+// Layouts
+import { MainLayout } from '../../shared/components/layouts/MainLayout'
+import { AuthLayout } from '../../shared/components/layouts/AuthLayout'
 
-// Guardião de Rotas Públicas
-const PublicRoute = ({ children }) => {
-  const { user, isLoading } = useAuth();
-  if (isLoading) return null;
-  if (user) return <Navigate to="/dashboard" replace />;
-  return children;
-};
+// Telas (Features)
+import { Login } from '../../features/auth/Login'
+import { Dashboard } from '../../features/dashboard/Dashboard'
+import { ShiftHandover } from '../../features/shift-handover/ShiftHandover'
+import { Deposits } from '../../features/deposits/Deposits'
+import { PreClosing } from '../../features/pre-closing/PreClosing'
+import { Divergences } from '../../features/divergences/Divergences'
+import { Reports } from '../../features/reports/Reports'
+import { UserManagement } from '../../features/auth/UserManagement'
 
-// Guardião de Rotas Administrativas (Proteção Escopada)
+// --- COMPONENTE DE BLINDAGEM (ROUTE GUARD) ---
 const AdminRoute = ({ children }) => {
-  const { user, isLoading } = useAuth();
-  if (isLoading) {
-    return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Validando credenciais de Admin...</div>;
-  }
-  if (!user || user.role !== 'ADMIN') {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return children;
-};
+  const { user } = useAuth()
+  if (!user) return <Navigate to="/login" replace />
+  if (user.role !== 'ADMIN') return <Navigate to="/troca-turno" replace />
+  return children
+}
+
+// Impede que quem já está logado veja a tela de login
+const PublicRoute = ({ children }) => {
+  const { user } = useAuth()
+  if (user) return <Navigate to="/" replace />
+  return children
+}
 
 export const AppRoutes = () => {
+  const { user } = useAuth()
+
   return (
-    <BrowserRouter>
-      <Routes>
-        
-        {/* MÓDULO DE AUTENTICAÇÃO */}
-        <Route path="/login" element={
+    <Routes>
+      {/* Rota Pública com o Fundo Azul */}
+      <Route
+        path="/login"
+        element={
           <PublicRoute>
             <AuthLayout />
           </PublicRoute>
-        }>
-          <Route index element={<Login />} />
-        </Route>
+        }
+      >
+        <Route index element={<Login />} />
+      </Route>
 
-        {/* MÓDULO OPERACIONAL (Protegido) */}
-        <Route path="/" element={
-          <PrivateRoute>
-            <MainLayout />
-          </PrivateRoute>
-        }>
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="troca-turno" element={<ShiftHandover />} />
-          <Route path="depositos" element={<Deposits />} />
-          <Route path="pre-fechamento" element={<PreClosing />} />
-          <Route path="divergencias" element={<Divergences />} />
-          <Route path="relatorios" element={<Reports />} />
-          
-          {/* Rota Administrativa protegida pelo novo Guardião */}
-          <Route path="gerenciar-usuarios" element={
+      {/* Rotas Privadas (Exigem Login e usam o MainLayout) */}
+      <Route element={user ? <MainLayout /> : <Navigate to="/login" replace />}>
+        {/* Redirecionamento Dinâmico ao acessar a raiz '/' */}
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to={user?.role === 'ADMIN' ? '/dashboard' : '/troca-turno'}
+              replace
+            />
+          }
+        />
+
+        {/* 🟢 ROTAS COMUNS (Todos os logados acessam) */}
+        <Route path="/troca-turno" element={<ShiftHandover />} />
+        <Route path="/depositos" element={<Deposits />} />
+        <Route path="/pre-fechamento" element={<PreClosing />} />
+
+        {/* 🔴 ROTAS RESTRITAS (Apenas ADMIN acessa) */}
+        <Route
+          path="/dashboard"
+          element={
+            <AdminRoute>
+              <Dashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/divergencias"
+          element={
+            <AdminRoute>
+              <Divergences />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/relatorios"
+          element={
+            <AdminRoute>
+              <Reports />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/gerenciar-usuarios"
+          element={
             <AdminRoute>
               <UserManagement />
             </AdminRoute>
-          } />
-          
-          <Route index element={<Navigate to="/dashboard" replace />} />
-        </Route>
+          }
+        />
+      </Route>
 
-        <Route path="*" element={<Navigate to="/login" replace />} />
-        
-      </Routes>
-    </BrowserRouter>
-  );
-};
+      {/* Rota de captura (Qualquer URL não mapeada joga pro início) */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
