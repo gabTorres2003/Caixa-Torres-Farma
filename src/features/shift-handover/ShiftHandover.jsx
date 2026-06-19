@@ -24,8 +24,15 @@ import { Table } from '../../shared/components/tables/Table'
 
 export const ShiftHandover = () => {
   const { user } = useAuth()
-  const role = user?.role || 'CAIXA_MANHA' // ADMIN, CAIXA_MANHA, CAIXA_TARDE
-
+  
+  // 1. Puxa a escolha dinâmica feita na tela de login
+  const turnoSelecionado = localStorage.getItem('turnoOperacional')
+  
+  // 2. Desvincula o cadastro: Se for operador, a tela obedece ao seletor de turno.
+  let role = user?.role || 'CAIXA_MANHA'
+  if (user?.role !== 'ADMIN' && turnoSelecionado) {
+    role = turnoSelecionado === 'Tarde' ? 'CAIXA_TARDE' : 'CAIXA_MANHA'
+  }
   const [entregas, setEntregas] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -35,7 +42,7 @@ export const ShiftHandover = () => {
   const [turnoEncerrado, setTurnoEncerrado] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  // NOVO: Estado para a data do filtro (Começa com o dia de hoje no fuso local)
+  // Estado para a data do filtro (Começa com o dia de hoje no fuso local)
   const [dataFiltro, setDataFiltro] = useState(() => {
     const tzOffset = new Date().getTimezoneOffset() * 60000
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
