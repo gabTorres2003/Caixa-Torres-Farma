@@ -27,12 +27,20 @@ export const Login = () => {
     setAuthError('')
 
     try {
-      await login(data.email, data.password)
+      // 1. Pega o usuário simples (ex: brunamanha) e adiciona o domínio falso
+      const emailFicticio = data.usuario.toLowerCase().trim() + '@torresfarma.com';
+      
+      // 2. Pega o PIN digitado (ex: 1234) e adiciona o sufixo secreto
+      const senhaSecreta = data.password + 'TF';
+
+      // 3. Faz o login no Supabase usando as credenciais mascaradas
+      await login(emailFicticio, senhaSecreta)
+      
       // Envia para a rota raiz ('/'), e o AppRoutes decide para onde ir baseado no cargo
       navigate('/', { replace: true })
     } catch (error) {
       console.error(error)
-      setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.')
+      setAuthError('Usuário ou PIN incorretos. Verifique suas credenciais.')
     } finally {
       setIsLoading(false)
     }
@@ -61,33 +69,38 @@ export const Login = () => {
       >
         <FormError message={authError} />
 
+        {/* CAMPO DE USUÁRIO (Sem validação de E-mail) */}
         <FormInput
-          label="E-mail"
-          id="email"
-          type="email"
-          placeholder="operador@torresfarma.com.br"
+          label="Usuário de Acesso"
+          id="usuario"
+          type="text" 
+          placeholder="Ex: josiane"
           autoComplete="username"
-          register={register('email', {
-            required: 'O e-mail é obrigatório',
-            pattern: {
-              value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-              message: 'E-mail inválido',
-            },
+          register={register('usuario', {
+            required: 'O usuário é obrigatório',
           })}
-          error={errors.email}
+          error={errors.usuario}
         />
 
+        {/* CAMPO DO PIN (Travado em 4 dígitos) */}
         <FormInput
-          label="Senha"
+          label="PIN de Acesso"
           id="password"
           type="password"
-          placeholder="••••••••"
+          maxLength={4}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          placeholder="••••"
           autoComplete="current-password"
           register={register('password', {
-            required: 'A senha é obrigatória',
+            required: 'O PIN é obrigatório',
             minLength: {
-              value: 6,
-              message: 'A senha deve ter no mínimo 6 caracteres',
+              value: 4,
+              message: 'O PIN deve ter exatos 4 números',
+            },
+            maxLength: {
+              value: 4,
+              message: 'O PIN deve ter exatos 4 números',
             },
           })}
           error={errors.password}
@@ -95,7 +108,7 @@ export const Login = () => {
 
         <div style={{ marginTop: '8px' }}>
           <Button type="submit" isLoading={isLoading} icon={LogIn}>
-            Acessar Sistema
+            Acessar Caixa
           </Button>
         </div>
       </form>
