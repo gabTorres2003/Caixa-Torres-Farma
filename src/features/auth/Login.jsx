@@ -35,7 +35,7 @@ export const Login = () => {
       await login(emailFicticio, senhaSecreta)
       
       // 3. Salva o turno selecionado na memória local do navegador
-      localStorage.setItem('turnoOperacional', data.turnoOperacional)
+      localStorage.setItem('turnoOperacional', data.turnoOperacional || 'AUTOMATICO')
 
       // Envia para a tela inicial
       navigate('/', { replace: true })
@@ -128,9 +128,9 @@ export const Login = () => {
               required: 'Você deve informar qual turno está assumindo.',
             })}
           >
-            <option value="">Selecione o turno...</option>
-            <option value="Manhã">Manhã (Abertura)</option>
-            <option value="Tarde">Tarde (Fechamento)</option>
+            <option value="AUTOMATICO">Automático (Meu turno padrão)</option>
+            <option value="Manhã">Manhã</option>
+            <option value="Tarde">Tarde</option>
           </select>
           {errors.turnoOperacional && (
             <span style={{ color: 'var(--color-error)', fontSize: '0.75rem' }}>

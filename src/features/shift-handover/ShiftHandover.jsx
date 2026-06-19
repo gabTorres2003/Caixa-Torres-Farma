@@ -27,11 +27,12 @@ export const ShiftHandover = () => {
   
   // 1. Puxa a escolha dinâmica feita na tela de login
   const turnoSelecionado = localStorage.getItem('turnoOperacional')
-  
-  // 2. Desvincula o cadastro: Se for operador, a tela obedece ao seletor de turno.
   let role = user?.role || 'CAIXA_MANHA'
-  if (user?.role !== 'ADMIN' && turnoSelecionado) {
-    role = turnoSelecionado === 'Tarde' ? 'CAIXA_TARDE' : 'CAIXA_MANHA'
+  
+  if (user?.role !== 'ADMIN') {
+    if (turnoSelecionado && turnoSelecionado !== 'AUTOMATICO') {
+      role = turnoSelecionado === 'Tarde' ? 'CAIXA_TARDE' : 'CAIXA_MANHA'
+    }
   }
   const [entregas, setEntregas] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)

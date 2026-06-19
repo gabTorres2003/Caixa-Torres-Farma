@@ -3,23 +3,17 @@ import { useForm } from 'react-hook-form'
 import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
 import { useAuth } from '../../core/hooks/useAuth'
-import { UserPlus, Users, Loader2 } from 'lucide-react'
+import { UserPlus, Users, Loader2, Pencil, Trash2, X } from 'lucide-react'
 
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 
-// Instância isolada para cadastrar usuários sem sobrescrever a sessão do Administrador atual
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const detachedAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    storageKey: 'torres-farma-detached-auth',
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-  },
+  auth: { persistSession: false, storageKey: 'torres-farma-detached', autoRefreshToken: false, detectSessionInUrl: false },
 })
 
 export const UserManagement = () => {
@@ -27,15 +21,10 @@ export const UserManagement = () => {
   const [usuarios, setUsuarios] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [editingId, setEditingId] = useState(null)
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm()
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
-  // Sincroniza a listagem de usuários baseada no store_id do admin logado
   const carregarUsuariosDaLoja = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
@@ -49,62 +38,80 @@ export const UserManagement = () => {
       if (error) throw error
       setUsuarios(data || [])
     } catch (err) {
-      console.error('Erro ao buscar usuários:', err.message)
+      console.error('Erro:', err.message)
     } finally {
       setIsPageLoading(false)
     }
   }, [user?.store_id])
 
-  useEffect(() => {
-    carregarUsuariosDaLoja()
-  }, [carregarUsuariosDaLoja])
+  useEffect(() => { carregarUsuariosDaLoja() }, [carregarUsuariosDaLoja])
 
-  // Processa o formulário, mascarando as credenciais para atender aos requisitos do Supabase Auth
-  const onCadastrarUsuario = async (data) => {
+  // --- AÇÕES DE EDIÇÃO E EXCLUSÃO ---
+  const handleEdit = (usuario) => {
+    setEditingId(usuario.id)
+    setValue('nome', usuario.nome)
+    setValue('role', usuario.role)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    reset({ nome: '', email: '', password: '', role: 'CAIXA_MANHA' })
+  }
+
+  const handleDelete = async (id, nome) => {
+    if (!window.confirm(`ATENÇÃO: Tem certeza que deseja excluir o acesso de ${nome}?`)) return
+    setIsPageLoading(true)
+    try {
+      const { error } = await supabase.from('users').delete().eq('id', id)
+      if (error) {
+        if (error.code === '23503') throw new Error(`Não é possível excluir ${nome} porque este operador já possui movimentações e depósitos registrados no histórico da auditoria.`)
+        throw error
+      }
+      alert('Operador removido com sucesso!')
+      if (editingId === id) handleCancelEdit()
+      await carregarUsuariosDaLoja()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setIsPageLoading(false)
+    }
+  }
+
+  const onSalvarUsuario = async (data) => {
     setIsActionLoading(true)
     try {
-      // Normalização do username simples para formato de e-mail fictício
-      const emailFicticio = data.email.toLowerCase().trim() + '@torresfarma.com'
+      if (editingId) {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ nome: data.nome, role: data.role })
+          .eq('id', editingId)
 
-      // Injeção de sufixo para atingir o length >= 6 do Supabase
-      const senhaSecreta = data.password + 'TF'
+        if (updateError) throw updateError
+        alert('Dados do operador atualizados com sucesso!')
+        handleCancelEdit()
 
-      // 1. Criação no microsserviço de autenticação
-      const { data: authData, error: authError } =
-        await detachedAuthClient.auth.signUp({
-          email: emailFicticio,
-          password: senhaSecreta,
-          options: {
-            data: {
-              nome: data.nome,
-              role: data.role,
-              store_id: user.store_id,
-            },
-          },
+      } else {
+        const emailFicticio = data.email.toLowerCase().trim() + '@torresfarma.com'
+        const senhaSecreta = data.password + 'TF' 
+
+        const { data: authData, error: authError } = await detachedAuthClient.auth.signUp({
+          email: emailFicticio, password: senhaSecreta,
+          options: { data: { nome: data.nome, role: data.role, store_id: user.store_id } },
         })
 
-      if (authError) throw authError
-
-      if (authData?.user) {
-        // 2. Sincronização na tabela pública (public.users)
-        const { error: profileError } = await supabase.from('users').upsert([
-          {
-            id: authData.user.id,
-            nome: data.nome,
-            role: data.role,
-            store_id: user.store_id,
-            email: emailFicticio,
-          },
-        ])
-
-        if (profileError) throw profileError
-
-        alert(`Usuário ${data.nome} cadastrado com sucesso!`)
-        reset()
-        await carregarUsuariosDaLoja()
+        if (authError) throw authError
+        if (authData?.user) {
+          const { error: profileError } = await supabase.from('users').upsert([
+            { id: authData.user.id, nome: data.nome, role: data.role, store_id: user.store_id, email: emailFicticio },
+          ])
+          if (profileError) throw profileError
+          alert(`Usuário ${data.nome} cadastrado com sucesso!`)
+          reset()
+        }
       }
+      await carregarUsuariosDaLoja()
     } catch (err) {
-      alert('Erro ao registrar funcionário: ' + err.message)
+      alert('Erro na operação: ' + err.message)
     } finally {
       setIsActionLoading(false)
     }
@@ -120,123 +127,74 @@ export const UserManagement = () => {
         return '🔑 Administrador'
       },
     },
+    {
+      header: 'Ações',
+      render: (row) => (
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }} title="Editar Dados">
+            <Pencil size={18} />
+          </button>
+          {/* Evita que o admin exclua a si mesmo acidentalmente */}
+          {row.id !== user.id && (
+            <button onClick={() => handleDelete(row.id, row.nome)} style={{ background: 'none', border: 'none', color: 'var(--color-error)', cursor: 'pointer' }} title="Excluir Operador">
+              <Trash2 size={18} />
+            </button>
+          )}
+        </div>
+      )
+    }
   ]
 
-  if (isPageLoading) {
-    return (
-      <div
-        style={{
-          height: '60vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '12px',
-        }}
-      >
-        <Loader2
-          className="animate-spin"
-          size={32}
-          color="var(--color-primary)"
-        />
-        <span>Carregando quadro de funcionários...</span>
-      </div>
-    )
-  }
+  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Processando dados...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div>
-        <h1
-          style={{
-            fontSize: '1.875rem',
-            color: 'var(--color-primary)',
-            fontWeight: 'bold',
-          }}
-        >
-          Controle de Acessos
-        </h1>
-        <p style={{ color: 'var(--color-text-muted)' }}>
-          Cadastre e gerencie as contas dos operadores de caixa da manhã e da
-          tarde.
-        </p>
+        <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Controle de Acessos</h1>
+        <p style={{ color: 'var(--color-text-muted)' }}>Cadastre e gerencie as contas dos operadores de caixa da manhã e da tarde.</p>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '400px 1fr',
-          gap: '24px',
-          alignItems: 'start',
-        }}
-      >
-        {/* Formulário de Cadastro */}
-        <form onSubmit={handleSubmit(onCadastrarUsuario)}>
-          <Card title="Adicionar Novo Operador" icon={UserPlus}>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-            >
-              <FormInput
-                label="Nome Completo"
-                id="nome"
-                placeholder="Ex: Ana Paula"
-                register={register('nome', {
-                  required: 'O nome é obrigatório',
-                })}
-                error={errors.nome}
-              />
+      <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '24px', alignItems: 'start' }}>
+        
+        <form onSubmit={handleSubmit(onSalvarUsuario)}>
+          <Card title={editingId ? 'Editar Operador' : 'Adicionar Novo Operador'} icon={editingId ? Pencil : UserPlus}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <FormInput label="Nome Completo" id="nome" placeholder="Ex: Ana Paula" register={register('nome', { required: 'O nome é obrigatório' })} error={errors.nome} />
 
-              <FormInput
-                label="Usuário"
-                id="email"
-                type="text"
-                placeholder="Ex: josiane"
-                register={register('email', {
-                  required: 'O usuário é obrigatório',
-                })}
-                error={errors.email}
-              />
-
-              <FormInput
-                label="Senha de Acesso"
-                id="password"
-                type="password"
-                maxLength={4}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="PIN de 4 dígitos (Ex: 1234)"
-                register={register('password', {
-                  required: 'O PIN é obrigatório',
-                  minLength: { value: 4, message: 'Digite exatos 4 números' },
-                  maxLength: { value: 4, message: 'Digite exatos 4 números' },
-                })}
-                error={errors.password}
-              />
+              {/* Esconde E-mail e Senha durante a edição, pois a alteração de senha requer regras avançadas */}
+              {!editingId && (
+                <>
+                  <FormInput label="Usuário de Acesso" id="email" type="text" placeholder="Ex: josiane" register={register('email', { required: 'O usuário é obrigatório' })} error={errors.email} />
+                  <FormInput label="Senha de Acesso" id="password" type="password" maxLength={4} inputMode="numeric" pattern="[0-9]*" placeholder="PIN de 4 dígitos (Ex: 1234)" register={register('password', { required: 'O PIN é obrigatório', minLength: { value: 4, message: 'Digite 4 números' } })} error={errors.password} />
+                </>
+              )}
 
               <div className="input-wrapper">
-                <label className="input-label">
-                  Atribuição de Turno (Perfil)
-                </label>
+                <label className="input-label">Atribuição de Turno (Perfil)</label>
                 <select id="role" className="input-field" {...register('role')}>
-                  <option value="CAIXA_MANHA">
-                    Caixa da Manhã (Lançamentos)
-                  </option>
-                  <option value="CAIXA_TARDE">
-                    Caixa da Tarde (Conferências/Check)
-                  </option>
-                  <option value="ADMIN">
-                    Administrador (Auditoria/Gerente)
-                  </option>
+                  <option value="CAIXA_MANHA">Caixa da Manhã (Lançamentos)</option>
+                  <option value="CAIXA_TARDE">Caixa da Tarde (Conferências/Check)</option>
+                  <option value="ADMIN">Administrador (Auditoria/Gerente)</option>
                 </select>
               </div>
 
-              <Button type="submit" isLoading={isActionLoading}>
-                Criar Conta do Operador
-              </Button>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <Button type="submit" isLoading={isActionLoading}>
+                  {editingId ? 'Salvar Alterações' : 'Criar Conta'}
+                </Button>
+                
+                {editingId && (
+                  <Button type="button" variant="secondary" onClick={handleCancelEdit}>
+                    <X size={18} />
+                  </Button>
+                )}
+              </div>
+
             </div>
           </Card>
         </form>
 
-        {/* Quadro Geral de Usuários */}
         <Card title="Funcionários Registrados na Filial" icon={Users}>
           <Table columns={colunas} data={usuarios} />
         </Card>

@@ -15,10 +15,14 @@ import {
 export const MainLayout = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
-  const turnoAtual = localStorage.getItem('turnoOperacional')
+  let turnoAtual = localStorage.getItem('turnoOperacional')
+  if (!turnoAtual || turnoAtual === 'AUTOMATICO') {
+    turnoAtual = user?.role === 'CAIXA_TARDE' ? 'Tarde' : 'Manhã'
+  }
+
   const textoPerfil = user?.role === 'ADMIN' 
     ? 'Administrador' 
-    : turnoAtual ? `Turno: ${turnoAtual}` : 'Operador de Caixa'
+    : `Turno: ${turnoAtual}`
 
   // 1. Menus Básicos 
   const baseMenuItems = [
