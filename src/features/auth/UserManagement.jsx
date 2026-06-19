@@ -46,11 +46,18 @@ export const UserManagement = () => {
 
   useEffect(() => { carregarUsuariosDaLoja() }, [carregarUsuariosDaLoja])
 
-  // --- AÇÕES DE EDIÇÃO E EXCLUSÃO ---
+  // --- AÇÕES DE EDIÇÃO ---
   const handleEdit = (usuario) => {
     setEditingId(usuario.id)
     setValue('nome', usuario.nome)
     setValue('role', usuario.role)
+    
+    // Puxa apenas o "usuário simples" cortando o domínio fictício
+    const usuarioSimples = usuario.email ? usuario.email.split('@')[0] : ''
+    setValue('email', usuarioSimples)
+    
+    // Deixa o campo de senha vazio. Se não for preenchido, a senha não altera.
+    setValue('password', '')
   }
 
   const handleCancelEdit = () => {
@@ -58,13 +65,14 @@ export const UserManagement = () => {
     reset({ nome: '', email: '', password: '', role: 'CAIXA_MANHA' })
   }
 
+  // --- AÇÃO DE EXCLUSÃO ---
   const handleDelete = async (id, nome) => {
     if (!window.confirm(`ATENÇÃO: Tem certeza que deseja excluir o acesso de ${nome}?`)) return
     setIsPageLoading(true)
     try {
       const { error } = await supabase.from('users').delete().eq('id', id)
       if (error) {
-        if (error.code === '23503') throw new Error(`Não é possível excluir ${nome} porque este operador já possui movimentações e depósitos registrados no histórico da auditoria.`)
+        if (error.code === '23503') throw new Error(`Não é possível excluir ${nome} porque este operador já possui movimentações registradas na auditoria.`)
         throw error
       }
       alert('Operador removido com sucesso!')
@@ -77,23 +85,34 @@ export const UserManagement = () => {
     }
   }
 
+  // --- SALVAR (CRIAR OU EDITAR) ---
   const onSalvarUsuario = async (data) => {
     setIsActionLoading(true)
     try {
+      const emailFicticio = data.email.toLowerCase().trim() + '@torresfarma.com'
+      const senhaSecreta = data.password ? (data.password + 'TF') : null
+
       if (editingId) {
+        // MODO EDIÇÃO: 1. Atualiza Nome e Cargo
         const { error: updateError } = await supabase
           .from('users')
           .update({ nome: data.nome, role: data.role })
           .eq('id', editingId)
-
         if (updateError) throw updateError
+
+        // MODO EDIÇÃO: 2. Chama a Função Segura (RPC) para atualizar Usuário e Senha
+        const { error: rpcError } = await supabase.rpc('admin_update_user', {
+          target_user_id: editingId,
+          new_email: emailFicticio,
+          new_password: senhaSecreta
+        })
+        if (rpcError) throw rpcError
+
         alert('Dados do operador atualizados com sucesso!')
         handleCancelEdit()
 
       } else {
-        const emailFicticio = data.email.toLowerCase().trim() + '@torresfarma.com'
-        const senhaSecreta = data.password + 'TF' 
-
+        // MODO CRIAÇÃO (Permanece igual)
         const { data: authData, error: authError } = await detachedAuthClient.auth.signUp({
           email: emailFicticio, password: senhaSecreta,
           options: { data: { nome: data.nome, role: data.role, store_id: user.store_id } },
@@ -134,7 +153,6 @@ export const UserManagement = () => {
           <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }} title="Editar Dados">
             <Pencil size={18} />
           </button>
-          {/* Evita que o admin exclua a si mesmo acidentalmente */}
           {row.id !== user.id && (
             <button onClick={() => handleDelete(row.id, row.nome)} style={{ background: 'none', border: 'none', color: 'var(--color-error)', cursor: 'pointer' }} title="Excluir Operador">
               <Trash2 size={18} />
@@ -162,13 +180,24 @@ export const UserManagement = () => {
               
               <FormInput label="Nome Completo" id="nome" placeholder="Ex: Ana Paula" register={register('nome', { required: 'O nome é obrigatório' })} error={errors.nome} />
 
-              {/* Esconde E-mail e Senha durante a edição, pois a alteração de senha requer regras avançadas */}
-              {!editingId && (
-                <>
-                  <FormInput label="Usuário de Acesso" id="email" type="text" placeholder="Ex: josiane" register={register('email', { required: 'O usuário é obrigatório' })} error={errors.email} />
-                  <FormInput label="Senha de Acesso" id="password" type="password" maxLength={4} inputMode="numeric" pattern="[0-9]*" placeholder="PIN de 4 dígitos (Ex: 1234)" register={register('password', { required: 'O PIN é obrigatório', minLength: { value: 4, message: 'Digite 4 números' } })} error={errors.password} />
-                </>
-              )}
+              <FormInput label="Usuário de Acesso" id="email" type="text" placeholder="Ex: josiane" register={register('email', { required: 'O usuário é obrigatório' })} error={errors.email} />
+              
+              {/* No modo edição, a senha não é obrigatória */}
+              <FormInput 
+                label={editingId ? "Nova Senha (opcional)" : "Senha de Acesso"} 
+                id="password" 
+                type="password" 
+                maxLength={4} 
+                inputMode="numeric" 
+                pattern="[0-9]*" 
+                placeholder={editingId ? "Deixe vazio para manter atual" : "PIN de 4 dígitos (Ex: 1234)"} 
+                register={register('password', { 
+                  required: editingId ? false : 'O PIN é obrigatório', 
+                  minLength: { value: 4, message: 'Digite 4 números' },
+                  maxLength: { value: 4, message: 'Digite 4 números' }
+                })} 
+                error={errors.password} 
+              />
 
               <div className="input-wrapper">
                 <label className="input-label">Atribuição de Turno (Perfil)</label>
@@ -185,8 +214,8 @@ export const UserManagement = () => {
                 </Button>
                 
                 {editingId && (
-                  <Button type="button" variant="secondary" onClick={handleCancelEdit}>
-                    <X size={18} />
+                  <Button type="button" variant="secondary" onClick={handleCancelEdit} style={{ padding: '0 12px' }}>
+                    <X size={18} /> Cancelar
                   </Button>
                 )}
               </div>
