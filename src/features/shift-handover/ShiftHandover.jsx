@@ -34,36 +34,27 @@ export const ShiftHandover = () => {
       role = turnoSelecionado === 'Tarde' ? 'CAIXA_TARDE' : 'CAIXA_MANHA'
     }
   }
+
   const [entregas, setEntregas] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
 
-  // Estado para anotações do caixa da tarde e impressão
   const [obsTarde, setObsTarde] = useState('')
   const [turnoEncerrado, setTurnoEncerrado] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  // Estado para a data do filtro (Começa com o dia de hoje no fuso local)
+  // O filtro de data começa hoje. A Manhã e o Admin podem alterar.
   const [dataFiltro, setDataFiltro] = useState(() => {
     const tzOffset = new Date().getTimezoneOffset() * 60000
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    formState: { errors },
-  } = useForm()
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
   // --- FUNÇÕES AUXILIARES ---
   const formatarHora = (timestamp) => {
     if (!timestamp) return '--:--'
-    return new Date(timestamp).toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }
 
   const getNomePagamento = (sigla) => {
@@ -73,26 +64,24 @@ export const ShiftHandover = () => {
     return sigla
   }
 
-  // --- BUSCA REAL DE DADOS (COM SUPORTE A HISTÓRICO PARA ADMIN) ---
+  // --- BUSCA DE DADOS ---
   const carregarEntregasDoDia = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
     try {
-      // Se for ADMIN, pesquisa a data selecionada no calendário. Se for CAIXA, força o dia de hoje.
+      // CAIXA_MANHA e ADMIN usam o calendário. CAIXA_TARDE é travado no dia de hoje para não errar.
       let dataConsulta = dataFiltro
-      if (role !== 'ADMIN') {
+      if (role === 'CAIXA_TARDE') {
         const tzOffset = new Date().getTimezoneOffset() * 60000
-        dataConsulta = new Date(Date.now() - tzOffset)
-          .toISOString()
-          .split('T')[0]
+        dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
       }
 
       const { data, error } = await supabase
         .from('pending_deliveries')
         .select('*')
         .eq('store_id', user.store_id)
-        .gte('created_at', `${dataConsulta}T00:00:00-03:00`) // Trava o início do dia no fuso BR
-        .lte('created_at', `${dataConsulta}T23:59:59-03:00`) // Trava o fim do dia no fuso BR
+        .gte('created_at', `${dataConsulta}T00:00:00-03:00`)
+        .lte('created_at', `${dataConsulta}T23:59:59-03:00`)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -104,36 +93,43 @@ export const ShiftHandover = () => {
     }
   }, [user?.store_id, role, dataFiltro])
 
-  // Refaz a busca sempre que o Admin mudar a data no calendário
   useEffect(() => {
     carregarEntregasDoDia()
   }, [carregarEntregasDoDia])
 
-  // --- CONTROLES DA MANHÃ (INSERT/UPDATE/DELETE) ---
+  // --- CONTROLES DA MANHÃ ---
   const handleIniciarEdicao = (entrega) => {
     setEditingId(entrega.id)
     setValue('comanda', entrega.comanda)
     setValue('valor', entrega.valor)
     setValue('tipo', entrega.tipo_saida)
+    setValue('observacoes', entrega.observacoes || '')
   }
 
   const handleCancelarEdicao = () => {
     setEditingId(null)
-    reset({ comanda: '', valor: '', tipo: 'D' })
+    reset({ comanda: '', valor: '', tipo: 'D', observacoes: '' })
   }
 
   const handleExcluirEntrega = async (id) => {
     if (!window.confirm('Tem certeza que deseja excluir esta comanda?')) return
     try {
-      const { error } = await supabase
-        .from('pending_deliveries')
-        .delete()
-        .eq('id', id)
+      const { error } = await supabase.from('pending_deliveries').delete().eq('id', id)
       if (error) throw error
       if (editingId === id) handleCancelarEdicao()
       await carregarEntregasDoDia()
     } catch (err) {
       alert('Erro ao excluir comanda: ' + err.message)
+    }
+  }
+
+  const handleToggleConciliado = async (id, statusAtual) => {
+    try {
+      const { error } = await supabase.from('pending_deliveries').update({ conciliado: !statusAtual }).eq('id', id)
+      if (error) throw error
+      setEntregas((prev) => prev.map((e) => (e.id === id ? { ...e, conciliado: !statusAtual } : e)))
+    } catch (err) {
+      alert('Erro ao conciliar malote: ' + err.message)
     }
   }
 
@@ -148,24 +144,24 @@ export const ShiftHandover = () => {
             valor: parseFloat(data.valor),
             tipo_saida: data.tipo,
             forma_pagamento_real: data.tipo,
+            observacoes: data.observacoes || null
           })
           .eq('id', editingId)
         if (error) throw error
         setEditingId(null)
       } else {
-        const { error } = await supabase.from('pending_deliveries').insert([
-          {
-            comanda: data.comanda,
-            valor: parseFloat(data.valor),
-            tipo_saida: data.tipo,
-            forma_pagamento_real: data.tipo,
-            store_id: user.store_id,
-            created_by: user.id,
-          },
-        ])
+        const { error } = await supabase.from('pending_deliveries').insert([{
+          comanda: data.comanda,
+          valor: parseFloat(data.valor),
+          tipo_saida: data.tipo,
+          forma_pagamento_real: data.tipo,
+          observacoes: data.observacoes || null,
+          store_id: user.store_id,
+          created_by: user.id,
+        }])
         if (error) throw error
       }
-      reset({ comanda: '', valor: '', tipo: 'D' })
+      reset({ comanda: '', valor: '', tipo: 'D', observacoes: '' })
       await carregarEntregasDoDia()
     } catch (err) {
       alert('Erro ao processar comanda: ' + err.message)
@@ -174,17 +170,12 @@ export const ShiftHandover = () => {
     }
   }
 
-  // --- CONTROLES DA TARDE (UPDATES E OBSERVAÇÕES) ---
+  // --- CONTROLES DA TARDE ---
   const handleToggleCheck = async (id, statusAtual) => {
     try {
-      const { error } = await supabase
-        .from('pending_deliveries')
-        .update({ conferido: !statusAtual })
-        .eq('id', id)
+      const { error } = await supabase.from('pending_deliveries').update({ conferido: !statusAtual }).eq('id', id)
       if (error) throw error
-      setEntregas((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, conferido: !statusAtual } : e)),
-      )
+      setEntregas((prev) => prev.map((e) => (e.id === id ? { ...e, conferido: !statusAtual } : e)))
     } catch (err) {
       alert('Erro ao atualizar conferência: ' + err.message)
     }
@@ -192,36 +183,21 @@ export const ShiftHandover = () => {
 
   const handleAlterarFormaReal = async (id, novaForma) => {
     try {
-      const { error } = await supabase
-        .from('pending_deliveries')
-        .update({ forma_pagamento_real: novaForma })
-        .eq('id', id)
+      const { error } = await supabase.from('pending_deliveries').update({ forma_pagamento_real: novaForma }).eq('id', id)
       if (error) throw error
-      setEntregas((prev) =>
-        prev.map((e) =>
-          e.id === id ? { ...e, forma_pagamento_real: novaForma } : e,
-        ),
-      )
+      setEntregas((prev) => prev.map((e) => e.id === id ? { ...e, forma_pagamento_real: novaForma } : e))
     } catch (err) {
       alert('Erro ao alterar forma de pagamento: ' + err.message)
     }
   }
 
   const handleAnotarObservacao = async (id, obsAtual) => {
-    const nota = window.prompt(
-      'Digite uma anotação para esta comanda específica:',
-      obsAtual || '',
-    )
+    const nota = window.prompt('Digite/Edite a anotação para esta comanda:', obsAtual || '')
     if (nota !== null) {
       try {
-        const { error } = await supabase
-          .from('pending_deliveries')
-          .update({ observacoes: nota })
-          .eq('id', id)
+        const { error } = await supabase.from('pending_deliveries').update({ observacoes: nota }).eq('id', id)
         if (error) throw error
-        setEntregas((prev) =>
-          prev.map((e) => (e.id === id ? { ...e, observacoes: nota } : e)),
-        )
+        setEntregas((prev) => prev.map((e) => (e.id === id ? { ...e, observacoes: nota } : e)))
       } catch (err) {
         alert('Erro ao salvar anotação: ' + err.message)
       }
@@ -236,7 +212,6 @@ export const ShiftHandover = () => {
         .update({ conferido: true })
         .eq('store_id', user.store_id)
         .eq('conferido', false)
-
       if (error) throw error
 
       alert('Turno vespertino consolidado com sucesso!')
@@ -250,14 +225,73 @@ export const ShiftHandover = () => {
   }
 
   // --- CÁLCULO DE TOTAIS ---
-  const totalDinheiro = entregas
-    .filter((e) => e.tipo_saida === 'D')
-    .reduce((acc, curr) => acc + curr.valor, 0)
-  const totalCartao = entregas
-    .filter((e) => e.tipo_saida === 'C')
-    .reduce((acc, curr) => acc + curr.valor, 0)
+  const totalDinheiro = entregas.filter((e) => e.tipo_saida === 'D').reduce((acc, curr) => acc + curr.valor, 0)
+  const totalCartao = entregas.filter((e) => e.tipo_saida === 'C').reduce((acc, curr) => acc + curr.valor, 0)
 
-  // --- DEFINIÇÃO DAS COLUNAS DA TARDE ---
+  // --- COLUNAS DA MANHÃ (COM RISCO DE CONCILIAÇÃO) ---
+  const getColunasManha = () => [
+    {
+      header: 'Hora',
+      render: (r) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>
+          <Clock size={12} /> {formatarHora(r.created_at)}
+        </span>
+      ),
+    },
+    { 
+      header: 'Comanda', 
+      render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>{r.comanda}</span>
+    },
+    {
+      header: 'Valor',
+      render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>R$ {r.valor.toFixed(2).replace('.', ',')}</span>,
+    },
+    {
+      header: 'Obs',
+      render: (r) => <span style={{ fontSize: '0.8rem', color: '#666', textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>{r.observacoes || '-'}</span>,
+    },
+    {
+      header: 'Ações',
+      className: 'actions-cell no-print',
+      render: (r) => (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Botão de Conciliar - O Caixa da Manhã dá baixa no dia seguinte */}
+          <button
+            type="button"
+            onClick={() => handleToggleConciliado(r.id, r.conciliado)}
+            style={{ background: 'none', border: 'none', color: r.conciliado ? '#10b981' : 'var(--color-text-muted)', cursor: 'pointer' }}
+            title="Conciliar (Malote Correto)"
+          >
+            <CheckCircle size={18} />
+          </button>
+          
+          {/* Bloqueio de Segurança: Só o dono do registro pode editar/excluir, e não pode editar se já estiver conciliado */}
+          {user.id === r.created_by && !r.conciliado && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleIniciarEdicao(r)}
+                style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }}
+                title="Editar Lançamento"
+              >
+                <Pencil size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExcluirEntrega(r.id)}
+                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}
+                title="Excluir Lançamento"
+              >
+                <Trash2 size={16} />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ]
+
+  // --- COLUNAS DA TARDE ---
   const colunasTarde = [
     {
       header: 'Conf.',
@@ -272,11 +306,7 @@ export const ShiftHandover = () => {
     },
     {
       header: 'Hora',
-      render: (row) => (
-        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-          <Clock size={12} /> {formatarHora(row.created_at)}
-        </span>
-      ),
+      render: (row) => <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}><Clock size={12} /> {formatarHora(row.created_at)}</span>,
     },
     { header: 'Comanda', accessorKey: 'comanda' },
     {
@@ -303,23 +333,11 @@ export const ShiftHandover = () => {
       header: 'Inconsistência',
       render: (row) =>
         row.tipo_saida !== row.forma_pagamento_real ? (
-          <span
-            style={{
-              color: '#d97706',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.8rem',
-              fontWeight: '600',
-            }}
-          >
-            <AlertCircle size={14} /> Alterado para{' '}
-            {getNomePagamento(row.forma_pagamento_real)}
+          <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: '600' }}>
+            <AlertCircle size={14} /> Alterado para {getNomePagamento(row.forma_pagamento_real)}
           </span>
         ) : (
-          <span style={{ color: 'var(--color-success)', fontSize: '0.8rem' }}>
-            Bate com Caderno
-          </span>
+          <span style={{ color: 'var(--color-success)', fontSize: '0.8rem' }}>Bate com Caderno</span>
         ),
     },
     {
@@ -330,29 +348,13 @@ export const ShiftHandover = () => {
           <button
             type="button"
             onClick={() => handleAnotarObservacao(row.id, row.observacoes)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: row.observacoes
-                ? 'var(--color-primary)'
-                : 'var(--color-text-muted)',
-              cursor: 'pointer',
-            }}
+            style={{ background: 'none', border: 'none', color: row.observacoes ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer' }}
             title={row.observacoes || 'Adicionar Anotação'}
           >
             <MessageSquare size={16} />
           </button>
           {row.observacoes && (
-            <span
-              style={{
-                fontSize: '0.75rem',
-                color: '#666',
-                maxWidth: '80px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+            <span style={{ fontSize: '0.75rem', color: '#666', maxWidth: '80px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {row.observacoes}
             </span>
           )}
@@ -361,26 +363,7 @@ export const ShiftHandover = () => {
     },
   ]
 
-  if (isPageLoading) {
-    return (
-      <div
-        style={{
-          height: '60vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '12px',
-        }}
-      >
-        <Loader2
-          className="animate-spin"
-          size={32}
-          color="var(--color-primary)"
-        />
-        <span>Carregando dados da filial...</span>
-      </div>
-    )
-  }
+  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando dados da filial...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -393,87 +376,42 @@ export const ShiftHandover = () => {
       `}</style>
 
       <div>
-        <h1
-          style={{
-            fontSize: '1.875rem',
-            color: 'var(--color-primary)',
-            fontWeight: 'bold',
-          }}
-        >
+        <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>
           {role === 'CAIXA_MANHA' && 'Prestação de Contas - Turno Manhã'}
           {role === 'CAIXA_TARDE' && 'Fechamento & Checklist - Entrada Tarde'}
           {role === 'ADMIN' && 'Auditoria Avançada de Fechamentos'}
         </h1>
-        <p style={{ color: 'var(--color-text-muted)' }}>
-          Usuário: <strong>{user?.nome}</strong> ({role})
-        </p>
+        <p style={{ color: 'var(--color-text-muted)' }}>Usuário: <strong>{user?.nome}</strong> ({role})</p>
       </div>
 
       {/* ==============================================
           VISÃO: CAIXA DA MANHÃ 
           ============================================== */}
       {role === 'CAIXA_MANHA' && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '380px 1fr',
-            gap: '24px',
-            alignItems: 'start',
-          }}
-        >
-          <form
-            onSubmit={handleSubmit(onAdicionarEntrega)}
-            className="no-print"
-          >
-            <Card
-              title={editingId ? 'Editar Comanda' : 'Lançar Nova Comanda'}
-              icon={Plus}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px',
-                }}
-              >
-                <FormInput
-                  label="Nome do Cliente / Nº Comanda"
-                  id="comanda"
-                  placeholder="Ex: Luiz"
-                  register={register('comanda', { required: 'Obrigatório' })}
-                  error={errors.comanda}
-                />
-                <FormInput
-                  label="Valor Real (R$)"
-                  id="valor"
-                  type="number"
-                  step="0.01"
-                  placeholder="0,00"
-                  register={register('valor', { required: 'Obrigatório' })}
-                  error={errors.valor}
-                />
+        <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '24px', alignItems: 'start' }}>
+          <form onSubmit={handleSubmit(onAdicionarEntrega)} className="no-print">
+            <Card title={editingId ? 'Editar Comanda' : 'Lançar Nova Comanda'} icon={Plus}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <FormInput label="Nome do Cliente / Nº Comanda" id="comanda" placeholder="Ex: Luiz" register={register('comanda', { required: 'Obrigatório' })} error={errors.comanda} />
+                <FormInput label="Valor Real (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório' })} error={errors.valor} />
+                
                 <div className="input-wrapper">
                   <label className="input-label">Forma de Pagamento</label>
-                  <select
-                    id="tipo"
-                    className="input-field"
-                    {...register('tipo')}
-                  >
+                  <select id="tipo" className="input-field" {...register('tipo')}>
                     <option value="D">Dinheiro</option>
                     <option value="C">Cartão / Outros</option>
                   </select>
                 </div>
+
+                {/* NOVO CAMPO: Observações do Caixa da Manhã */}
+                <FormInput label="Observação (Opcional)" id="observacoes" placeholder="Ex: Faltou 2 reais de troco..." register={register('observacoes')} />
 
                 <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                   <Button type="submit" isLoading={isActionLoading}>
                     {editingId ? 'Salvar Alterações' : 'Gravar na Tabela'}
                   </Button>
                   {editingId && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleCancelarEdicao}
-                    >
+                    <Button type="button" variant="secondary" onClick={handleCancelarEdicao}>
                       <X size={16} style={{ marginRight: '4px' }} /> Cancelar
                     </Button>
                   )}
@@ -482,177 +420,34 @@ export const ShiftHandover = () => {
             </Card>
           </form>
 
-          <Card
-            title="Espelho Digital da Folha de Vendas"
-            icon={FileText}
-            className="print-card"
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                marginBottom: '16px',
-              }}
-              className="no-print"
-            >
+          <Card title="Espelho Digital da Folha de Vendas" icon={FileText} className="print-card">
+            
+            {/* CABEÇALHO DO ESPELHO COM CALENDÁRIO PARA A MANHÃ */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }} className="no-print">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Calendar size={18} /> Conciliar dia:
+                </label>
+                <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
+              </div>
               <Button variant="secondary" onClick={() => window.print()}>
                 Exportar PDF da Folha
               </Button>
             </div>
 
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
-            >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div>
-                <h4
-                  style={{
-                    backgroundColor: '#fee2e2',
-                    padding: '10px',
-                    borderRadius: '6px',
-                    color: '#991b1b',
-                    marginBottom: '12px',
-                    textAlign: 'center',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Dinheiro — Total: R${' '}
-                  {totalDinheiro.toFixed(2).replace('.', ',')}
+                <h4 style={{ backgroundColor: '#fee2e2', padding: '10px', borderRadius: '6px', color: '#991b1b', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
+                  Dinheiro — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}
                 </h4>
-                <Table
-                  columns={[
-                    {
-                      header: 'Hora',
-                      render: (r) => (
-                        <span
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            color: 'var(--color-text-muted)',
-                          }}
-                        >
-                          <Clock size={12} />
-                          {formatarHora(r.created_at)}
-                        </span>
-                      ),
-                    },
-                    { header: 'Comanda', accessorKey: 'comanda' },
-                    {
-                      header: 'Valor',
-                      render: (r) =>
-                        `R$ ${r.valor.toFixed(2).replace('.', ',')}`,
-                    },
-                    {
-                      header: 'Ações',
-                      className: 'actions-cell no-print',
-                      render: (r) => (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleIniciarEdicao(r)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'var(--color-primary)',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleExcluirEntrega(r.id)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#dc2626',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ),
-                    },
-                  ]}
-                  data={entregas.filter((e) => e.tipo_saida === 'D')}
-                />
+                <Table columns={getColunasManha()} data={entregas.filter((e) => e.tipo_saida === 'D')} />
               </div>
 
               <div>
-                <h4
-                  style={{
-                    backgroundColor: '#e0e7ff',
-                    padding: '10px',
-                    borderRadius: '6px',
-                    color: '#1e40af',
-                    marginBottom: '12px',
-                    textAlign: 'center',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  Cartão / Outros — Total: R${' '}
-                  {totalCartao.toFixed(2).replace('.', ',')}
+                <h4 style={{ backgroundColor: '#e0e7ff', padding: '10px', borderRadius: '6px', color: '#1e40af', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
+                  Cartão / Outros — Total: R$ {totalCartao.toFixed(2).replace('.', ',')}
                 </h4>
-                <Table
-                  columns={[
-                    {
-                      header: 'Hora',
-                      render: (r) => (
-                        <span
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            color: 'var(--color-text-muted)',
-                          }}
-                        >
-                          <Clock size={12} />
-                          {formatarHora(r.created_at)}
-                        </span>
-                      ),
-                    },
-                    { header: 'Comanda', accessorKey: 'comanda' },
-                    {
-                      header: 'Valor',
-                      render: (r) =>
-                        `R$ ${r.valor.toFixed(2).replace('.', ',')}`,
-                    },
-                    {
-                      header: 'Ações',
-                      className: 'actions-cell no-print',
-                      render: (r) => (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleIniciarEdicao(r)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'var(--color-primary)',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleExcluirEntrega(r.id)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#dc2626',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ),
-                    },
-                  ]}
-                  data={entregas.filter((e) => e.tipo_saida === 'C')}
-                />
+                <Table columns={getColunasManha()} data={entregas.filter((e) => e.tipo_saida === 'C')} />
               </div>
             </div>
           </Card>
@@ -663,66 +458,25 @@ export const ShiftHandover = () => {
           VISÃO: CAIXA DA TARDE 
           ============================================== */}
       {role === 'CAIXA_TARDE' && (
-        <Card
-          title="Conferência de Comandas Físicas (Cestinha)"
-          icon={CheckCircle}
-          className="print-card"
-        >
-          <div
-            style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
-          >
-            {/* Tabela Dinheiro */}
+        <Card title="Conferência de Comandas Físicas (Cestinha)" icon={CheckCircle} className="print-card">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <h4
-                style={{
-                  backgroundColor: '#fee2e2',
-                  padding: '10px',
-                  borderRadius: '6px',
-                  color: '#991b1b',
-                  marginBottom: '12px',
-                  textAlign: 'center',
-                  fontWeight: 'bold',
-                }}
-              >
-                Conferência Dinheiro — Total: R${' '}
-                {totalDinheiro.toFixed(2).replace('.', ',')}
+              <h4 style={{ backgroundColor: '#fee2e2', padding: '10px', borderRadius: '6px', color: '#991b1b', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
+                Conferência Dinheiro — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}
               </h4>
-              <Table
-                columns={colunasTarde}
-                data={entregas.filter((e) => e.tipo_saida === 'D')}
-              />
+              <Table columns={colunasTarde} data={entregas.filter((e) => e.tipo_saida === 'D')} />
             </div>
 
-            {/* Tabela Cartão */}
             <div>
-              <h4
-                style={{
-                  backgroundColor: '#e0e7ff',
-                  padding: '10px',
-                  borderRadius: '6px',
-                  color: '#1e40af',
-                  marginBottom: '12px',
-                  textAlign: 'center',
-                  fontWeight: 'bold',
-                }}
-              >
-                Conferência Cartão / Outros — Total: R${' '}
-                {totalCartao.toFixed(2).replace('.', ',')}
+              <h4 style={{ backgroundColor: '#e0e7ff', padding: '10px', borderRadius: '6px', color: '#1e40af', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
+                Conferência Cartão / Outros — Total: R$ {totalCartao.toFixed(2).replace('.', ',')}
               </h4>
-              <Table
-                columns={colunasTarde}
-                data={entregas.filter((e) => e.tipo_saida === 'C')}
-              />
+              <Table columns={colunasTarde} data={entregas.filter((e) => e.tipo_saida === 'C')} />
             </div>
           </div>
 
           <div style={{ marginTop: '24px' }}>
-            <label
-              className="input-label"
-              style={{ marginBottom: '8px', display: 'block' }}
-            >
-              Anotações Gerais do Turno Vespertino (Impressão)
-            </label>
+            <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Anotações Gerais do Turno Vespertino (Impressão)</label>
             <textarea
               className="input-field"
               rows="2"
@@ -733,28 +487,14 @@ export const ShiftHandover = () => {
             />
           </div>
 
-          <div
-            style={{
-              marginTop: '20px',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '12px',
-            }}
-            className="no-print"
-          >
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }} className="no-print">
             {turnoEncerrado && (
               <Button variant="secondary" onClick={() => window.print()}>
-                <Printer size={16} style={{ marginRight: '6px' }} /> Exportar
-                Relatório PDF
+                <Printer size={16} style={{ marginRight: '6px' }} /> Exportar Relatório PDF
               </Button>
             )}
             <div style={{ width: '250px' }}>
-              <Button
-                onClick={handleFinalizarTurnoTarde}
-                isLoading={isActionLoading}
-              >
-                Encerrar Turno e Salvar
-              </Button>
+              <Button onClick={handleFinalizarTurnoTarde} isLoading={isActionLoading}>Encerrar Turno e Salvar</Button>
             </div>
           </div>
         </Card>
@@ -765,103 +505,33 @@ export const ShiftHandover = () => {
           ============================================== */}
       {role === 'ADMIN' && (
         <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText}>
-          {/* HEADER DO ADMIN COM CALENDÁRIO */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: '1px solid #e2e8f0',
-            }}
-          >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
             <div>
-              <h3
-                style={{
-                  fontSize: '1.1rem',
-                  color: 'var(--color-text-main)',
-                  marginBottom: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                <Calendar size={18} color="var(--color-primary)" /> Data da
-                Operação
+              <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Calendar size={18} color="var(--color-primary)" /> Data da Operação
               </h3>
-              <p
-                style={{
-                  fontSize: '0.85rem',
-                  color: 'var(--color-text-muted)',
-                }}
-              >
-                Selecione um dia para auditar o histórico de caixas.
-              </p>
+              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Selecione um dia para auditar o histórico de caixas.</p>
             </div>
             <div>
-              <input
-                type="date"
-                className="input-field"
-                style={{
-                  width: 'auto',
-                  padding: '10px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  color: 'var(--color-primary)',
-                }}
-                value={dataFiltro}
-                onChange={(e) => setDataFiltro(e.target.value)}
-              />
+              <input type="date" className="input-field" style={{ width: 'auto', padding: '10px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--color-primary)' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
             </div>
           </div>
 
-          <div
-            style={{
-              padding: '16px',
-              backgroundColor: 'var(--color-background)',
-              borderRadius: '8px',
-              marginBottom: '20px',
-            }}
-          >
-            <p style={{ fontSize: '0.95rem' }}>
-              Total Geral em Dinheiro Declarado:{' '}
-              <strong>R$ {totalDinheiro.toFixed(2).replace('.', ',')}</strong>
-            </p>
-            <p style={{ fontSize: '0.95rem', marginTop: '4px' }}>
-              Total Geral em Cartões Declarado:{' '}
-              <strong>R$ {totalCartao.toFixed(2).replace('.', ',')}</strong>
-            </p>
+          <div style={{ padding: '16px', backgroundColor: 'var(--color-background)', borderRadius: '8px', marginBottom: '20px' }}>
+            <p style={{ fontSize: '0.95rem' }}>Total Geral em Dinheiro Declarado: <strong>R$ {totalDinheiro.toFixed(2).replace('.', ',')}</strong></p>
+            <p style={{ fontSize: '0.95rem', marginTop: '4px' }}>Total Geral em Cartões Declarado: <strong>R$ {totalCartao.toFixed(2).replace('.', ',')}</strong></p>
           </div>
 
           <Table
             columns={[
               { header: 'Hora', render: (r) => formatarHora(r.created_at) },
               { header: 'Comanda', accessorKey: 'comanda' },
-              {
-                header: 'Valor',
-                render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}`,
-              },
-              {
-                header: 'Lançado Manhã',
-                render: (r) => (r.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão'),
-              },
-              {
-                header: 'Pago Real Tarde',
-                render: (r) => getNomePagamento(r.forma_pagamento_real),
-              },
-              {
-                header: 'Status',
-                render: (r) => (r.conferido ? '✅ Conferido' : '⏳ Pendente'),
-              },
-              {
-                header: 'Obs.',
-                render: (r) => (
-                  <span style={{ fontSize: '0.8rem', color: '#666' }}>
-                    {r.observacoes || '-'}
-                  </span>
-                ),
-              },
+              { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` },
+              { header: 'Lançado Manhã', render: (r) => (r.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão') },
+              { header: 'Pago Real Tarde', render: (r) => getNomePagamento(r.forma_pagamento_real) },
+              { header: 'Status', render: (r) => (r.conferido ? '✅ Conferido' : '⏳ Pendente') },
+              { header: 'Baixa (Conciliado)', render: (r) => (r.conciliado ? '✅ Sim' : '❌ Não') },
+              { header: 'Obs.', render: (r) => <span style={{ fontSize: '0.8rem', color: '#666' }}>{r.observacoes || '-'}</span> },
             ]}
             data={entregas}
           />
