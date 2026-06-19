@@ -69,7 +69,6 @@ export const ShiftHandover = () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
     try {
-      // CAIXA_MANHA e ADMIN usam o calendário. CAIXA_TARDE é travado no dia de hoje para não errar.
       let dataConsulta = dataFiltro
       if (role === 'CAIXA_TARDE') {
         const tzOffset = new Date().getTimezoneOffset() * 60000
@@ -228,7 +227,7 @@ export const ShiftHandover = () => {
   const totalDinheiro = entregas.filter((e) => e.tipo_saida === 'D').reduce((acc, curr) => acc + curr.valor, 0)
   const totalCartao = entregas.filter((e) => e.tipo_saida === 'C').reduce((acc, curr) => acc + curr.valor, 0)
 
-  // --- COLUNAS DA MANHÃ (COM RISCO DE CONCILIAÇÃO) ---
+  // --- COLUNAS DA MANHÃ (COM RISCO DE CONCILIAÇÃO E DADOS DA TARDE) ---
   const getColunasManha = () => [
     {
       header: 'Hora',
@@ -245,6 +244,26 @@ export const ShiftHandover = () => {
     {
       header: 'Valor',
       render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>R$ {r.valor.toFixed(2).replace('.', ',')}</span>,
+    },
+    {
+      header: 'Recebido (Tarde)',
+      render: (r) => {
+        const formaReal = r.forma_pagamento_real || r.tipo_saida;
+        const alterado = r.tipo_saida !== formaReal;
+        
+        return (
+          <div style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>
+            <span style={{ fontWeight: alterado ? 'bold' : 'normal' }}>
+              {getNomePagamento(formaReal)}
+            </span>
+            {alterado && (
+              <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: '600', marginTop: '2px' }}>
+                <AlertCircle size={12} /> Divergente
+              </span>
+            )}
+          </div>
+        );
+      }
     },
     {
       header: 'Obs',
@@ -423,16 +442,19 @@ export const ShiftHandover = () => {
           <Card title="Espelho Digital da Folha de Vendas" icon={FileText} className="print-card">
             
             {/* CABEÇALHO DO ESPELHO COM CALENDÁRIO PARA A MANHÃ */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px' }} className="no-print">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="no-print">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Calendar size={18} /> Conciliar dia:
                 </label>
                 <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
               </div>
-              <Button variant="secondary" onClick={() => window.print()}>
-                Exportar PDF da Folha
-              </Button>
+              
+              <div style={{ width: 'max-content' }}>
+                <Button variant="secondary" onClick={() => window.print()}>
+                  Exportar PDF da Folha
+                </Button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
