@@ -3,14 +3,14 @@ import { useForm } from 'react-hook-form'
 import { createClient } from '@supabase/supabase-js'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
 import { useAuth } from '../../core/hooks/useAuth'
-import { UserPlus, Users, Shield, Loader2 } from 'lucide-react'
+import { UserPlus, Users, Loader2 } from 'lucide-react'
 
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 
-// Instância isolada para cadastrar usuários sem deslogar o Administrador atual
+// Instância isolada para cadastrar usuários sem sobrescrever a sessão do Administrador atual
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const detachedAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -35,7 +35,7 @@ export const UserManagement = () => {
     formState: { errors },
   } = useForm()
 
-  // Buscar todos os usuários vinculados à mesma filial (store_id)
+  // Sincroniza a listagem de usuários baseada no store_id do admin logado
   const carregarUsuariosDaLoja = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
@@ -59,14 +59,21 @@ export const UserManagement = () => {
     carregarUsuariosDaLoja()
   }, [carregarUsuariosDaLoja])
 
+  // Processa o formulário, mascarando as credenciais para atender aos requisitos do Supabase Auth
   const onCadastrarUsuario = async (data) => {
     setIsActionLoading(true)
     try {
-      // 1. Criar o usuário no microsserviço de autenticação (Auth)
+      // Normalização do username simples para formato de e-mail fictício
+      const emailFicticio = data.email.toLowerCase().trim() + '@torresfarma.com'
+
+      // Injeção de sufixo para atingir o length >= 6 do Supabase
+      const senhaSecreta = data.password + 'TF'
+
+      // 1. Criação no microsserviço de autenticação
       const { data: authData, error: authError } =
         await detachedAuthClient.auth.signUp({
-          email: data.email,
-          password: data.password,
+          email: emailFicticio,
+          password: senhaSecreta,
           options: {
             data: {
               nome: data.nome,
@@ -79,14 +86,14 @@ export const UserManagement = () => {
       if (authError) throw authError
 
       if (authData?.user) {
-        // 2. Inserir/Sincronizar dados na tabela pública de perfis (public.users)
+        // 2. Sincronização na tabela pública (public.users)
         const { error: profileError } = await supabase.from('users').upsert([
           {
             id: authData.user.id,
             nome: data.nome,
             role: data.role,
             store_id: user.store_id,
-            email: data.email, 
+            email: emailFicticio,
           },
         ])
 
@@ -179,12 +186,12 @@ export const UserManagement = () => {
               />
 
               <FormInput
-                label="E-mail de Login"
+                label="Usuário"
                 id="email"
-                type="email"
-                placeholder="operador@torresfarma.com.br"
+                type="text"
+                placeholder="Ex: josiane"
                 register={register('email', {
-                  required: 'O e-mail é obrigatório',
+                  required: 'O usuário é obrigatório',
                 })}
                 error={errors.email}
               />
@@ -193,13 +200,14 @@ export const UserManagement = () => {
                 label="Senha de Acesso"
                 id="password"
                 type="password"
-                placeholder="Mínimo 6 caracteres"
+                maxLength={4}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="PIN de 4 dígitos (Ex: 1234)"
                 register={register('password', {
-                  required: 'A senha é obrigatória',
-                  minLength: {
-                    value: 6,
-                    message: 'A senha deve ter pelo menos 6 dígitos',
-                  },
+                  required: 'O PIN é obrigatório',
+                  minLength: { value: 4, message: 'Digite exatos 4 números' },
+                  maxLength: { value: 4, message: 'Digite exatos 4 números' },
                 })}
                 error={errors.password}
               />
