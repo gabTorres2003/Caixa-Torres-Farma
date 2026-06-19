@@ -15,6 +15,10 @@ import {
 export const MainLayout = () => {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const turnoAtual = localStorage.getItem('turnoOperacional')
+  const textoPerfil = user?.role === 'ADMIN' 
+    ? 'Administrador' 
+    : turnoAtual ? `Turno: ${turnoAtual}` : 'Operador de Caixa'
 
   // 1. Menus Básicos 
   const baseMenuItems = [
@@ -159,9 +163,10 @@ export const MainLayout = () => {
                 style={{
                   color: 'var(--color-text-muted)',
                   fontSize: '0.75rem',
+                  fontWeight: '500',
                 }}
               >
-                {user?.role}
+                {textoPerfil}
               </p>
             </div>
           </div>
