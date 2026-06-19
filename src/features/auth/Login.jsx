@@ -27,16 +27,17 @@ export const Login = () => {
     setAuthError('')
 
     try {
-      // 1. Pega o usuário simples (ex: brunamanha) e adiciona o domínio falso
-      const emailFicticio = data.usuario.toLowerCase().trim() + '@torresfarma.com';
-      
-      // 2. Pega o PIN digitado (ex: 1234) e adiciona o sufixo secreto
-      const senhaSecreta = data.password + 'TF';
+      // 1. Mascara as credenciais para o formato do Supabase
+      const emailFicticio = data.usuario.toLowerCase().trim() + '@torresfarma.com'
+      const senhaSecreta = data.password + 'TF'
 
-      // 3. Faz o login no Supabase usando as credenciais mascaradas
+      // 2. Faz o login no banco de dados
       await login(emailFicticio, senhaSecreta)
       
-      // Envia para a rota raiz ('/'), e o AppRoutes decide para onde ir baseado no cargo
+      // 3. Salva o turno selecionado na memória local do navegador
+      localStorage.setItem('turnoOperacional', data.turnoOperacional)
+
+      // Envia para a tela inicial
       navigate('/', { replace: true })
     } catch (error) {
       console.error(error)
@@ -69,11 +70,10 @@ export const Login = () => {
       >
         <FormError message={authError} />
 
-        {/* CAMPO DE USUÁRIO (Sem validação de E-mail) */}
         <FormInput
           label="Usuário de Acesso"
           id="usuario"
-          type="text" 
+          type="text"
           placeholder="Ex: josiane"
           autoComplete="username"
           register={register('usuario', {
@@ -82,7 +82,6 @@ export const Login = () => {
           error={errors.usuario}
         />
 
-        {/* CAMPO DO PIN (Travado em 4 dígitos) */}
         <FormInput
           label="PIN de Acesso"
           id="password"
@@ -94,17 +93,52 @@ export const Login = () => {
           autoComplete="current-password"
           register={register('password', {
             required: 'O PIN é obrigatório',
-            minLength: {
-              value: 4,
-              message: 'O PIN deve ter exatos 4 números',
-            },
-            maxLength: {
-              value: 4,
-              message: 'O PIN deve ter exatos 4 números',
-            },
+            minLength: { value: 4, message: 'O PIN deve ter exatos 4 números' },
+            maxLength: { value: 4, message: 'O PIN deve ter exatos 4 números' },
           })}
           error={errors.password}
         />
+
+        {/* --- INÍCIO DO BLOCO DO TURNO --- */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label
+            htmlFor="turnoOperacional"
+            style={{
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              color: 'var(--color-text-main)'
+            }}
+          >
+            Turno de Trabalho Atual
+          </label>
+          <select
+            id="turnoOperacional"
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+              backgroundColor: 'var(--color-background)',
+              fontSize: '1rem',
+              color: 'var(--color-text-main)',
+              outline: 'none',
+              cursor: 'pointer'
+            }}
+            {...register('turnoOperacional', {
+              required: 'Você deve informar qual turno está assumindo.',
+            })}
+          >
+            <option value="">Selecione o turno...</option>
+            <option value="Manhã">Manhã (Abertura)</option>
+            <option value="Tarde">Tarde (Fechamento)</option>
+          </select>
+          {errors.turnoOperacional && (
+            <span style={{ color: 'var(--color-error)', fontSize: '0.75rem' }}>
+              {errors.turnoOperacional.message}
+            </span>
+          )}
+        </div>
+        {/* --- FIM DO BLOCO DO TURNO --- */}
 
         <div style={{ marginTop: '8px' }}>
           <Button type="submit" isLoading={isLoading} icon={LogIn}>
