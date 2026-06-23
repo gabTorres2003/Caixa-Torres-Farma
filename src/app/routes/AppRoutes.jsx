@@ -15,6 +15,7 @@ import { PreClosing } from '../../features/pre-closing/PreClosing'
 import { Divergences } from '../../features/divergences/Divergences'
 import { Reports } from '../../features/reports/Reports'
 import { UserManagement } from '../../features/auth/UserManagement'
+import { NotesCoinsManagement } from '../../features/conference/NotesCoinsManagement'
 
 // --- GUARDAS DE ROTA ---
 const AdminRoute = ({ children }) => {
@@ -98,6 +99,24 @@ export const AppRoutes = () => {
             element={
               <AdminRoute>
                 <UserManagement />
+              </AdminRoute>
+            }
+          />
+
+          {/* MÓDULO DE CONFERÊNCIA */}
+          <Route
+            path="/conferencia/notas-moedas"
+            element={
+              <AdminRoute>
+                <NotesCoinsManagement />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/conferencia/caixas-fechados"
+            element={
+              <AdminRoute>
+                <div style={{ padding: '24px', fontSize: '1.2rem', color: '#666' }}>Em construção: Caixas Fechados</div>
               </AdminRoute>
             }
           />
