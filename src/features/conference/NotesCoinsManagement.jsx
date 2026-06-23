@@ -11,7 +11,6 @@ export const NotesCoinsManagement = () => {
 
   const [estoqueLocal, setEstoqueLocal] = useState({})
 
-  // Transforma os dados do banco em um estado local para podermos editar na tela antes de salvar
   useEffect(() => {
     if (denominations.length > 0) {
       const inicial = {}
@@ -27,7 +26,10 @@ export const NotesCoinsManagement = () => {
     }
   }, [denominations])
 
-  // Lida com a digitação do valor e calcula as unidades automaticamente
+  useEffect(() => {
+    carregarEstoque()
+  }, [carregarEstoque])
+
   const handleTotalDinheiroChange = (id, valorFace, valorDigitado) => {
     const unidades = calcularUnidadesPorTotal(valorFace, valorDigitado)
     setEstoqueLocal(prev => ({
@@ -36,7 +38,6 @@ export const NotesCoinsManagement = () => {
     }))
   }
 
-  // Lida com a alteração manual das metas de mínimo e ideal
   const handleLimiteChange = (id, campo, valor) => {
     setEstoqueLocal(prev => ({
       ...prev,
@@ -44,11 +45,26 @@ export const NotesCoinsManagement = () => {
     }))
   }
 
+  // Blindagem contra loop infinito
   if (isLoading || (denominations.length > 0 && Object.keys(estoqueLocal).length === 0)) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '50px', alignItems: 'center', gap: '12px' }}>
-        <Loader2 className="animate-spin" size={32} color="var(--color-primary)" />
-        <span style={{ color: 'var(--color-text-muted)' }}>Sincronizando cofre...</span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '100px', gap: '16px' }}>
+        <Loader2 className="animate-spin" size={40} color="var(--color-primary)" />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: '1.1rem' }}>Sincronizando cofre...</span>
+      </div>
+    )
+  }
+
+  // TELA DE CONTINGÊNCIA: Se o banco falhar em trazer os dados
+  if (denominations.length === 0) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
+        <AlertTriangle size={64} color="#ef4444" style={{ margin: '0 auto 24px' }} />
+        <h2 style={{ fontSize: '1.5rem', color: 'var(--color-text-main)', marginBottom: '12px' }}>Nenhum dado encontrado no Cofre</h2>
+        <p style={{ color: 'var(--color-text-muted)', marginBottom: '32px', lineHeight: '1.6' }}>
+          Não foi possível ler as configurações de notas e moedas. Verifique se o script SQL de criação das tabelas foi executado corretamente no Supabase e não retornou erros.
+        </p>
+        <Button onClick={carregarEstoque}>Tentar Conectar Novamente</Button>
       </div>
     )
   }
@@ -56,17 +72,14 @@ export const NotesCoinsManagement = () => {
   const notas = denominations.filter(d => d.tipo === 'NOTA')
   const moedas = denominations.filter(d => d.tipo === 'MOEDA')
 
-  // --- CÁLCULO DOS RESUMOS TOTAIS ---
   const totalNotas = notas.reduce((acc, n) => acc + (estoqueLocal[n.id]?.unidades_atual * n.valor || 0), 0)
   const totalMoedas = moedas.reduce((acc, m) => acc + (estoqueLocal[m.id]?.unidades_atual * m.valor || 0), 0)
   const totalGeral = totalNotas + totalMoedas
 
-  // --- COMPONENTE REUTILIZÁVEL PARA DESENHAR AS LINHAS (NOTAS E MOEDAS) ---
   const renderItem = (item) => {
     const dados = estoqueLocal[item.id]
     if (!dados) return null
 
-    // Lógica dos Alertas Visuais
     const isAbaixoMinimo = dados.minima > 0 && dados.unidades_atual <= dados.minima
     const qtdRepor = dados.ideal - dados.unidades_atual
     const precisaRepor = dados.ideal > 0 && qtdRepor > 0
@@ -77,7 +90,6 @@ export const NotesCoinsManagement = () => {
         backgroundColor: isAbaixoMinimo ? '#fef2f2' : '#fff',
         padding: '16px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '12px'
       }}>
-        {/* Topo: Valor e Digitação da Contagem */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>
             R$ {item.valor.toFixed(2).replace('.', ',')}
@@ -99,7 +111,6 @@ export const NotesCoinsManagement = () => {
           </div>
         </div>
 
-        {/* Linha de Limites (Mínimo e Ideal) */}
         <div style={{ display: 'flex', gap: '12px', borderTop: '1px dashed #cbd5e1', paddingTop: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Aviso Mín.</label>
@@ -111,7 +122,6 @@ export const NotesCoinsManagement = () => {
           </div>
         </div>
 
-        {/* Mensagem de Alerta para Reposição */}
         {precisaRepor && (
           <div style={{ color: isAbaixoMinimo ? '#b91c1c' : '#d97706', fontSize: '0.8rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <AlertTriangle size={14} /> 
@@ -124,8 +134,6 @@ export const NotesCoinsManagement = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '40px' }}>
-      
-      {/* CABEÇALHO COM RESUMO GERAL */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Cofre Central (Trocos)</h1>
@@ -154,14 +162,12 @@ export const NotesCoinsManagement = () => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-        {/* COLUNA 1: NOTAS */}
         <Card title="Cédulas" icon={Banknote}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {notas.map(renderItem)}
           </div>
         </Card>
 
-        {/* COLUNA 2: MOEDAS */}
         <Card title="Moedas" icon={Coins}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {moedas.map(renderItem)}

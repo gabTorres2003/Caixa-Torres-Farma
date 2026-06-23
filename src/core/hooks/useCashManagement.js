@@ -7,7 +7,7 @@ export const useCashManagement = (storeId) => {
   const [isLoading, setIsLoading] = useState(true)
 
   const carregarEstoque = useCallback(async () => {
-    // Desliga o loading se o ID da loja ainda não estiver pronto
+    // Garante que o loading desliga se a filial ainda não estiver carregada na memória
     if (!storeId) {
       setIsLoading(false)
       return
@@ -16,15 +16,14 @@ export const useCashManagement = (storeId) => {
     setIsLoading(true)
     try {
       let data = await SupabaseCashRepository.getDenominations(storeId)
-      
       if (data.length === 0) {
         await SupabaseCashRepository.initializeDenominations(storeId)
         data = await SupabaseCashRepository.getDenominations(storeId)
       }
-      
       setDenominations(data)
     } catch (error) {
       console.error('Erro ao carregar estoque:', error)
+      alert('Atenção: Erro de conexão com o banco de dados. Verifique se o SQL foi rodado com sucesso. Detalhe: ' + error.message) 
     } finally {
       setIsLoading(false)
     }
