@@ -58,10 +58,9 @@ export const MainLayout = () => {
             label: 'Pré-Fechamento',
             icon: Calculator,
           },
-          // --- MÓDULO DE CONFERÊNCIA (SANFONA) ---
           {
             key: 'conferencia',
-            label: 'Módulo Conferência',
+            label: 'Conferência',
             icon: ShieldCheck,
             subItems: [
               {
@@ -141,7 +140,7 @@ export const MainLayout = () => {
           }}
         >
           {menuItems.map((item) => {
-            // SE FOR UM MENU COM SUBLISTA (SANFONA)
+            // MENU SANFONA
             if (item.subItems) {
               const isOpen = openMenus[item.key]
               const isActiveChild = item.subItems.some(
@@ -240,7 +239,7 @@ export const MainLayout = () => {
               )
             }
 
-            // SE FOR UM BOTÃO NORMAL
+            // BOTÃO NORMAL
             const isActive = location.pathname === item.path
             const Icon = item.icon
             return (

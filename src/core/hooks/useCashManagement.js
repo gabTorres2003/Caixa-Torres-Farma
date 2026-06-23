@@ -7,14 +7,21 @@ export const useCashManagement = (storeId) => {
   const [isLoading, setIsLoading] = useState(true)
 
   const carregarEstoque = useCallback(async () => {
-    if (!storeId) return
+    // Desliga o loading se o ID da loja ainda não estiver pronto
+    if (!storeId) {
+      setIsLoading(false)
+      return
+    }
+    
     setIsLoading(true)
     try {
       let data = await SupabaseCashRepository.getDenominations(storeId)
+      
       if (data.length === 0) {
         await SupabaseCashRepository.initializeDenominations(storeId)
         data = await SupabaseCashRepository.getDenominations(storeId)
       }
+      
       setDenominations(data)
     } catch (error) {
       console.error('Erro ao carregar estoque:', error)
@@ -28,7 +35,6 @@ export const useCashManagement = (storeId) => {
     return Math.floor(parseFloat(valorTotalDigitado) / parseFloat(valorFace))
   }
 
-  // Salva as contagens e os limites de segurança no banco
   const salvarLimitesEContagem = async (estoqueLocal) => {
     setIsLoading(true)
     try {

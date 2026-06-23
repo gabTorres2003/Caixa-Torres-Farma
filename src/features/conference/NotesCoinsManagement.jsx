@@ -44,10 +44,11 @@ export const NotesCoinsManagement = () => {
     }))
   }
 
-  if (isLoading || Object.keys(estoqueLocal).length === 0) {
+  if (isLoading || (denominations.length > 0 && Object.keys(estoqueLocal).length === 0)) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '50px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '50px', alignItems: 'center', gap: '12px' }}>
         <Loader2 className="animate-spin" size={32} color="var(--color-primary)" />
+        <span style={{ color: 'var(--color-text-muted)' }}>Sincronizando cofre...</span>
       </div>
     )
   }
