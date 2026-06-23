@@ -4,7 +4,7 @@ import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Loader2, Coins, Banknote, Save, AlertTriangle, Clock, Briefcase } from 'lucide-react'
+import { Loader2, Coins, Banknote, Save, AlertTriangle, Clock, Briefcase, X } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
@@ -14,7 +14,7 @@ export const NotesCoinsManagement = () => {
   
   const [isModalBolsaOpen, setIsModalBolsaOpen] = useState(false)
   const [qtdBolsas, setQtdBolsas] = useState(1)
-  const [bolsasPendentes, setBolsasPendentes] = useState(0) // Controla o que não foi salvo
+  const [bolsasPendentes, setBolsasPendentes] = useState(0)
 
   useEffect(() => {
     if (denominations.length > 0) {
@@ -45,22 +45,20 @@ export const NotesCoinsManagement = () => {
   }
 
   const handleLimiteChange = (id, campo, valor) => {
-    // Permite vazio para não travar o 0, converte se tiver número
     setEstoqueLocal(prev => ({
       ...prev,
       [id]: { ...prev[id], [campo]: valor === '' ? '' : Number(valor) }
     }))
   }
 
-  // --- NOVA LÓGICA: APENAS PRÉVIA NA TELA ---
+  const regraBolsa = [
+    { valorFace: 20, qtd: 5 }, { valorFace: 10, qtd: 10 }, { valorFace: 5, qtd: 20 },
+    { valorFace: 2, qtd: 50 }, { valorFace: 1, qtd: 5 }, { valorFace: 0.50, qtd: 20 },
+    { valorFace: 0.25, qtd: 40 }, { valorFace: 0.10, qtd: 30 }, { valorFace: 0.05, qtd: 40 },
+  ]
+
   const handleAplicarBolsaLocal = () => {
     if (qtdBolsas < 1) return
-
-    const regraBolsa = [
-      { valorFace: 20, qtd: 5 }, { valorFace: 10, qtd: 10 }, { valorFace: 5, qtd: 20 },
-      { valorFace: 2, qtd: 50 }, { valorFace: 1, qtd: 5 }, { valorFace: 0.50, qtd: 20 },
-      { valorFace: 0.25, qtd: 40 }, { valorFace: 0.10, qtd: 30 }, { valorFace: 0.05, qtd: 40 },
-    ]
 
     let novoEstoque = { ...estoqueLocal }
     let alertas = []
@@ -77,7 +75,7 @@ export const NotesCoinsManagement = () => {
         novoEstoque[d.id] = {
           ...novoEstoque[d.id],
           unidades_atual: saldoFinal,
-          valor_total_digitado: (saldoFinal * d.valor).toFixed(2)
+          valor_total_digitado: saldoFinal > 0 ? (saldoFinal * d.valor).toFixed(2) : ''
         }
       }
     })
@@ -91,6 +89,29 @@ export const NotesCoinsManagement = () => {
     setBolsasPendentes(prev => prev + Number(qtdBolsas))
     setIsModalBolsaOpen(false)
     setQtdBolsas(1)
+  }
+
+  // --- NOVA FUNÇÃO: CANCELAR A PRÉVIA DE BOLSA ---
+  const handleCancelarPrévia = () => {
+    let novoEstoque = { ...estoqueLocal }
+
+    denominations.forEach(d => {
+      const regra = regraBolsa.find(r => r.valorFace === Number(d.valor))
+      if (regra) {
+        const atual = Number(novoEstoque[d.id].unidades_atual) || 0
+        const devolver = regra.qtd * bolsasPendentes // Devolve exatamente o que foi subtraído
+        const saldoFinal = atual + devolver
+
+        novoEstoque[d.id] = {
+          ...novoEstoque[d.id],
+          unidades_atual: saldoFinal,
+          valor_total_digitado: saldoFinal > 0 ? (saldoFinal * d.valor).toFixed(2) : ''
+        }
+      }
+    })
+
+    setEstoqueLocal(novoEstoque)
+    setBolsasPendentes(0)
   }
 
   const handleSalvarTudo = async () => {
@@ -175,12 +196,8 @@ export const NotesCoinsManagement = () => {
             <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Mínimo</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input 
-                type="number" 
-                className="input-field" 
-                style={{ width: '80px', padding: '4px', paddingRight: '26px' }} 
-                value={dados.minima} 
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => handleLimiteChange(item.id, 'minima', e.target.value)} 
+                type="number" className="input-field" style={{ width: '80px', padding: '4px', paddingRight: '26px' }} 
+                value={dados.minima} onFocus={(e) => e.target.select()} onChange={(e) => handleLimiteChange(item.id, 'minima', e.target.value)} 
               />
               <span style={{ position: 'absolute', right: '8px', fontSize: '0.7rem', color: '#94a3b8', pointerEvents: 'none' }}>un</span>
             </div>
@@ -189,12 +206,8 @@ export const NotesCoinsManagement = () => {
             <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Ideal</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input 
-                type="number" 
-                className="input-field" 
-                style={{ width: '80px', padding: '4px', paddingRight: '26px' }} 
-                value={dados.ideal} 
-                onFocus={(e) => e.target.select()}
-                onChange={(e) => handleLimiteChange(item.id, 'ideal', e.target.value)} 
+                type="number" className="input-field" style={{ width: '80px', padding: '4px', paddingRight: '26px' }} 
+                value={dados.ideal} onFocus={(e) => e.target.select()} onChange={(e) => handleLimiteChange(item.id, 'ideal', e.target.value)} 
               />
               <span style={{ position: 'absolute', right: '8px', fontSize: '0.7rem', color: '#94a3b8', pointerEvents: 'none' }}>un</span>
             </div>
@@ -243,9 +256,14 @@ export const NotesCoinsManagement = () => {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: 'max-content' }}>
           {bolsasPendentes > 0 && (
-            <span style={{ color: '#d97706', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <AlertTriangle size={16} /> {bolsasPendentes} bolsa(s) pré-visualizada(s) (Não Salvo)
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#fffbeb', padding: '6px 12px', borderRadius: '6px', border: '1px solid #fde68a' }}>
+              <span style={{ color: '#d97706', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertTriangle size={16} /> {bolsasPendentes} bolsa(s) pré-visualizada(s)
+              </span>
+              <button onClick={handleCancelarPrévia} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <X size={14} /> Cancelar
+              </button>
+            </div>
           )}
           <Button variant="secondary" onClick={() => setIsModalBolsaOpen(true)} icon={Briefcase}>
             Prévia de Bolsa
