@@ -196,6 +196,11 @@ export const Deposits = () => {
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador =
       registro.responsavel_nome || registro.users?.nome || 'Operador'
+      
+    // Monta a string da origem + data (ex: "Caixa Jô - 22/06/2026")
+    const origemComData = registro.data_caixa 
+      ? `${registro.origem} - ${new Date(registro.data_caixa + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : registro.origem
 
     const conteudoCupom = `
       <html>
@@ -219,7 +224,7 @@ export const Deposits = () => {
           <div><span class="bold">Data:</span> ${dataApenas}</div>
           <div><span class="bold">Hora:</span> ${horaApenas}</div>
           <div><span class="bold">Categoria:</span> ${registro.categoria || 'Depósito'}</div>
-          <div><span class="bold">Origem:</span> ${registro.origem}</div>
+          <div><span class="bold">Origem:</span> ${origemComData}</div>
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
           <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
