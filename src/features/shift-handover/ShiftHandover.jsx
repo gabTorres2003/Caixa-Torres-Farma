@@ -25,7 +25,6 @@ export const ShiftHandover = () => {
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  // Importando a lógica do Hook
   const { 
     entregas, isPageLoading, isActionLoading, turnoEncerrado,
     carregarEntregas, salvarEntrega, excluirEntrega, toggleConciliado,
@@ -33,7 +32,8 @@ export const ShiftHandover = () => {
   } = useShiftHandover(user, role, dataFiltro)
 
   const [editingId, setEditingId] = useState(null)
-  const [obsTarde, setObsTarde] = useState('')
+  
+  const [obsGerais, setObsGerais] = useState('')
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
@@ -124,30 +124,72 @@ export const ShiftHandover = () => {
     },
   ]
 
+  // === CABEÇALHO DO PDF ===
+  const CabecalhoPDF = () => (
+    <div className="print-only" style={{ borderBottom: '2px solid #000', paddingBottom: '16px', marginBottom: '24px' }}>
+      <h2 style={{ fontSize: '22px', fontWeight: 'bold', margin: '0 0 12px 0', color: '#000' }}>Troca de Turno - Espelho de Entregas Pendentes</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#000' }}>
+        <div>
+          <strong>Responsável pela Emissão:</strong> {user?.nome} <br/>
+          <strong>Caixa:</strong> {role === 'CAIXA_MANHA' ? 'Turno Manhã' : role === 'CAIXA_TARDE' ? 'Turno Tarde' : 'Auditoria Administrativa'}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <strong>Data da Emissão:</strong> {new Date().toLocaleString('pt-BR')} <br/>
+          <strong>Data de Referência (Filtro):</strong> {dataFiltro.split('-').reverse().join('/')}
+        </div>
+      </div>
+    </div>
+  )
+
+  // === OBSERVAÇÕES DO PDF ===
+  const ObservacoesGerais = () => (
+    <>
+      <div className="no-print" style={{ marginTop: '24px' }}>
+        <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Anotações Gerais do Turno (Sairá na Impressão)</label>
+        <textarea className="input-field" rows="3" value={obsGerais} onChange={(e) => setObsGerais(e.target.value)} placeholder="Digite aqui um resumo das inconsistências, faltas de troco, recados para o próximo turno..." style={{ width: '100%', resize: 'none' }} />
+      </div>
+
+      <div className="print-only" style={{ marginTop: '32px', fontSize: '14px', border: '1px solid #ccc', padding: '16px', borderRadius: '4px' }}>
+        <strong style={{ display: 'block', marginBottom: '8px', fontSize: '15px' }}>Anotações Gerais do Turno:</strong>
+        <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{obsGerais || 'Nenhuma anotação geral registrada para este turno.'}</p>
+      </div>
+    </>
+  )
+
   if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando dados da filial...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* CSS DE IMPRESSÃO */}
+      {/* CSS DE IMPRESSÃO  */}
       <style>{`
+        @media screen {
+          .print-only { display: none !important; }
+        }
         @media print {
-          /* Define margem zero na página para o Chrome não imprimir URL e Data */
-          @page { margin: 0; size: A4; }
+          /* Zera as margens da página para o Chrome não imprimir URL/Data no topo e rodapé */
+          @page { margin: 10mm; size: A4 portrait; }
           
-          /* Força cor de fundo branca e ajusta o layout base do body */
-          body { 
-            margin: 10mm; /* Adiciona respiro físico no papel */
+          /* Força as estruturas principais a abandonarem o formato de Tela/Flexbox e virarem Documento/Bloco */
+          html, body, #root { 
+            height: auto !important; 
+            min-height: 0 !important; 
             background-color: #ffffff !important; 
-            -webkit-print-color-adjust: exact; 
-            print-color-adjust: exact; 
+            display: block !important; 
+            overflow: visible !important;
+          }
+
+          /* Remove a trava de 100vh do MainLayout que gerava a página em branco gigante */
+          body > div {
+            min-height: 0 !important;
+            display: block !important;
           }
           
           /* Esconde absolutamente tudo que for menu ou navegação */
           aside, nav, header, .no-print { display: none !important; }
           
-          /* Expande a área principal para usar 100% da folha sem scroll */
-          main, #root, .print-container { 
+          /* Expande a área principal para usar 100% da folha */
+          main { 
             width: 100% !important; 
             margin: 0 !important; 
             padding: 0 !important; 
@@ -155,18 +197,24 @@ export const ShiftHandover = () => {
             display: block !important; 
           }
           
-          /* Formata o card para tirar sombras e bordas */
+          /* Formata o card para tirar sombras e bordas simulando uma página A4 limpa */
           .print-card { 
             border: none !important; 
             box-shadow: none !important; 
             padding: 0 !important; 
+            margin: 0 !important; 
             width: 100% !important; 
           }
           
-          /* Garante que a tabela não vaze e não quebre a linha pela metade */
-          table { width: 100% !important; table-layout: fixed; page-break-inside: auto; }
+          /* Mostra os cabeçalhos/rodapés específicos de impressão */
+          .print-only { display: block !important; }
+          
+          /* Garante que a tabela não quebre linhas ao meio */
+          table { width: 100% !important; table-layout: auto; page-break-inside: auto; }
           tr { page-break-inside: avoid; page-break-after: auto; }
-          td, th { word-wrap: break-word; font-size: 12px; }
+          td, th { padding: 6px !important; font-size: 11px !important; }
+          
+          * { float: none !important; }
         }
       `}</style>
 
@@ -192,7 +240,7 @@ export const ShiftHandover = () => {
                     <option value="D">Dinheiro</option><option value="C">Cartão / Outros</option>
                   </select>
                 </div>
-                <div style={{ flex: 1 }}><FormInput label="Observação (Opcional)" id="observacoes" placeholder="Faltou 2 reais de troco..." register={register('observacoes')} /></div>
+                <div style={{ flex: 1 }}><FormInput label="Observação Pontual" id="observacoes" placeholder="Faltou 2 reais de troco..." register={register('observacoes')} /></div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <Button type="submit" isLoading={isActionLoading}>{editingId ? 'Salvar' : 'Gravar'}</Button>
                   {editingId && <Button type="button" variant="secondary" onClick={handleCancelarEdicao}><X size={16}/></Button>}
@@ -201,8 +249,11 @@ export const ShiftHandover = () => {
             </Card>
           </form>
 
-          <Card title="Espelho Digital da Folha de Vendas" icon={FileText} className="print-card">
+          <Card className="print-card">
             
+            {/* CABEÇALHO ESCONDIDO */}
+            <CabecalhoPDF />
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="no-print">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -228,12 +279,19 @@ export const ShiftHandover = () => {
                 <Table columns={getColunasManha()} data={entregas.filter((e) => e.tipo_saida === 'C')} />
               </div>
             </div>
+
+            {/* OBSERVAÇÕES GERAIS (TELA E PDF) */}
+            <ObservacoesGerais />
+
           </Card>
         </div>
       )}
 
       {role === 'CAIXA_TARDE' && (
-        <Card title="Conferência de Comandas Físicas (Cestinha)" icon={CheckCircle} className="print-card">
+        <Card className="print-card">
+          
+          <CabecalhoPDF />
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
               <h4 style={{ backgroundColor: '#fee2e2', padding: '10px', borderRadius: '6px', color: '#991b1b', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>Conferência Dinheiro — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}</h4>
@@ -244,25 +302,30 @@ export const ShiftHandover = () => {
               <Table columns={colunasTarde} data={entregas.filter((e) => e.tipo_saida === 'C')} />
             </div>
           </div>
-          <div style={{ marginTop: '24px' }} className="no-print">
-            <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Anotações Gerais do Turno Vespertino (Impressão)</label>
-            <textarea className="input-field" rows="2" value={obsTarde} onChange={(e) => setObsTarde(e.target.value)} placeholder="Digite um resumo das inconsistências..." style={{ width: '100%', resize: 'none' }} />
-          </div>
+          
+          <ObservacoesGerais />
+
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }} className="no-print">
-            {turnoEncerrado && <Button variant="secondary" onClick={() => window.print()}><Printer size={16} style={{ marginRight: '6px' }} /> Exportar Relatório PDF</Button>}
+            {turnoEncerrado && <Button variant="secondary" onClick={() => window.print()}><Printer size={16} style={{ marginRight: '6px' }} /> Exportar PDF da Folha</Button>}
             <div style={{ width: '250px' }}><Button onClick={finalizarTurnoTarde} isLoading={isActionLoading}>Encerrar Turno e Salvar</Button></div>
           </div>
         </Card>
       )}
 
       {role === 'ADMIN' && (
-        <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
+        <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText} className="print-card">
+          
+          <CabecalhoPDF />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }} className="no-print">
             <div>
               <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} color="var(--color-primary)" /> Data da Operação</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Selecione um dia para auditar o histórico.</p>
             </div>
-            <div><input type="date" className="input-field" style={{ width: 'auto', padding: '10px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--color-primary)' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} /></div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <input type="date" className="input-field" style={{ width: 'auto', padding: '10px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--color-primary)' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
+              <Button variant="secondary" onClick={() => window.print()}>Imprimir Auditoria</Button>
+            </div>
           </div>
           <div style={{ padding: '16px', backgroundColor: 'var(--color-background)', borderRadius: '8px', marginBottom: '20px' }}>
             <p style={{ fontSize: '0.95rem' }}>Total Dinheiro: <strong>R$ {totalDinheiro.toFixed(2).replace('.', ',')}</strong></p>
