@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react'
 import { SupabaseCashRepository } from '../../infrastructure/supabase/repositories/SupabaseCashRepository'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
 
-export const useCashManagement = (storeId) => {
+export const useCashManagement = (user) => {
+  const storeId = user?.store_id
   const [denominations, setDenominations] = useState([])
   const [lastConference, setLastConference] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -22,7 +23,6 @@ export const useCashManagement = (storeId) => {
       }
       setDenominations(data)
 
-      // Busca os dados da última conferência
       const ultima = await SupabaseCashRepository.getLastConference(storeId)
       setLastConference(ultima)
 
@@ -39,11 +39,15 @@ export const useCashManagement = (storeId) => {
     return Math.floor(parseFloat(valorTotalDigitado) / parseFloat(valorFace))
   }
 
-  // recebe o usuário logado e gera o histórico
-  const salvarLimitesEContagem = async (estoqueLocal, user) => {
+  const salvarLimitesEContagem = async (estoqueLocal) => {
+    // Trava de segurança garantindo que o usuário existe na memória
+    if (!user) {
+      alert('Sessão do usuário não encontrada. Recarregue a página.');
+      return;
+    }
+
     setIsLoading(true)
     try {
-      // 1. Atualiza as configurações de cada nota/moeda
       const promises = Object.entries(estoqueLocal).map(([id, dados]) => {
         return supabase.from('cash_denominations')
           .update({
@@ -55,7 +59,6 @@ export const useCashManagement = (storeId) => {
       })
       await Promise.all(promises)
 
-      // detalhamento para o Histórico
       let valor_total = 0
       let detalhamento = {}
 
@@ -67,7 +70,6 @@ export const useCashManagement = (storeId) => {
         }
       })
 
-      // 3. Salva a conferência no histórico
       await SupabaseCashRepository.registerMovement({
         store_id: user.store_id,
         created_by: user.id,

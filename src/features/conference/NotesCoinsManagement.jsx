@@ -3,11 +3,11 @@ import { useAuth } from '../../core/hooks/useAuth'
 import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
-import { Loader2, Coins, Banknote, Save, AlertTriangle } from 'lucide-react'
+import { Loader2, Coins, Banknote, Save, AlertTriangle, Clock } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
-  const { denominations, isLoading, carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem } = useCashManagement(user?.store_id)
+  const { denominations, lastConference, isLoading, carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem } = useCashManagement(user)
 
   const [estoqueLocal, setEstoqueLocal] = useState({})
 
@@ -45,7 +45,6 @@ export const NotesCoinsManagement = () => {
     }))
   }
 
-  // Blindagem contra loop infinito
   if (isLoading || (denominations.length > 0 && Object.keys(estoqueLocal).length === 0)) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '100px', gap: '16px' }}>
@@ -55,14 +54,13 @@ export const NotesCoinsManagement = () => {
     )
   }
 
-  // TELA DE CONTINGÊNCIA: Se o banco falhar em trazer os dados
   if (denominations.length === 0) {
     return (
       <div style={{ padding: '40px', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
         <AlertTriangle size={64} color="#ef4444" style={{ margin: '0 auto 24px' }} />
         <h2 style={{ fontSize: '1.5rem', color: 'var(--color-text-main)', marginBottom: '12px' }}>Nenhum dado encontrado no Cofre</h2>
         <p style={{ color: 'var(--color-text-muted)', marginBottom: '32px', lineHeight: '1.6' }}>
-          Não foi possível ler as configurações de notas e moedas. Verifique se o script SQL de criação das tabelas foi executado corretamente no Supabase e não retornou erros.
+          Não foi possível ler as configurações de notas e moedas. Verifique se o script SQL de criação das tabelas foi executado corretamente.
         </p>
         <Button onClick={carregarEstoque}>Tentar Conectar Novamente</Button>
       </div>
@@ -75,6 +73,14 @@ export const NotesCoinsManagement = () => {
   const totalNotas = notas.reduce((acc, n) => acc + (estoqueLocal[n.id]?.unidades_atual * n.valor || 0), 0)
   const totalMoedas = moedas.reduce((acc, m) => acc + (estoqueLocal[m.id]?.unidades_atual * m.valor || 0), 0)
   const totalGeral = totalNotas + totalMoedas
+
+  let textoUltimaConferencia = "Nenhuma conferência registrada."
+  if (lastConference) {
+    const dataFormatada = new Date(lastConference.created_at).toLocaleString('pt-BR', { 
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+    })
+    textoUltimaConferencia = `Última conferência salva por ${lastConference.users?.nome || 'Usuário'} em ${dataFormatada}`
+  }
 
   const renderItem = (item) => {
     const dados = estoqueLocal[item.id]
@@ -155,10 +161,17 @@ export const NotesCoinsManagement = () => {
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button onClick={() => salvarLimitesEContagem(estoqueLocal)} icon={Save}>
-          Salvar Contagem e Configurações
-        </Button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '0.9rem' }}>
+          <Clock size={16} />
+          {textoUltimaConferencia}
+        </div>
+
+        <div style={{ width: 'max-content' }}>
+          <Button onClick={() => salvarLimitesEContagem(estoqueLocal)} icon={Save}>
+            Salvar Contagem e Configurações
+          </Button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
