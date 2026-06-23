@@ -3,13 +3,18 @@ import { useAuth } from '../../core/hooks/useAuth'
 import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
-import { Loader2, Coins, Banknote, Save, AlertTriangle, Clock } from 'lucide-react'
+import { Modal } from '../../shared/components/modals/Modal'
+import { Loader2, Coins, Banknote, Save, AlertTriangle, Clock, Briefcase } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
-  const { denominations, lastConference, isLoading, carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem } = useCashManagement(user)
+  const { denominations, lastConference, isLoading, carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem, montarBolsaTroco } = useCashManagement(user)
 
   const [estoqueLocal, setEstoqueLocal] = useState({})
+  
+  // Estados do Modal de Bolsa
+  const [isModalBolsaOpen, setIsModalBolsaOpen] = useState(false)
+  const [qtdBolsas, setQtdBolsas] = useState(1)
 
   useEffect(() => {
     if (denominations.length > 0) {
@@ -43,6 +48,12 @@ export const NotesCoinsManagement = () => {
       ...prev,
       [id]: { ...prev[id], [campo]: Number(valor) }
     }))
+  }
+
+  const handleConfirmarBolsa = async () => {
+    await montarBolsaTroco(Number(qtdBolsas))
+    setIsModalBolsaOpen(false)
+    setQtdBolsas(1)
   }
 
   if (isLoading || (denominations.length > 0 && Object.keys(estoqueLocal).length === 0)) {
@@ -79,7 +90,7 @@ export const NotesCoinsManagement = () => {
     const dataFormatada = new Date(lastConference.created_at).toLocaleString('pt-BR', { 
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
     })
-    textoUltimaConferencia = `Última conferência salva por ${lastConference.users?.nome || 'Usuário'} em ${dataFormatada}`
+    textoUltimaConferencia = `Última conferência por ${lastConference.users?.nome || 'Usuário'} em ${dataFormatada}`
   }
 
   const renderItem = (item) => {
@@ -102,24 +113,23 @@ export const NotesCoinsManagement = () => {
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Contagem (Total R$)</label>
+              <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Contagem (R$)</label>
               <input 
-                type="number" className="input-field" style={{ width: '110px', padding: '6px' }}
+                type="number" className="input-field" style={{ width: '100px', padding: '6px' }}
                 value={dados.valor_total_digitado}
                 onChange={(e) => handleTotalDinheiroChange(item.id, item.valor, e.target.value)}
-                placeholder="Ex: 100"
               />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '70px', backgroundColor: '#e0e7ff', padding: '6px', borderRadius: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '60px', backgroundColor: '#e0e7ff', padding: '6px', borderRadius: '6px' }}>
               <label style={{ fontSize: '0.7rem', color: '#1e40af' }}>Temos</label>
-              <span style={{ fontWeight: 'bold', color: '#1e40af' }}>{dados.unidades_atual} un</span>
+              <span style={{ fontWeight: 'bold', color: '#1e40af' }}>{dados.unidades_atual}</span>
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', borderTop: '1px dashed #cbd5e1', paddingTop: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Aviso Mín.</label>
+            <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Mínimo</label>
             <input type="number" className="input-field" style={{ width: '60px', padding: '4px' }} value={dados.minima} onChange={(e) => handleLimiteChange(item.id, 'minima', e.target.value)} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -140,6 +150,8 @@ export const NotesCoinsManagement = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '40px' }}>
+      
+      {/* CABEÇALHO */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Cofre Central (Trocos)</h1>
@@ -161,32 +173,76 @@ export const NotesCoinsManagement = () => {
         </div>
       </div>
 
+      {/* BARRA DE AÇÕES (NOVO BOTÃO DE BOLSA) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '0.9rem' }}>
           <Clock size={16} />
           {textoUltimaConferencia}
         </div>
-
-        <div style={{ width: 'max-content' }}>
+        
+        <div style={{ display: 'flex', gap: '12px', width: 'max-content' }}>
+          <Button variant="secondary" onClick={() => setIsModalBolsaOpen(true)} icon={Briefcase}>
+            Montar Bolsa
+          </Button>
           <Button onClick={() => salvarLimitesEContagem(estoqueLocal)} icon={Save}>
-            Salvar Contagem e Configurações
+            Salvar Cofre
           </Button>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
         <Card title="Cédulas" icon={Banknote}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {notas.map(renderItem)}
-          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>{notas.map(renderItem)}</div>
         </Card>
-
         <Card title="Moedas" icon={Coins}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {moedas.map(renderItem)}
-          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>{moedas.map(renderItem)}</div>
         </Card>
       </div>
+
+      {/* MODAL: MONTAGEM DE BOLSA DE TROCO */}
+      <Modal isOpen={isModalBolsaOpen} onClose={() => setIsModalBolsaOpen(false)} title="Montar Bolsa de Abertura">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+            O sistema deduzirá <strong>R$ 430,00</strong> do cofre por cada bolsa gerada, respeitando a divisão unitária abaixo:
+          </p>
+          
+          <div style={{ backgroundColor: '#f1f5f9', padding: '16px', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--color-text-main)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <strong style={{ color: 'var(--color-primary)' }}>Notas (R$ 400,00)</strong><br/>
+              • 5 un. de R$ 20,00<br/>
+              • 10 un. de R$ 10,00<br/>
+              • 20 un. de R$ 5,00<br/>
+              • 50 un. de R$ 2,00
+            </div>
+            <div>
+              <strong style={{ color: 'var(--color-primary)' }}>Moedas (R$ 30,00)</strong><br/>
+              • 5 un. de R$ 1,00<br/>
+              • 20 un. de R$ 0,50<br/>
+              • 40 un. de R$ 0,25<br/>
+              • 30 un. de R$ 0,10<br/>
+              • 40 un. de R$ 0,05
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)' }}>Quantas bolsas deseja montar agora?</label>
+            <input 
+              type="number" 
+              min="1" 
+              value={qtdBolsas} 
+              onChange={(e) => setQtdBolsas(e.target.value)} 
+              className="input-field"
+              style={{ width: '100px' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <Button variant="secondary" onClick={() => setIsModalBolsaOpen(false)}>Cancelar</Button>
+            <Button onClick={handleConfirmarBolsa} isLoading={isLoading}>Confirmar e Deduzir</Button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   )
 }
