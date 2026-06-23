@@ -1,7 +1,6 @@
 import { supabase } from '../supabaseClient'
 
 export const SupabaseCashRepository = {
-  // Busca o estoque atual de notas e moedas da loja
   async getDenominations(storeId) {
     const { data, error } = await supabase
       .from('cash_denominations')
@@ -13,7 +12,6 @@ export const SupabaseCashRepository = {
     return data
   },
 
-  // Inicializa as notas e moedas padrão (se a loja for nova e a tabela estiver vazia)
   async initializeDenominations(storeId) {
     const valoresPadrao = [
       { valor: 200, tipo: 'NOTA' }, { valor: 100, tipo: 'NOTA' }, { valor: 50, tipo: 'NOTA' },
@@ -27,9 +25,25 @@ export const SupabaseCashRepository = {
     if (error) throw error
   },
 
-  // Salva o histórico de movimentação (Inclusão/Retirada)
+  // Salva o histórico exato do que foi contado
   async registerMovement(payload) {
     const { error } = await supabase.from('cash_movements').insert([payload])
     if (error) throw error
+  },
+
+  // Puxa quem fez a última conferência e que horas
+  async getLastConference(storeId) {
+    const { data, error } = await supabase
+      .from('cash_movements')
+      .select('created_at, users ( nome )')
+      .eq('store_id', storeId)
+      .eq('tipo_movimento', 'CONTAGEM_INICIAL') // Usaremos este tipo para as conferências de cofre
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    // O erro PGRST116 significa "nenhuma linha encontrada"
+    if (error && error.code !== 'PGRST116') throw error
+    return data
   }
 }

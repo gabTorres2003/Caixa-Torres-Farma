@@ -4,10 +4,10 @@ import { supabase } from '../../infrastructure/supabase/supabaseClient'
 
 export const useCashManagement = (storeId) => {
   const [denominations, setDenominations] = useState([])
+  const [lastConference, setLastConference] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const carregarEstoque = useCallback(async () => {
-    // Garante que o loading desliga se a filial ainda não estiver carregada na memória
     if (!storeId) {
       setIsLoading(false)
       return
@@ -21,9 +21,14 @@ export const useCashManagement = (storeId) => {
         data = await SupabaseCashRepository.getDenominations(storeId)
       }
       setDenominations(data)
+
+      // Busca os dados da última conferência
+      const ultima = await SupabaseCashRepository.getLastConference(storeId)
+      setLastConference(ultima)
+
     } catch (error) {
       console.error('Erro ao carregar estoque:', error)
-      alert('Atenção: Erro de conexão com o banco de dados. Verifique se o SQL foi rodado com sucesso. Detalhe: ' + error.message) 
+      alert('Atenção: Erro de conexão com o banco de dados. Detalhe: ' + error.message)
     } finally {
       setIsLoading(false)
     }
@@ -34,9 +39,11 @@ export const useCashManagement = (storeId) => {
     return Math.floor(parseFloat(valorTotalDigitado) / parseFloat(valorFace))
   }
 
-  const salvarLimitesEContagem = async (estoqueLocal) => {
+  // recebe o usuário logado e gera o histórico
+  const salvarLimitesEContagem = async (estoqueLocal, user) => {
     setIsLoading(true)
     try {
+      // 1. Atualiza as configurações de cada nota/moeda
       const promises = Object.entries(estoqueLocal).map(([id, dados]) => {
         return supabase.from('cash_denominations')
           .update({
@@ -46,9 +53,32 @@ export const useCashManagement = (storeId) => {
           })
           .eq('id', id)
       })
-      
       await Promise.all(promises)
-      alert('Estoque do cofre e limites salvos com sucesso!')
+
+      // detalhamento para o Histórico
+      let valor_total = 0
+      let detalhamento = {}
+
+      Object.entries(estoqueLocal).forEach(([id, dados]) => {
+        const denom = denominations.find(d => d.id === id)
+        if (denom) {
+          valor_total += (dados.unidades_atual * denom.valor)
+          detalhamento[denom.valor.toString()] = dados.unidades_atual
+        }
+      })
+
+      // 3. Salva a conferência no histórico
+      await SupabaseCashRepository.registerMovement({
+        store_id: user.store_id,
+        created_by: user.id,
+        tipo_movimento: 'CONTAGEM_INICIAL',
+        valor_total: valor_total,
+        origem: 'Cofre Central',
+        destino: 'Cofre Central',
+        detalhamento: detalhamento
+      })
+
+      alert('Estoque do cofre, limites e registro de conferência salvos com sucesso!')
       await carregarEstoque()
     } catch (err) {
       alert('Erro ao salvar as configurações: ' + err.message)
@@ -57,5 +87,5 @@ export const useCashManagement = (storeId) => {
     }
   }
 
-  return { denominations, isLoading, carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem }
+  return { denominations, lastConference, isLoading, carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem }
 }

@@ -224,10 +224,6 @@ export const Deposits = () => {
           <div class="divisor"></div>
           <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
           <div class="divisor"></div>
-          <br><br><br>
-          <div class="center">_________________________________</div>
-          <div class="center">Assinatura do Responsável</div>
-          <br><br>
         </body>
       </html>
     `
@@ -268,7 +264,7 @@ export const Deposits = () => {
           <div class="center title">DROGARIA EIRELI</div>
           <div class="center">CNPJ: 23.584.239/0001-51</div>
           <br>
-          <div class="center bold">FECHAMENTO DE DEPOSITOS</div>
+          <div class="center bold">VALOR TOTAL PARA DEPÓSITO</div>
           <div class="divisor"></div>
           <div><span class="bold">Data:</span> ${dataApenas}</div>
           <div><span class="bold">Hora:</span> ${horaApenas}</div>
@@ -277,11 +273,6 @@ export const Deposits = () => {
           <div class="center bold" style="font-size: 18px; margin: 10px 0;">
             TOTAL: ${valorFormatado}
           </div>
-          <div class="divisor"></div>
-          <br><br><br>
-          <div class="center">_________________________________</div>
-          <div class="center">Assinatura do Responsável</div>
-          <br><br>
         </body>
       </html>
     `
