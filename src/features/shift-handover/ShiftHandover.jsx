@@ -1,21 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../core/hooks/useAuth'
-import { supabase } from '../../infrastructure/supabase/supabaseClient'
-import {
-  Plus,
-  FileText,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  Clock,
-  Pencil,
-  Trash2,
-  X,
-  MessageSquare,
-  Printer,
-  Calendar,
-} from 'lucide-react'
+import { useShiftHandover } from '../../core/hooks/useShiftHandover'
+import { Plus, FileText, CheckCircle, AlertCircle, Loader2, Clock, Pencil, Trash2, X, MessageSquare, Printer, Calendar } from 'lucide-react'
 
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
@@ -25,78 +12,39 @@ import { Table } from '../../shared/components/tables/Table'
 export const ShiftHandover = () => {
   const { user } = useAuth()
   
-  // 1. Puxa a escolha dinâmica feita na tela de login
   const turnoSelecionado = localStorage.getItem('turnoOperacional')
   let role = user?.role || 'CAIXA_MANHA'
-  
   if (user?.role !== 'ADMIN') {
     if (turnoSelecionado && turnoSelecionado !== 'AUTOMATICO') {
       role = turnoSelecionado === 'Tarde' ? 'CAIXA_TARDE' : 'CAIXA_MANHA'
     }
   }
 
-  const [entregas, setEntregas] = useState([])
-  const [isPageLoading, setIsPageLoading] = useState(true)
-  const [isActionLoading, setIsActionLoading] = useState(false)
-
-  const [obsTarde, setObsTarde] = useState('')
-  const [turnoEncerrado, setTurnoEncerrado] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-
-  // O filtro de data começa hoje. A Manhã e o Admin podem alterar.
   const [dataFiltro, setDataFiltro] = useState(() => {
     const tzOffset = new Date().getTimezoneOffset() * 60000
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
+  // Importando a lógica do Hook
+  const { 
+    entregas, isPageLoading, isActionLoading, turnoEncerrado,
+    carregarEntregas, salvarEntrega, excluirEntrega, toggleConciliado,
+    toggleCheckTarde, alterarFormaReal, anotarObservacao, finalizarTurnoTarde 
+  } = useShiftHandover(user, role, dataFiltro)
+
+  const [editingId, setEditingId] = useState(null)
+  const [obsTarde, setObsTarde] = useState('')
+
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
-  // --- FUNÇÕES AUXILIARES ---
-  const formatarHora = (timestamp) => {
-    if (!timestamp) return '--:--'
-    return new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  }
+  useEffect(() => { carregarEntregas() }, [carregarEntregas])
 
-  const getNomePagamento = (sigla) => {
-    if (sigla === 'D') return 'Dinheiro'
-    if (sigla === 'C') return 'Cartão'
-    if (sigla === 'PX') return 'Pix'
-    return sigla
-  }
+  const formatarHora = (timestamp) => timestamp ? new Date(timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--'
+  const getNomePagamento = (sigla) => ({ 'D': 'Dinheiro', 'C': 'Cartão', 'PX': 'Pix' }[sigla] || sigla)
 
-  // --- BUSCA DE DADOS ---
-  const carregarEntregasDoDia = useCallback(async () => {
-    if (!user?.store_id) return
-    setIsPageLoading(true)
-    try {
-      let dataConsulta = dataFiltro
-      if (role === 'CAIXA_TARDE') {
-        const tzOffset = new Date().getTimezoneOffset() * 60000
-        dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
-      }
+  const totalDinheiro = entregas.filter((e) => e.tipo_saida === 'D').reduce((acc, curr) => acc + curr.valor, 0)
+  const totalCartao = entregas.filter((e) => e.tipo_saida === 'C').reduce((acc, curr) => acc + curr.valor, 0)
 
-      const { data, error } = await supabase
-        .from('pending_deliveries')
-        .select('*')
-        .eq('store_id', user.store_id)
-        .gte('created_at', `${dataConsulta}T00:00:00-03:00`)
-        .lte('created_at', `${dataConsulta}T23:59:59-03:00`)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setEntregas(data || [])
-    } catch (err) {
-      console.error('Erro ao buscar entregas:', err.message)
-    } finally {
-      setIsPageLoading(false)
-    }
-  }, [user?.store_id, role, dataFiltro])
-
-  useEffect(() => {
-    carregarEntregasDoDia()
-  }, [carregarEntregasDoDia])
-
-  // --- CONTROLES DA MANHÃ ---
   const handleIniciarEdicao = (entrega) => {
     setEditingId(entrega.id)
     setValue('comanda', entrega.comanda)
@@ -110,275 +58,69 @@ export const ShiftHandover = () => {
     reset({ comanda: '', valor: '', tipo: 'D', observacoes: '' })
   }
 
-  const handleExcluirEntrega = async (id) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta comanda?')) return
-    try {
-      const { error } = await supabase.from('pending_deliveries').delete().eq('id', id)
-      if (error) throw error
-      if (editingId === id) handleCancelarEdicao()
-      await carregarEntregasDoDia()
-    } catch (err) {
-      alert('Erro ao excluir comanda: ' + err.message)
-    }
-  }
-
-  const handleToggleConciliado = async (id, statusAtual) => {
-    try {
-      const { error } = await supabase.from('pending_deliveries').update({ conciliado: !statusAtual }).eq('id', id)
-      if (error) throw error
-      setEntregas((prev) => prev.map((e) => (e.id === id ? { ...e, conciliado: !statusAtual } : e)))
-    } catch (err) {
-      alert('Erro ao conciliar malote: ' + err.message)
-    }
-  }
-
   const onAdicionarEntrega = async (data) => {
-    setIsActionLoading(true)
-    try {
-      if (editingId) {
-        const { error } = await supabase
-          .from('pending_deliveries')
-          .update({
-            comanda: data.comanda,
-            valor: parseFloat(data.valor),
-            tipo_saida: data.tipo,
-            forma_pagamento_real: data.tipo,
-            observacoes: data.observacoes || null
-          })
-          .eq('id', editingId)
-        if (error) throw error
-        setEditingId(null)
-      } else {
-        const { error } = await supabase.from('pending_deliveries').insert([{
-          comanda: data.comanda,
-          valor: parseFloat(data.valor),
-          tipo_saida: data.tipo,
-          forma_pagamento_real: data.tipo,
-          observacoes: data.observacoes || null,
-          store_id: user.store_id,
-          created_by: user.id,
-        }])
-        if (error) throw error
-      }
-      reset({ comanda: '', valor: '', tipo: 'D', observacoes: '' })
-      await carregarEntregasDoDia()
-    } catch (err) {
-      alert('Erro ao processar comanda: ' + err.message)
-    } finally {
-      setIsActionLoading(false)
+    await salvarEntrega(data, editingId)
+    if (editingId) handleCancelarEdicao()
+    else reset({ comanda: '', valor: '', tipo: 'D', observacoes: '' })
+  }
+
+  const onExcluirEntrega = async (id) => {
+    if (window.confirm('Tem certeza que deseja excluir esta comanda?')) {
+      await excluirEntrega(id)
+      if (editingId === id) handleCancelarEdicao()
     }
   }
 
-  // --- CONTROLES DA TARDE ---
-  const handleToggleCheck = async (id, statusAtual) => {
-    try {
-      const { error } = await supabase.from('pending_deliveries').update({ conferido: !statusAtual }).eq('id', id)
-      if (error) throw error
-      setEntregas((prev) => prev.map((e) => (e.id === id ? { ...e, conferido: !statusAtual } : e)))
-    } catch (err) {
-      alert('Erro ao atualizar conferência: ' + err.message)
-    }
-  }
-
-  const handleAlterarFormaReal = async (id, novaForma) => {
-    try {
-      const { error } = await supabase.from('pending_deliveries').update({ forma_pagamento_real: novaForma }).eq('id', id)
-      if (error) throw error
-      setEntregas((prev) => prev.map((e) => e.id === id ? { ...e, forma_pagamento_real: novaForma } : e))
-    } catch (err) {
-      alert('Erro ao alterar forma de pagamento: ' + err.message)
-    }
-  }
-
-  const handleAnotarObservacao = async (id, obsAtual) => {
-    const nota = window.prompt('Digite/Edite a anotação para esta comanda:', obsAtual || '')
-    if (nota !== null) {
-      try {
-        const { error } = await supabase.from('pending_deliveries').update({ observacoes: nota }).eq('id', id)
-        if (error) throw error
-        setEntregas((prev) => prev.map((e) => (e.id === id ? { ...e, observacoes: nota } : e)))
-      } catch (err) {
-        alert('Erro ao salvar anotação: ' + err.message)
-      }
-    }
-  }
-
-  const handleFinalizarTurnoTarde = async () => {
-    setIsActionLoading(true)
-    try {
-      const { error } = await supabase
-        .from('pending_deliveries')
-        .update({ conferido: true })
-        .eq('store_id', user.store_id)
-        .eq('conferido', false)
-      if (error) throw error
-
-      alert('Turno vespertino consolidado com sucesso!')
-      setTurnoEncerrado(true)
-      await carregarEntregasDoDia()
-    } catch (err) {
-      alert('Erro ao encerrar turno: ' + err.message)
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
-  // --- CÁLCULO DE TOTAIS ---
-  const totalDinheiro = entregas.filter((e) => e.tipo_saida === 'D').reduce((acc, curr) => acc + curr.valor, 0)
-  const totalCartao = entregas.filter((e) => e.tipo_saida === 'C').reduce((acc, curr) => acc + curr.valor, 0)
-
-  // --- COLUNAS DA MANHÃ (COM RISCO DE CONCILIAÇÃO E DADOS DA TARDE) ---
   const getColunasManha = () => [
-    {
-      header: 'Hora',
-      render: (r) => (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>
-          <Clock size={12} /> {formatarHora(r.created_at)}
-        </span>
-      ),
-    },
-    { 
-      header: 'Comanda', 
-      render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>{r.comanda}</span>
-    },
-    {
-      header: 'Valor',
-      render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>R$ {r.valor.toFixed(2).replace('.', ',')}</span>,
-    },
-    {
-      header: 'Recebido (Tarde)',
-      render: (r) => {
-        const formaReal = r.forma_pagamento_real || r.tipo_saida;
-        const alterado = r.tipo_saida !== formaReal;
-        
+    { header: 'Hora', render: (r) => <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-muted)', textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}><Clock size={12} /> {formatarHora(r.created_at)}</span> },
+    { header: 'Comanda', render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>{r.comanda}</span> },
+    { header: 'Valor', render: (r) => <span style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>R$ {r.valor.toFixed(2).replace('.', ',')}</span> },
+    { header: 'Recebido (Tarde)', render: (r) => {
+        const formaReal = r.forma_pagamento_real || r.tipo_saida; const alterado = r.tipo_saida !== formaReal;
         return (
           <div style={{ textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>
-            <span style={{ fontWeight: alterado ? 'bold' : 'normal' }}>
-              {getNomePagamento(formaReal)}
-            </span>
-            {alterado && (
-              <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: '600', marginTop: '2px' }}>
-                <AlertCircle size={12} /> Divergente
-              </span>
-            )}
+            <span style={{ fontWeight: alterado ? 'bold' : 'normal' }}>{getNomePagamento(formaReal)}</span>
+            {alterado && <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: '600', marginTop: '2px' }}><AlertCircle size={12} /> Divergente</span>}
           </div>
         );
       }
     },
-    {
-      header: 'Obs',
-      render: (r) => <span style={{ fontSize: '0.8rem', color: '#666', textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>{r.observacoes || '-'}</span>,
-    },
-    {
-      header: 'Ações',
-      className: 'actions-cell no-print',
-      render: (r) => (
+    { header: 'Obs', render: (r) => <span style={{ fontSize: '0.8rem', color: '#666', textDecoration: r.conciliado ? 'line-through' : 'none', opacity: r.conciliado ? 0.5 : 1 }}>{r.observacoes || '-'}</span> },
+    { header: 'Ações', className: 'actions-cell no-print', render: (r) => (
         <div style={{ display: 'flex', gap: '8px' }}>
-          {/* Botão de Conciliar - O Caixa da Manhã dá baixa no dia seguinte */}
-          <button
-            type="button"
-            onClick={() => handleToggleConciliado(r.id, r.conciliado)}
-            style={{ background: 'none', border: 'none', color: r.conciliado ? '#10b981' : 'var(--color-text-muted)', cursor: 'pointer' }}
-            title="Conciliar (Malote Correto)"
-          >
-            <CheckCircle size={18} />
-          </button>
-          
-          {/* Bloqueio de Segurança: Só o dono do registro pode editar/excluir, e não pode editar se já estiver conciliado */}
+          <button type="button" onClick={() => toggleConciliado(r.id, r.conciliado)} style={{ background: 'none', border: 'none', color: r.conciliado ? '#10b981' : 'var(--color-text-muted)', cursor: 'pointer' }}><CheckCircle size={18} /></button>
           {user.id === r.created_by && !r.conciliado && (
             <>
-              <button
-                type="button"
-                onClick={() => handleIniciarEdicao(r)}
-                style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }}
-                title="Editar Lançamento"
-              >
-                <Pencil size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExcluirEntrega(r.id)}
-                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}
-                title="Excluir Lançamento"
-              >
-                <Trash2 size={16} />
-              </button>
+              <button type="button" onClick={() => handleIniciarEdicao(r)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }}><Pencil size={16} /></button>
+              <button type="button" onClick={() => onExcluirEntrega(r.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}><Trash2 size={16} /></button>
             </>
           )}
         </div>
-      ),
+      )
     },
   ]
 
-  // --- COLUNAS DA TARDE ---
   const colunasTarde = [
-    {
-      header: 'Conf.',
-      render: (row) => (
-        <input
-          type="checkbox"
-          checked={row.conferido}
-          onChange={() => handleToggleCheck(row.id, row.conferido)}
-          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-        />
-      ),
-    },
-    {
-      header: 'Hora',
-      render: (row) => <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}><Clock size={12} /> {formatarHora(row.created_at)}</span>,
-    },
+    { header: 'Conf.', render: (row) => <input type="checkbox" checked={row.conferido} onChange={() => toggleCheckTarde(row.id, row.conferido)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} /> },
+    { header: 'Hora', render: (row) => <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}><Clock size={12} /> {formatarHora(row.created_at)}</span> },
     { header: 'Comanda', accessorKey: 'comanda' },
-    {
-      header: 'Valor',
-      render: (row) => `R$ ${row.valor.toFixed(2).replace('.', ',')}`,
-    },
-    {
-      header: 'Forma Real',
-      className: 'no-print',
-      render: (row) => (
-        <select
-          value={row.forma_pagamento_real || row.tipo_saida}
-          onChange={(e) => handleAlterarFormaReal(row.id, e.target.value)}
-          className="input-field"
-          style={{ padding: '2px 4px', fontSize: '0.85rem' }}
-        >
-          <option value="D">Dinheiro</option>
-          <option value="C">Cartão (POS)</option>
-          <option value="PX">Pix (QR)</option>
+    { header: 'Valor', render: (row) => `R$ ${row.valor.toFixed(2).replace('.', ',')}` },
+    { header: 'Forma Real', className: 'no-print', render: (row) => (
+        <select value={row.forma_pagamento_real || row.tipo_saida} onChange={(e) => alterarFormaReal(row.id, e.target.value)} className="input-field" style={{ padding: '2px 4px', fontSize: '0.85rem' }}>
+          <option value="D">Dinheiro</option><option value="C">Cartão (POS)</option><option value="PX">Pix (QR)</option>
         </select>
-      ),
+      )
     },
-    {
-      header: 'Inconsistência',
-      render: (row) =>
-        row.tipo_saida !== row.forma_pagamento_real ? (
-          <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: '600' }}>
-            <AlertCircle size={14} /> Alterado para {getNomePagamento(row.forma_pagamento_real)}
-          </span>
-        ) : (
-          <span style={{ color: 'var(--color-success)', fontSize: '0.8rem' }}>Bate com Caderno</span>
-        ),
+    { header: 'Inconsistência', render: (row) => row.tipo_saida !== row.forma_pagamento_real 
+        ? <span style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: '600' }}><AlertCircle size={14} /> Alterado para {getNomePagamento(row.forma_pagamento_real)}</span>
+        : <span style={{ color: 'var(--color-success)', fontSize: '0.8rem' }}>Bate com Caderno</span>
     },
-    {
-      header: 'Obs.',
-      className: 'no-print',
-      render: (row) => (
+    { header: 'Obs.', className: 'no-print', render: (row) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button
-            type="button"
-            onClick={() => handleAnotarObservacao(row.id, row.observacoes)}
-            style={{ background: 'none', border: 'none', color: row.observacoes ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer' }}
-            title={row.observacoes || 'Adicionar Anotação'}
-          >
-            <MessageSquare size={16} />
-          </button>
-          {row.observacoes && (
-            <span style={{ fontSize: '0.75rem', color: '#666', maxWidth: '80px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {row.observacoes}
-            </span>
-          )}
+          <button type="button" onClick={() => anotarObservacao(row.id, row.observacoes)} style={{ background: 'none', border: 'none', color: row.observacoes ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer' }}><MessageSquare size={16} /></button>
+          {row.observacoes && <span style={{ fontSize: '0.75rem', color: '#666', maxWidth: '80px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.observacoes}</span>}
         </div>
-      ),
+      )
     },
   ]
 
@@ -386,15 +128,49 @@ export const ShiftHandover = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      {/* CSS DE IMPRESSÃO */}
       <style>{`
         @media print {
-          aside, nav, button, .no-print, .actions-cell { display: none !important; }
-          main { padding: 0 !important; }
-          .print-card { border: none !important; box-shadow: none !important; }
+          /* Define margem zero na página para o Chrome não imprimir URL e Data */
+          @page { margin: 0; size: A4; }
+          
+          /* Força cor de fundo branca e ajusta o layout base do body */
+          body { 
+            margin: 10mm; /* Adiciona respiro físico no papel */
+            background-color: #ffffff !important; 
+            -webkit-print-color-adjust: exact; 
+            print-color-adjust: exact; 
+          }
+          
+          /* Esconde absolutamente tudo que for menu ou navegação */
+          aside, nav, header, .no-print { display: none !important; }
+          
+          /* Expande a área principal para usar 100% da folha sem scroll */
+          main, #root, .print-container { 
+            width: 100% !important; 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            overflow: visible !important; 
+            display: block !important; 
+          }
+          
+          /* Formata o card para tirar sombras e bordas */
+          .print-card { 
+            border: none !important; 
+            box-shadow: none !important; 
+            padding: 0 !important; 
+            width: 100% !important; 
+          }
+          
+          /* Garante que a tabela não vaze e não quebre a linha pela metade */
+          table { width: 100% !important; table-layout: fixed; page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          td, th { word-wrap: break-word; font-size: 12px; }
         }
       `}</style>
 
-      <div>
+      <div className="no-print">
         <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>
           {role === 'CAIXA_MANHA' && 'Prestação de Contas - Turno Manhã'}
           {role === 'CAIXA_TARDE' && 'Fechamento & Checklist - Entrada Tarde'}
@@ -403,37 +179,23 @@ export const ShiftHandover = () => {
         <p style={{ color: 'var(--color-text-muted)' }}>Usuário: <strong>{user?.nome}</strong> ({role})</p>
       </div>
 
-      {/* ==============================================
-          VISÃO: CAIXA DA MANHÃ 
-          ============================================== */}
       {role === 'CAIXA_MANHA' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '24px', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', alignItems: 'start' }}>
           <form onSubmit={handleSubmit(onAdicionarEntrega)} className="no-print">
             <Card title={editingId ? 'Editar Comanda' : 'Lançar Nova Comanda'} icon={Plus}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <FormInput label="Nome do Cliente / Nº Comanda" id="comanda" placeholder="Ex: Luiz" register={register('comanda', { required: 'Obrigatório' })} error={errors.comanda} />
-                <FormInput label="Valor Real (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório' })} error={errors.valor} />
-                
-                <div className="input-wrapper">
-                  <label className="input-label">Forma de Pagamento</label>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px' }}>
+                <div style={{ flex: 1 }}><FormInput label="Nome do Cliente / Nº Comanda" id="comanda" placeholder="Ex: Luiz" register={register('comanda', { required: 'Obrigatório' })} error={errors.comanda} /></div>
+                <div style={{ width: '150px' }}><FormInput label="Valor Real (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório' })} error={errors.valor} /></div>
+                <div className="input-wrapper" style={{ width: '150px' }}>
+                  <label className="input-label">Forma de Pgto.</label>
                   <select id="tipo" className="input-field" {...register('tipo')}>
-                    <option value="D">Dinheiro</option>
-                    <option value="C">Cartão / Outros</option>
+                    <option value="D">Dinheiro</option><option value="C">Cartão / Outros</option>
                   </select>
                 </div>
-
-                {/* NOVO CAMPO: Observações do Caixa da Manhã */}
-                <FormInput label="Observação (Opcional)" id="observacoes" placeholder="Ex: Faltou 2 reais de troco..." register={register('observacoes')} />
-
-                <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                  <Button type="submit" isLoading={isActionLoading}>
-                    {editingId ? 'Salvar Alterações' : 'Gravar na Tabela'}
-                  </Button>
-                  {editingId && (
-                    <Button type="button" variant="secondary" onClick={handleCancelarEdicao}>
-                      <X size={16} style={{ marginRight: '4px' }} /> Cancelar
-                    </Button>
-                  )}
+                <div style={{ flex: 1 }}><FormInput label="Observação (Opcional)" id="observacoes" placeholder="Faltou 2 reais de troco..." register={register('observacoes')} /></div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <Button type="submit" isLoading={isActionLoading}>{editingId ? 'Salvar' : 'Gravar'}</Button>
+                  {editingId && <Button type="button" variant="secondary" onClick={handleCancelarEdicao}><X size={16}/></Button>}
                 </div>
               </div>
             </Card>
@@ -441,7 +203,6 @@ export const ShiftHandover = () => {
 
           <Card title="Espelho Digital da Folha de Vendas" icon={FileText} className="print-card">
             
-            {/* CABEÇALHO DO ESPELHO COM CALENDÁRIO PARA A MANHÃ */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }} className="no-print">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -449,12 +210,7 @@ export const ShiftHandover = () => {
                 </label>
                 <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
               </div>
-              
-              <div style={{ width: 'max-content' }}>
-                <Button variant="secondary" onClick={() => window.print()}>
-                  Exportar PDF da Folha
-                </Button>
-              </div>
+              <div style={{ width: 'max-content' }}><Button variant="secondary" onClick={() => window.print()}>Exportar PDF da Folha</Button></div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -476,87 +232,43 @@ export const ShiftHandover = () => {
         </div>
       )}
 
-      {/* ==============================================
-          VISÃO: CAIXA DA TARDE 
-          ============================================== */}
       {role === 'CAIXA_TARDE' && (
         <Card title="Conferência de Comandas Físicas (Cestinha)" icon={CheckCircle} className="print-card">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div>
-              <h4 style={{ backgroundColor: '#fee2e2', padding: '10px', borderRadius: '6px', color: '#991b1b', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
-                Conferência Dinheiro — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}
-              </h4>
+              <h4 style={{ backgroundColor: '#fee2e2', padding: '10px', borderRadius: '6px', color: '#991b1b', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>Conferência Dinheiro — Total: R$ {totalDinheiro.toFixed(2).replace('.', ',')}</h4>
               <Table columns={colunasTarde} data={entregas.filter((e) => e.tipo_saida === 'D')} />
             </div>
-
             <div>
-              <h4 style={{ backgroundColor: '#e0e7ff', padding: '10px', borderRadius: '6px', color: '#1e40af', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>
-                Conferência Cartão / Outros — Total: R$ {totalCartao.toFixed(2).replace('.', ',')}
-              </h4>
+              <h4 style={{ backgroundColor: '#e0e7ff', padding: '10px', borderRadius: '6px', color: '#1e40af', marginBottom: '12px', textAlign: 'center', fontWeight: 'bold' }}>Conferência Cartão / Outros — Total: R$ {totalCartao.toFixed(2).replace('.', ',')}</h4>
               <Table columns={colunasTarde} data={entregas.filter((e) => e.tipo_saida === 'C')} />
             </div>
           </div>
-
-          <div style={{ marginTop: '24px' }}>
+          <div style={{ marginTop: '24px' }} className="no-print">
             <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Anotações Gerais do Turno Vespertino (Impressão)</label>
-            <textarea
-              className="input-field"
-              rows="2"
-              value={obsTarde}
-              onChange={(e) => setObsTarde(e.target.value)}
-              placeholder="Digite aqui um resumo das inconsistências do caixa para sair no PDF final..."
-              style={{ width: '100%', resize: 'none' }}
-            />
+            <textarea className="input-field" rows="2" value={obsTarde} onChange={(e) => setObsTarde(e.target.value)} placeholder="Digite um resumo das inconsistências..." style={{ width: '100%', resize: 'none' }} />
           </div>
-
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }} className="no-print">
-            {turnoEncerrado && (
-              <Button variant="secondary" onClick={() => window.print()}>
-                <Printer size={16} style={{ marginRight: '6px' }} /> Exportar Relatório PDF
-              </Button>
-            )}
-            <div style={{ width: '250px' }}>
-              <Button onClick={handleFinalizarTurnoTarde} isLoading={isActionLoading}>Encerrar Turno e Salvar</Button>
-            </div>
+            {turnoEncerrado && <Button variant="secondary" onClick={() => window.print()}><Printer size={16} style={{ marginRight: '6px' }} /> Exportar Relatório PDF</Button>}
+            <div style={{ width: '250px' }}><Button onClick={finalizarTurnoTarde} isLoading={isActionLoading}>Encerrar Turno e Salvar</Button></div>
           </div>
         </Card>
       )}
 
-      {/* ==============================================
-          VISÃO: ADMINISTRADOR (COM FILTRO DE DATA)
-          ============================================== */}
       {role === 'ADMIN' && (
         <Card title="Espelho de Auditoria Geral dos Caixas" icon={FileText}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
             <div>
-              <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Calendar size={18} color="var(--color-primary)" /> Data da Operação
-              </h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Selecione um dia para auditar o histórico de caixas.</p>
+              <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} color="var(--color-primary)" /> Data da Operação</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Selecione um dia para auditar o histórico.</p>
             </div>
-            <div>
-              <input type="date" className="input-field" style={{ width: 'auto', padding: '10px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--color-primary)' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
-            </div>
+            <div><input type="date" className="input-field" style={{ width: 'auto', padding: '10px', cursor: 'pointer', fontWeight: 'bold', color: 'var(--color-primary)' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} /></div>
           </div>
-
           <div style={{ padding: '16px', backgroundColor: 'var(--color-background)', borderRadius: '8px', marginBottom: '20px' }}>
-            <p style={{ fontSize: '0.95rem' }}>Total Geral em Dinheiro Declarado: <strong>R$ {totalDinheiro.toFixed(2).replace('.', ',')}</strong></p>
-            <p style={{ fontSize: '0.95rem', marginTop: '4px' }}>Total Geral em Cartões Declarado: <strong>R$ {totalCartao.toFixed(2).replace('.', ',')}</strong></p>
+            <p style={{ fontSize: '0.95rem' }}>Total Dinheiro: <strong>R$ {totalDinheiro.toFixed(2).replace('.', ',')}</strong></p>
+            <p style={{ fontSize: '0.95rem', marginTop: '4px' }}>Total Cartões: <strong>R$ {totalCartao.toFixed(2).replace('.', ',')}</strong></p>
           </div>
-
-          <Table
-            columns={[
-              { header: 'Hora', render: (r) => formatarHora(r.created_at) },
-              { header: 'Comanda', accessorKey: 'comanda' },
-              { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` },
-              { header: 'Lançado Manhã', render: (r) => (r.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão') },
-              { header: 'Pago Real Tarde', render: (r) => getNomePagamento(r.forma_pagamento_real) },
-              { header: 'Status', render: (r) => (r.conferido ? '✅ Conferido' : '⏳ Pendente') },
-              { header: 'Baixa (Conciliado)', render: (r) => (r.conciliado ? '✅ Sim' : '❌ Não') },
-              { header: 'Obs.', render: (r) => <span style={{ fontSize: '0.8rem', color: '#666' }}>{r.observacoes || '-'}</span> },
-            ]}
-            data={entregas}
-          />
+          <Table columns={[{ header: 'Hora', render: (r) => formatarHora(r.created_at) }, { header: 'Comanda', accessorKey: 'comanda' }, { header: 'Valor', render: (r) => `R$ ${r.valor.toFixed(2).replace('.', ',')}` }, { header: 'Lançado Manhã', render: (r) => (r.tipo_saida === 'D' ? 'Dinheiro' : 'Cartão') }, { header: 'Pago Real Tarde', render: (r) => getNomePagamento(r.forma_pagamento_real) }, { header: 'Status', render: (r) => (r.conferido ? '✅ Conferido' : '⏳ Pendente') }, { header: 'Baixa', render: (r) => (r.conciliado ? '✅ Sim' : '❌ Não') }, { header: 'Obs.', render: (r) => <span style={{ fontSize: '0.8rem', color: '#666' }}>{r.observacoes || '-'}</span> }]} data={entregas} />
         </Card>
       )}
     </div>
