@@ -7,7 +7,7 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { ArrowLeftRight, Plus, Printer, Loader2, CheckCircle, Calendar } from 'lucide-react'
+import { ArrowLeftRight, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2 } from 'lucide-react'
 
 export const Exchanges = () => {
   const { user } = useAuth()
@@ -16,21 +16,40 @@ export const Exchanges = () => {
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, receberTroca } = useDeposits(user, dataFiltro)
+  // Hook agora puxando também a função excluirDeposito
+  const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca } = useDeposits(user, dataFiltro)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [tipoTroca, setTipoTroca] = useState('INTERNA') // 'INTERNA' ou 'EXTERNA'
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm()
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
   useEffect(() => { carregarDepositos() }, [carregarDepositos])
 
   // Filtra a lista mista do banco para exibir apenas as trocas
   const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
 
+  // --- FUNÇÕES DE EDIÇÃO E EXCLUSÃO (ADMIN) ---
+  const handleEdit = (registro) => {
+    setEditingId(registro.id)
+    setTipoTroca(registro.categoria === 'Troca Externa' ? 'EXTERNA' : 'INTERNA')
+    setValue('valor', registro.valor)
+    setValue('destino', registro.destino || '')
+    setIsModalOpen(true)
+  }
+
+  const handleDelete = async (id) => {
+    if (window.confirm('ATENÇÃO: Você é um Administrador. Tem certeza que deseja apagar esta troca permanentemente?')) {
+      await excluirDeposito(id)
+    }
+  }
+
   const fecharModal = () => {
     setIsModalOpen(false)
+    setEditingId(null)
     reset({ valor: '', destino: '' })
+    setTipoTroca('INTERNA')
   }
 
   const onSubmit = async (data) => {
@@ -38,15 +57,18 @@ export const Exchanges = () => {
       valor: parseFloat(data.valor),
       value: parseFloat(data.valor),
       categoria: tipoTroca === 'INTERNA' ? 'Troca (Caixa de Troco)' : 'Troca Externa',
-      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa', // Preenchimento seguro para o DB
+      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa',
       origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa',
       destino: tipoTroca === 'EXTERNA' ? data.destino : null,
-      status_troca: tipoTroca === 'EXTERNA' ? 'PENDENTE' : 'CONCLUIDA',
-      responsavel_nome: user?.nome || 'Operador',
+    }
+
+    if (!editingId) {
+      payload.status_troca = tipoTroca === 'EXTERNA' ? 'PENDENTE' : 'CONCLUIDA'
+      payload.responsavel_nome = user?.nome || 'Operador'
     }
 
     try {
-      await salvarDeposito(payload)
+      await salvarDeposito(payload, editingId)
       fecharModal()
     } catch (e) { /* Tratado no Hook */ }
   }
@@ -58,6 +80,7 @@ export const Exchanges = () => {
     }
   }
 
+  // --- IMPRESSÃO ---
   const imprimirComprovante = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
@@ -118,6 +141,7 @@ export const Exchanges = () => {
     setTimeout(() => { janelaImpressao.print(); janelaImpressao.close() }, 250)
   }
 
+  // --- COLUNAS DA TABELA ---
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
     { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Troca Externa' ? '#9333ea' : '#1d4ed8' }}>{row.categoria === 'Troca (Caixa de Troco)' ? 'Interna' : 'Externa'}</span> },
@@ -131,11 +155,26 @@ export const Exchanges = () => {
     },
     { header: 'Ações', render: (row) => (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir Comprovante"><Printer size={20} /></button>
+          <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir Comprovante">
+            <Printer size={20} />
+          </button>
+          
           {row.status_troca === 'PENDENTE' && (
             <Button onClick={() => handleReceber(row.id)} icon={CheckCircle} style={{ padding: '6px 10px', fontSize: '0.75rem', height: 'auto', backgroundColor: '#d97706', border: 'none' }}>
               Receber Troco
             </Button>
+          )}
+
+          {/* BOTÕES EXCLUSIVOS PARA O ADMINISTRADOR */}
+          {user.role === 'ADMIN' && (
+            <>
+              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar Troca">
+                <Pencil size={18} />
+              </button>
+              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Deletar Troca">
+                <Trash2 size={18} />
+              </button>
+            </>
           )}
         </div>
       )
@@ -172,7 +211,7 @@ export const Exchanges = () => {
         </div>
       </Card>
 
-      <Modal isOpen={isModalOpen} onClose={fecharModal} title="Registrar Nova Troca">
+      <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Troca" : "Registrar Nova Troca"}>
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           <div style={{ display: 'flex', gap: '12px', padding: '4px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
@@ -216,7 +255,9 @@ export const Exchanges = () => {
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
             <Button type="button" variant="secondary" onClick={fecharModal} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>
-            <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center' }}>Registrar Troca</Button>
+            <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center' }} icon={editingId ? Pencil : Plus}>
+              {editingId ? "Salvar Alterações" : "Registrar Troca"}
+            </Button>
           </div>
         </form>
       </Modal>
