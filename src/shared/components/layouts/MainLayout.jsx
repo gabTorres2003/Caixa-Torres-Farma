@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../core/hooks/useAuth'
 import {
@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Coins,
   LockKeyhole,
+  Menu,
+  X
 } from 'lucide-react'
 
 export const MainLayout = () => {
@@ -23,6 +25,28 @@ export const MainLayout = () => {
 
   // 1. Estado para controlar quais menus sanfona estão abertos
   const [openMenus, setOpenMenus] = useState({ conferencia: true })
+
+  // --- NOVOS ESTADOS PARA O MENU RESPONSIVO ---
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768)
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
+
+  // Monitora o tamanho da tela para ajustar o layout automaticamente
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768
+      setIsMobile(mobile)
+      setIsSidebarOpen(!mobile) // Abre no PC, fecha no celular
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Recolhe o menu automaticamente no celular ao trocar de página
+  useEffect(() => {
+    if (isMobile) {
+      setIsSidebarOpen(false)
+    }
+  }, [location.pathname, isMobile])
 
   const toggleMenu = (menuKey) => {
     setOpenMenus((prev) => ({ ...prev, [menuKey]: !prev[menuKey] }))
@@ -97,36 +121,81 @@ export const MainLayout = () => {
         display: 'flex',
         minHeight: '100vh',
         backgroundColor: 'var(--color-background)',
+        overflow: 'hidden', // Evita barra de rolagem dupla
       }}
     >
+      {/* CSS PARA ESCONDER ELEMENTOS NA IMPRESSÃO E AJUSTES GERAIS */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          main { overflow: visible !important; height: auto !important; padding: 0 !important; }
+        }
+      `}</style>
+
+      {/* OVERLAY ESCURO DO MOBILE (Clica fora para fechar) */}
+      {isMobile && isSidebarOpen && (
+        <div
+          className="no-print"
+          onClick={() => setIsSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 40,
+          }}
+        />
+      )}
+
       {/* Menu Lateral (Sidebar) */}
       <aside
+        className="no-print"
         style={{
           width: '260px',
           backgroundColor: 'var(--color-surface)',
           borderRight: '1px solid var(--color-border)',
           display: 'flex',
           flexDirection: 'column',
+          position: isMobile ? 'fixed' : 'relative',
+          height: '100vh',
+          zIndex: 50,
+          transition: 'margin-left 0.3s ease, transform 0.3s ease',
+          // No celular usa transform (desliza por cima), no PC usa margin (empurra a tela)
+          transform: isMobile ? (isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
+          marginLeft: !isMobile && !isSidebarOpen ? '-260px' : '0',
         }}
       >
         <div
           style={{
             padding: '24px',
             borderBottom: '1px solid var(--color-border)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}
         >
-          <h2
-            style={{
-              color: 'var(--color-primary)',
-              fontSize: '1.25rem',
-              fontWeight: 'bold',
-            }}
+          <div>
+            <h2
+              style={{
+                color: 'var(--color-primary)',
+                fontSize: '1.25rem',
+                fontWeight: 'bold',
+                margin: 0
+              }}
+            >
+              Torres Farma
+            </h2>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
+              Operação de Caixa
+            </p>
+          </div>
+          
+          {/* BOTÃO FECHAR MENU (Visível no Celular ou para recolher no Computador) */}
+          <button 
+            onClick={() => setIsSidebarOpen(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)' }}
           >
-            Torres Farma
-          </h2>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-            Operação de Caixa
-          </p>
+            {isMobile ? <X size={24} /> : <Menu size={24} />}
+          </button>
         </div>
 
         <nav
@@ -304,6 +373,7 @@ export const MainLayout = () => {
                   fontSize: '0.875rem',
                   whiteSpace: 'nowrap',
                   textOverflow: 'ellipsis',
+                  margin: 0
                 }}
               >
                 {user?.nome || 'Operador'}
@@ -313,6 +383,7 @@ export const MainLayout = () => {
                   color: 'var(--color-text-muted)',
                   fontSize: '0.75rem',
                   fontWeight: '500',
+                  margin: 0
                 }}
               >
                 {textoPerfil}
@@ -341,10 +412,40 @@ export const MainLayout = () => {
         </div>
       </aside>
 
-      {/* Área Principal onde as telas serão injetadas */}
-      <main style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
-        <Outlet />
-      </main>
+      {/* ÁREA PRINCIPAL (Telas injetadas) */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        
+        {/* BARRA SUPERIOR (Visível se estiver no celular ou se o menu do PC for recolhido) */}
+        {(!isSidebarOpen || isMobile) && (
+          <header 
+            className="no-print" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '16px', 
+              padding: '16px 24px', 
+              backgroundColor: 'var(--color-surface)', 
+              borderBottom: '1px solid var(--color-border)' 
+            }}
+          >
+            <button 
+              onClick={() => setIsSidebarOpen(true)} 
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }}
+            >
+              <Menu size={28} />
+            </button>
+            <div>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'block', lineHeight: '1' }}>Torres Farma</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Operação de Caixa</span>
+            </div>
+          </header>
+        )}
+
+        <main style={{ flex: 1, padding: isMobile ? '16px' : '32px', overflowY: 'auto' }}>
+          <Outlet />
+        </main>
+      </div>
+
     </div>
   )
 }
