@@ -27,5 +27,10 @@ export const DepositRepository = {
   async deleteDeposit(id) {
     const { error } = await supabase.from('deposits').delete().eq('id', id)
     if (error) throw error
+  },
+
+  async receiveExchange(id, payload) {
+    const { error } = await supabase.from('deposits').update(payload).eq('id', id)
+    if (error) throw error
   }
 }

@@ -70,20 +70,37 @@ export const MainLayout = () => {
 
   const textoPerfil = user?.role === 'ADMIN' ? 'Administrador' : `Turno: ${turnoAtual}`
 
-  // 2. Menus Básicos
+  // 2. Menus Básicos (Agora com sublista para Movimentações)
   const baseMenuItems = [
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
-    { path: '/depositos', label: 'Movimentações', icon: Banknote },
+    {
+      key: 'movimentacoes',
+      label: 'Movimentações',
+      icon: Banknote,
+      subItems: [
+        { path: '/depositos', label: 'Depósitos', icon: Banknote },
+        { path: '/trocas', label: 'Trocas', icon: ArrowLeftRight },
+      ],
+    },
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
   ]
 
-  // 3. Montagem Inteligente do Menu
+  // 3. Montagem Inteligente do Menu Admin
   const menuItems =
     user?.role === 'ADMIN'
       ? [
           { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
           { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
           { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
+          {
+            key: 'movimentacoes',
+            label: 'Movimentações',
+            icon: Banknote,
+            subItems: [
+              { path: '/depositos', label: 'Depósitos', icon: Banknote },
+              { path: '/trocas', label: 'Trocas', icon: ArrowLeftRight },
+            ],
+          },
           {
             key: 'conferencia',
             label: 'Conferência',
@@ -92,7 +109,6 @@ export const MainLayout = () => {
               { path: '/conferencia/notas-moedas', label: 'Notas / Moedas', icon: Coins },
               { path: '/conferencia/caixas-fechados', label: 'Caixas Fechados', icon: LockKeyhole },
               { path: '/divergencias', label: 'Diferenças', icon: AlertTriangle },
-              { path: '/depositos', label: 'Depósitos', icon: Banknote },
             ],
           },
           { path: '/relatorios', label: 'Relatórios', icon: FileText },

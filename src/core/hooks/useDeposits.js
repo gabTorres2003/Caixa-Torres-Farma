@@ -9,20 +9,16 @@ export const useDeposits = (user, dataFiltro) => {
   const carregarDepositos = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
-    
     try {
       let dataConsulta = dataFiltro
-      
-      // TRAVA DE SEGURANÇA: Se não for ADMIN, força a consulta sempre para o dia de HOJE
       if (user.role !== 'ADMIN') {
         const tzOffset = new Date().getTimezoneOffset() * 60000
         dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
       }
-      
       const data = await DepositRepository.getDeposits(user.store_id, dataConsulta)
       setDepositsList(data)
     } catch (err) {
-      console.error('Erro ao buscar depósitos:', err.message)
+      console.error('Erro ao buscar dados:', err.message)
     } finally {
       setIsPageLoading(false)
     }
@@ -32,19 +28,13 @@ export const useDeposits = (user, dataFiltro) => {
     setIsActionLoading(true)
     try {
       if (editingId) {
-        // ADMIN Editando um depósito existente
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
-        // Criando novo depósito
-        await DepositRepository.addDeposit({ 
-          ...payload, 
-          store_id: user.store_id, 
-          created_by: user.id 
-        })
+        await DepositRepository.addDeposit({ ...payload, store_id: user.store_id, created_by: user.id })
       }
       await carregarDepositos()
     } catch (err) {
-      alert('Erro ao processar depósito: ' + err.message)
+      alert('Erro ao processar registro: ' + err.message)
       throw err
     } finally {
       setIsActionLoading(false)
@@ -57,18 +47,28 @@ export const useDeposits = (user, dataFiltro) => {
       await DepositRepository.deleteDeposit(id)
       await carregarDepositos()
     } catch (err) {
-      alert('Erro ao excluir depósito: ' + err.message)
+      alert('Erro ao excluir: ' + err.message)
     } finally {
       setIsActionLoading(false)
     }
   }
 
-  return { 
-    depositsList, 
-    isPageLoading, 
-    isActionLoading, 
-    carregarDepositos, 
-    salvarDeposito, 
-    excluirDeposito 
+  const receberTroca = async (id, recebido_por) => {
+    setIsActionLoading(true)
+    try {
+      await DepositRepository.receiveExchange(id, {
+        status_troca: 'CONCLUIDA',
+        recebido_por,
+        recebido_em: new Date().toISOString()
+      })
+      await carregarDepositos()
+      alert('Recebimento confirmado com sucesso!')
+    } catch (err) {
+      alert('Erro ao confirmar recebimento: ' + err.message)
+    } finally {
+      setIsActionLoading(false)
+    }
   }
+
+  return { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca }
 }
