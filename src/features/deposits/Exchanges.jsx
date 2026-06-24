@@ -173,7 +173,7 @@ export const Exchanges = () => {
         </html>
       `;
     } else {
-      // ---> LAYOUT 2: TROCA EXTERNA
+      // ---> LAYOUT 2: TROCA EXTERNA 
       conteudoCupom = `
         <html>
           <head>
@@ -253,6 +253,26 @@ export const Exchanges = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      {/* CSS PARA O GRID DE NOTAS E PREVENIR VAZAMENTOS */}
+      <style>{`
+        .notas-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          width: 100%;
+        }
+        .notas-grid > div {
+          min-width: 0;
+          width: 100%;
+        }
+        @media (max-width: 480px) {
+          .notas-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Trocas</h1>
@@ -297,14 +317,14 @@ export const Exchanges = () => {
 
           {/* CÁLCULO E DETALHAMENTO DE TROCA INTERNA */}
           {tipoTroca === 'INTERNA' ? (
-            <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%', boxSizing: 'border-box' }}>
               <p style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '0.9rem', color: 'var(--color-text-main)' }}>Valores retirados do Caixa de Troco (R$):</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <FormInput label="Em Notas de R$ 2" id="valor_2" type="number" step="0.01" register={register('valor_2')} placeholder="0,00" />
-                <FormInput label="Em Notas de R$ 5" id="valor_5" type="number" step="0.01" register={register('valor_5')} placeholder="0,00" />
-                <FormInput label="Em Notas de R$ 10" id="valor_10" type="number" step="0.01" register={register('valor_10')} placeholder="0,00" />
-                <FormInput label="Em Notas de R$ 20" id="valor_20" type="number" step="0.01" register={register('valor_20')} placeholder="0,00" />
-                <FormInput label="Em Moedas" id="valor_moedas" type="number" step="0.01" register={register('valor_moedas')} placeholder="0,00" />
+              <div className="notas-grid">
+                <div><FormInput label="Em Notas de R$ 2" id="valor_2" type="number" step="0.01" register={register('valor_2')} placeholder="0,00" /></div>
+                <div><FormInput label="Em Notas de R$ 5" id="valor_5" type="number" step="0.01" register={register('valor_5')} placeholder="0,00" /></div>
+                <div><FormInput label="Em Notas de R$ 10" id="valor_10" type="number" step="0.01" register={register('valor_10')} placeholder="0,00" /></div>
+                <div><FormInput label="Em Notas de R$ 20" id="valor_20" type="number" step="0.01" register={register('valor_20')} placeholder="0,00" /></div>
+                <div><FormInput label="Em Moedas" id="valor_moedas" type="number" step="0.01" register={register('valor_moedas')} placeholder="0,00" /></div>
               </div>
             </div>
           ) : (
