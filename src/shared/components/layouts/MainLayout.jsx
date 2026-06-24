@@ -21,10 +21,17 @@ import {
 
 export const MainLayout = () => {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const location = useLocation()
+  
+  // Controle de estados do menu
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const [isConferenceOpen, setIsConferenceOpen] = useState(false)
 
-  // 1. Estado para controlar quais menus sanfona estão abertos
-  const [openMenus, setOpenMenus] = useState({ conferencia: true })
+  // Fecha o menu mobile automaticamente ao trocar de página
+  useEffect(() => {
+    setIsMobileOpen(false)
+  }, [location.pathname])
 
   // --- NOVOS ESTADOS PARA O MENU RESPONSIVO ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768)
@@ -52,68 +59,29 @@ export const MainLayout = () => {
     setOpenMenus((prev) => ({ ...prev, [menuKey]: !prev[menuKey] }))
   }
 
-  let turnoAtual = localStorage.getItem('turnoOperacional')
-  if (!turnoAtual || turnoAtual === 'AUTOMATICO') {
-    turnoAtual = user?.role === 'CAIXA_TARDE' ? 'Tarde' : 'Manhã'
-  }
-
-  const textoPerfil =
-    user?.role === 'ADMIN' ? 'Administrador' : `Turno: ${turnoAtual}`
-
-  // 2. Menus Básicos
-  const baseMenuItems = [
-    { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
-    { path: '/depositos', label: 'Movimentações', icon: Banknote },
-    { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
-  ]
-
-  // 3. Montagem Inteligente do Menu
-  const menuItems =
-    user?.role === 'ADMIN'
-      ? [
-          { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-          {
-            path: '/troca-turno',
-            label: 'Troca de Turno',
-            icon: ArrowLeftRight,
-          },
-          {
-            path: '/pre-fechamento',
-            label: 'Pré-Fechamento',
-            icon: Calculator,
-          },
-          {
-            key: 'conferencia',
-            label: 'Conferência',
-            icon: ShieldCheck,
-            subItems: [
-              {
-                path: '/conferencia/notas-moedas',
-                label: 'Notas / Moedas',
-                icon: Coins,
-              },
-              {
-                path: '/conferencia/caixas-fechados',
-                label: 'Caixas Fechados',
-                icon: LockKeyhole,
-              },
-              {
-                path: '/divergencias',
-                label: 'Diferenças',
-                icon: AlertTriangle,
-              },
-              { path: '/depositos', label: 'Depósitos', icon: Banknote },
-            ],
-          },
-          // ---------------------------------------
-          { path: '/relatorios', label: 'Relatórios', icon: FileText },
-          {
-            path: '/gerenciar-usuarios',
-            label: 'Gerenciar Usuários',
-            icon: User,
-          },
-        ]
-      : baseMenuItems
+  // Componente de botão do Menu
+  const NavItem = ({ to, icon: Icon, label, isSubItem = false }) => (
+    <NavLink
+      to={to}
+      style={({ isActive }) => ({
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '12px',
+        padding: isSubItem ? '10px 16px 10px 48px' : '12px 16px',
+        margin: '4px 16px',
+        borderRadius: '8px',
+        textDecoration: 'none',
+        color: isActive ? '#1e40af' : '#475569',
+        backgroundColor: isActive ? '#eff6ff' : 'transparent',
+        fontWeight: isActive ? '600' : '500',
+        fontSize: '0.9rem',
+        transition: 'all 0.2s ease'
+      })}
+    >
+      <Icon size={isSubItem ? 18 : 20} />
+      {label}
+    </NavLink>
+  )
 
   return (
     <div
@@ -198,143 +166,43 @@ export const MainLayout = () => {
           </button>
         </div>
 
-        <nav
-          style={{
-            flex: 1,
-            padding: '16px 8px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            overflowY: 'auto',
-          }}
-        >
-          {menuItems.map((item) => {
-            // MENU SANFONA
-            if (item.subItems) {
-              const isOpen = openMenus[item.key]
-              const isActiveChild = item.subItems.some(
-                (sub) => location.pathname === sub.path,
-              )
-              const Icon = item.icon
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '16px 0' }}>
+          <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
+          <NavItem to="/troca-turno" icon={ArrowLeftRight} label="Troca de Turno" />
+          <NavItem to="/pre-fechamento" icon={Calculator} label="Pré-Fechamento" />
+          
+          {/* MENU SANFONA: CONFERÊNCIA */}
+          <div 
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+              padding: '12px 16px', margin: '4px 16px', borderRadius: '8px', 
+              cursor: 'pointer', color: '#475569', fontWeight: '500', fontSize: '0.9rem' 
+            }}
+            onClick={() => setIsConferenceOpen(!isConferenceOpen)}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <ShieldCheck size={20} /> Conferência
+            </div>
+            {isConferenceOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </div>
 
-              return (
-                <div
-                  key={item.key}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <button
-                    onClick={() => toggleMenu(item.key)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      borderRadius: 'var(--radius-md)',
-                      border: 'none',
-                      background:
-                        isActiveChild && !isOpen ? '#eff6ff' : 'transparent',
-                      color: isActiveChild
-                        ? 'var(--color-primary)'
-                        : 'var(--color-text-main)',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                      }}
-                    >
-                      <Icon size={20} /> {item.label}
-                    </div>
-                    {isOpen ? (
-                      <ChevronDown size={18} />
-                    ) : (
-                      <ChevronRight size={18} />
-                    )}
-                  </button>
+          {/* ITENS DENTRO DA CONFERÊNCIA */}
+          {isConferenceOpen && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', backgroundColor: '#f8fafc', paddingBottom: '8px' }}>
+              <NavItem to="/conferencia/notas-moedas" icon={Coins} label="Notas / Moedas" isSubItem />
+              <NavItem to="/conferencia/caixas-fechados" icon={Lock} label="Caixas Fechados" isSubItem />
+              <NavItem to="/divergencias" icon={AlertTriangle} label="Diferenças" isSubItem />
+              <NavItem to="/depositos" icon={Banknote} label="Depósitos" isSubItem />
+            </div>
+          )}
 
-                  {/* Itens da Sublista */}
-                  {isOpen && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px',
-                        paddingLeft: '32px',
-                        marginTop: '4px',
-                      }}
-                    >
-                      {item.subItems.map((sub) => {
-                        const isSubActive = location.pathname === sub.path
-                        const SubIcon = sub.icon
-                        return (
-                          <Link
-                            key={sub.path}
-                            to={sub.path}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '10px',
-                              padding: '10px 16px',
-                              borderRadius: 'var(--radius-md)',
-                              textDecoration: 'none',
-                              fontSize: '0.9rem',
-                              fontWeight: isSubActive ? '600' : '500',
-                              backgroundColor: isSubActive
-                                ? 'var(--color-primary)'
-                                : 'transparent',
-                              color: isSubActive
-                                ? 'white'
-                                : 'var(--color-text-muted)',
-                              transition: 'all 0.2s',
-                            }}
-                          >
-                            {SubIcon && <SubIcon size={16} />}
-                            {sub.label}
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            }
-
-            // BOTÃO NORMAL
-            const isActive = location.pathname === item.path
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  textDecoration: 'none',
-                  fontWeight: '500',
-                  backgroundColor: isActive
-                    ? 'var(--color-primary)'
-                    : 'transparent',
-                  color: isActive ? 'white' : 'var(--color-text-main)',
-                  transition: 'background-color 0.2s',
-                }}
-              >
-                <Icon size={20} />
-                {item.label}
-              </Link>
-            )
-          })}
+          {/* MENUS EXCLUSIVOS DO ADMIN */}
+          {user?.role === 'ADMIN' && (
+            <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+              <NavItem to="/relatorios" icon={FileText} label="Relatórios" />
+              <NavItem to="/usuarios" icon={Users} label="Gerenciar Usuários" />
+            </div>
+          )}
         </nav>
 
         {/* Rodapé do Menu - Perfil e Logout */}
@@ -390,24 +258,8 @@ export const MainLayout = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={logout}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              width: '100%',
-              padding: '10px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'transparent',
-              color: 'var(--color-error)',
-              cursor: 'pointer',
-              fontWeight: '600',
-            }}
-          >
-            <LogOut size={18} /> Sair
+          <button onClick={handleLogout} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', cursor: 'pointer', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Sair">
+            <LogOut size={18} />
           </button>
         </div>
       </aside>
