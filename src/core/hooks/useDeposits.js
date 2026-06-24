@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { DepositRepository } from '../../infrastructure/supabase/repositories/DepositRepository'
+import { DepositRepository } from '../../infrastructure/supabase/repositories/SupabaseDepositRepository'
 
 export const useDeposits = (user, dataFiltro) => {
   const [depositsList, setDepositsList] = useState([])
