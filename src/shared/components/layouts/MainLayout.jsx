@@ -28,7 +28,7 @@ export const MainLayout = () => {
   const navigate = useNavigate()
 
   // 1. Estado para controlar quais menus sanfona estão abertos
-  const [openMenus, setOpenMenus] = useState({ conferencia: true })
+  const [openMenus, setOpenMenus] = useState({ conferencia: false })
 
   // --- ESTADOS PARA O MENU RESPONSIVO ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768)

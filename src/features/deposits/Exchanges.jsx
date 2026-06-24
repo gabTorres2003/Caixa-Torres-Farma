@@ -16,26 +16,52 @@ export const Exchanges = () => {
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  // Hook agora puxando também a função excluirDeposito
   const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca } = useDeposits(user, dataFiltro)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [tipoTroca, setTipoTroca] = useState('INTERNA') // 'INTERNA' ou 'EXTERNA'
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
+  // "watch" para monitorar a digitação das notas em tempo real
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
 
   useEffect(() => { carregarDepositos() }, [carregarDepositos])
 
-  // Filtra a lista mista do banco para exibir apenas as trocas
   const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
 
-  // --- FUNÇÕES DE EDIÇÃO E EXCLUSÃO (ADMIN) ---
+  // --- CÁLCULO AUTOMÁTICO DO TOTAL (TROCA INTERNA) ---
+  const val2 = watch('valor_2')
+  const val5 = watch('valor_5')
+  const val10 = watch('valor_10')
+  const val20 = watch('valor_20')
+  const valM = watch('valor_moedas')
+
+  useEffect(() => {
+    if (tipoTroca === 'INTERNA') {
+      const sum = (parseFloat(val2) || 0) + (parseFloat(val5) || 0) + (parseFloat(val10) || 0) + (parseFloat(val20) || 0) + (parseFloat(valM) || 0)
+      setValue('valor', sum > 0 ? sum.toFixed(2) : '')
+    }
+  }, [val2, val5, val10, val20, valM, tipoTroca, setValue])
+
+  // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
     setEditingId(registro.id)
-    setTipoTroca(registro.categoria === 'Troca Externa' ? 'EXTERNA' : 'INTERNA')
+    const isExterna = registro.categoria === 'Troca Externa'
+    setTipoTroca(isExterna ? 'EXTERNA' : 'INTERNA')
+    
     setValue('valor', registro.valor)
     setValue('destino', registro.destino || '')
+
+    if (!isExterna && registro.detalhes_troca) {
+      setValue('valor_2', registro.detalhes_troca.valor_2 || '')
+      setValue('valor_5', registro.detalhes_troca.valor_5 || '')
+      setValue('valor_10', registro.detalhes_troca.valor_10 || '')
+      setValue('valor_20', registro.detalhes_troca.valor_20 || '')
+      setValue('valor_moedas', registro.detalhes_troca.valor_moedas || '')
+    } else {
+      setValue('valor_2', ''); setValue('valor_5', ''); setValue('valor_10', ''); setValue('valor_20', ''); setValue('valor_moedas', '');
+    }
+
     setIsModalOpen(true)
   }
 
@@ -48,7 +74,7 @@ export const Exchanges = () => {
   const fecharModal = () => {
     setIsModalOpen(false)
     setEditingId(null)
-    reset({ valor: '', destino: '' })
+    reset({ valor: '', destino: '', valor_2: '', valor_5: '', valor_10: '', valor_20: '', valor_moedas: '' })
     setTipoTroca('INTERNA')
   }
 
@@ -60,6 +86,15 @@ export const Exchanges = () => {
       origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa',
       origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa',
       destino: tipoTroca === 'EXTERNA' ? data.destino : null,
+      
+      // Salva a composição das notas apenas se for interna
+      detalhes_troca: tipoTroca === 'INTERNA' ? {
+        valor_2: parseFloat(data.valor_2) || 0,
+        valor_5: parseFloat(data.valor_5) || 0,
+        valor_10: parseFloat(data.valor_10) || 0,
+        valor_20: parseFloat(data.valor_20) || 0,
+        valor_moedas: parseFloat(data.valor_moedas) || 0,
+      } : null
     }
 
     if (!editingId) {
@@ -88,51 +123,89 @@ export const Exchanges = () => {
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
 
-    let infoDestinoOrigem = ''
-    if (registro.categoria === 'Troca Externa') {
-      infoDestinoOrigem = `<div><span class="bold">Destino / Banco:</span> ${registro.destino}</div>`
+    let conteudoCupom = '';
+
+    if (registro.categoria === 'Troca (Caixa de Troco)') {
+      // ---> LAYOUT 1: TROCA INTERNA 
+      let detalhesHtml = '';
+      if (registro.detalhes_troca) {
+        const d = registro.detalhes_troca;
+        detalhesHtml = `
+          <div class="divisor"></div>
+          <div class="bold" style="margin-bottom: 4px;">Composição da Retirada:</div>
+          ${d.valor_2 ? `<div>Em Notas de R$ 2: R$ ${parseFloat(d.valor_2).toFixed(2).replace('.',',')}</div>` : ''}
+          ${d.valor_5 ? `<div>Em Notas de R$ 5: R$ ${parseFloat(d.valor_5).toFixed(2).replace('.',',')}</div>` : ''}
+          ${d.valor_10 ? `<div>Em Notas de R$ 10: R$ ${parseFloat(d.valor_10).toFixed(2).replace('.',',')}</div>` : ''}
+          ${d.valor_20 ? `<div>Em Notas de R$ 20: R$ ${parseFloat(d.valor_20).toFixed(2).replace('.',',')}</div>` : ''}
+          ${d.valor_moedas ? `<div>Em Moedas: R$ ${parseFloat(d.valor_moedas).toFixed(2).replace('.',',')}</div>` : ''}
+        `;
+      }
+
+      conteudoCupom = `
+        <html>
+          <head>
+            <style>
+              @page { margin: 0; }
+              body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
+              .center { text-align: center; }
+              .bold { font-weight: bold; }
+              .title { font-size: 16px; font-weight: bold; }
+              .divisor { border-top: 1px dashed #000; margin: 10px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="center title">MARCIO GABRIEL TORRES</div>
+            <div class="center title">DROGARIA EIRELI</div>
+            <div class="center">CNPJ: 23.584.239/0001-51</div>
+            <br>
+            <div class="center bold">COMPROVANTE DE TROCA INTERNA</div>
+            <div class="divisor"></div>
+            <div><span class="bold">Data Emissão:</span> ${dataApenas}</div>
+            <div><span class="bold">Hora:</span> ${horaApenas}</div>
+            <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
+            <div class="divisor"></div>
+            <div><span class="bold">Origem:</span> Caixa de Troco</div>
+            ${detalhesHtml}
+            <div class="divisor"></div>
+            <div class="bold" style="font-size: 18px;">TOTAL TROCADO: ${valorFormatado}</div>
+            <div class="divisor"></div>
+          </body>
+        </html>
+      `;
     } else {
-      infoDestinoOrigem = `<div><span class="bold">Origem:</span> Caixa de Troco</div>`
+      // ---> LAYOUT 2: TROCA EXTERNA
+      conteudoCupom = `
+        <html>
+          <head>
+            <style>
+              @page { margin: 0; }
+              body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
+              .center { text-align: center; }
+              .bold { font-weight: bold; }
+              .title { font-size: 16px; font-weight: bold; }
+              .divisor { border-top: 1px dashed #000; margin: 10px 0; }
+            </style>
+          </head>
+          <body>
+            <div class="center title">MARCIO GABRIEL TORRES</div>
+            <div class="center title">DROGARIA EIRELI</div>
+            <div class="center">CNPJ: 23.584.239/0001-51</div>
+            <br>
+            <div class="center bold">COMPROVANTE DE TROCA EXTERNA</div>
+            <div class="divisor"></div>
+            <div><span class="bold">Data Emissão:</span> ${dataApenas}</div>
+            <div><span class="bold">Hora:</span> ${horaApenas}</div>
+            <div><span class="bold">Usuário (Saída):</span> ${nomeOperador}</div>
+            ${registro.recebido_por ? `<div><span class="bold">Recebido por (Retorno):</span> ${registro.recebido_por}</div>` : ''}
+            <div class="divisor"></div>
+            <div><span class="bold">Destino / Banco:</span> ${registro.destino}</div>
+            <div class="divisor"></div>
+            <div class="bold" style="font-size: 18px;">TOTAL TROCADO: ${valorFormatado}</div>
+            <div class="divisor"></div>
+          </body>
+        </html>
+      `;
     }
-
-    const recebedor = registro.recebido_por ? registro.recebido_por : '_________________________________';
-
-    const conteudoCupom = `
-      <html>
-        <head>
-          <style>
-            @page { margin: 0; }
-            body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .title { font-size: 16px; font-weight: bold; }
-            .divisor { border-top: 1px dashed #000; margin: 10px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="center title">MARCIO GABRIEL TORRES</div>
-          <div class="center title">DROGARIA EIRELI</div>
-          <div class="center">CNPJ: 23.584.239/0001-51</div>
-          <br>
-          <div class="center bold">COMPROVANTE DE TROCA</div>
-          <div class="divisor"></div>
-          <div><span class="bold">Data Emissão:</span> ${dataApenas}</div>
-          <div><span class="bold">Hora:</span> ${horaApenas}</div>
-          <div><span class="bold">Tipo:</span> ${registro.categoria}</div>
-          ${infoDestinoOrigem}
-          <div class="divisor"></div>
-          <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
-          <div class="divisor"></div>
-          <br><br>
-          <div><span class="bold">Registrado por (Saída):</span><br>${nomeOperador}</div>
-          <br><br>
-          <div><span class="bold">Recebido por (Retorno):</span><br>${recebedor}</div>
-          <br><br>
-          ${!registro.recebido_por ? '<div class="center" style="font-size: 12px;">(Assinatura Física)</div>' : `<div class="center" style="font-size: 12px;">(Baixa Sistêmica: ${new Date(registro.recebido_em).toLocaleString('pt-BR')})</div>`}
-          <br><br>
-        </body>
-      </html>
-    `
 
     const janelaImpressao = window.open('', '', 'width=300,height=400')
     janelaImpressao.document.write(conteudoCupom)
@@ -165,15 +238,10 @@ export const Exchanges = () => {
             </Button>
           )}
 
-          {/* BOTÕES EXCLUSIVOS PARA O ADMINISTRADOR */}
           {user.role === 'ADMIN' && (
             <>
-              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar Troca">
-                <Pencil size={18} />
-              </button>
-              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Deletar Troca">
-                <Trash2 size={18} />
-              </button>
+              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar Troca"><Pencil size={18} /></button>
+              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Deletar Troca"><Trash2 size={18} /></button>
             </>
           )}
         </div>
@@ -197,9 +265,7 @@ export const Exchanges = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
             {user.role === 'ADMIN' ? (
             <>
-              <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Calendar size={18} color="var(--color-primary)"/> Filtrar Operações do dia:
-              </label>
+              <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={18} color="var(--color-primary)"/> Filtrar Operações do dia:</label>
               <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
             </>
           ) : (
@@ -229,21 +295,22 @@ export const Exchanges = () => {
             </button>
           </div>
 
-          <FormInput
-            label="Valor Trocado (R$)" id="valor" type="number" step="0.01" placeholder="0,00"
-            register={register('valor', { required: 'O valor é obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })}
-            error={errors.valor}
-          />
-
+          {/* CÁLCULO E DETALHAMENTO DE TROCA INTERNA */}
           {tipoTroca === 'INTERNA' ? (
-            <div className="input-wrapper">
-              <label className="input-label">Origem</label>
-              <input type="text" className="input-field" style={{ backgroundColor: '#e2e8f0', color: '#64748b', cursor: 'not-allowed', fontWeight: 'bold' }} value="Caixa de Troco" readOnly disabled />
+            <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '0.9rem', color: 'var(--color-text-main)' }}>Valores retirados do Caixa de Troco (R$):</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <FormInput label="Em Notas de R$ 2" id="valor_2" type="number" step="0.01" register={register('valor_2')} placeholder="0,00" />
+                <FormInput label="Em Notas de R$ 5" id="valor_5" type="number" step="0.01" register={register('valor_5')} placeholder="0,00" />
+                <FormInput label="Em Notas de R$ 10" id="valor_10" type="number" step="0.01" register={register('valor_10')} placeholder="0,00" />
+                <FormInput label="Em Notas de R$ 20" id="valor_20" type="number" step="0.01" register={register('valor_20')} placeholder="0,00" />
+                <FormInput label="Em Moedas" id="valor_moedas" type="number" step="0.01" register={register('valor_moedas')} placeholder="0,00" />
+              </div>
             </div>
           ) : (
             <div className="input-wrapper">
               <label htmlFor="destino" className="input-label">Destino da Troca</label>
-              <select id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: tipoTroca === 'EXTERNA' ? 'Selecione o destino' : false })}>
+              <select id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Selecione o destino' })}>
                 <option value="">Selecione...</option>
                 <option value="Sicoob">Sicoob</option>
                 <option value="Sicredi">Sicredi</option>
@@ -252,6 +319,13 @@ export const Exchanges = () => {
               {errors.destino && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.destino.message}</span>}
             </div>
           )}
+
+          <FormInput
+            label="Total Trocado (R$)" id="valor" type="number" step="0.01" placeholder="0,00"
+            register={register('valor', { required: 'O valor é obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })}
+            error={errors.valor}
+            disabled={tipoTroca === 'INTERNA'} // Bloqueia o campo se for Interna (calcula sozinho)
+          />
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
             <Button type="button" variant="secondary" onClick={fecharModal} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>

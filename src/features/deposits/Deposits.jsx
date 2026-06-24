@@ -109,11 +109,6 @@ export const Deposits = () => {
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
           <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
-          <div class="divisor"></div>
-          <br><br><br>
-          <div class="center">_________________________________</div>
-          <div class="center">Assinatura do Responsável</div>
-          <br><br>
         </body>
       </html>
     `
