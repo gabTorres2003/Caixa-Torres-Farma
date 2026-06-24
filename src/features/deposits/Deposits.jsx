@@ -71,6 +71,7 @@ export const Deposits = () => {
       await salvarDeposito(payload, editingId)
       fecharModal()
     } catch (e) {
+      // Tratado no hook
     }
   }
 
@@ -185,7 +186,7 @@ export const Deposits = () => {
     }, 250)
   }
 
-  // --- COLUNAS DA TABELA (Dinâmica por Papel) ---
+  // --- COLUNAS DA TABELA ---
   const columns = [
     {
       header: 'Data e Hora',
@@ -215,7 +216,7 @@ export const Deposits = () => {
     {
       header: 'Categoria',
       render: (row) => (
-        <span style={{ padding: '4px 8px', backgroundColor: row.categoria === 'Troca (Caixa de Troco)' ? '#eff6ff' : '#ecfdf5', color: row.categoria === 'Troca (Caixa de Troco)' ? '#1d4ed8' : 'var(--color-success)', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600' }}>
+        <span style={{ padding: '4px 8px', backgroundColor: row.categoria === 'Troca (Caixa de Troco)' ? '#eff6ff' : '#ecfdf5', color: row.categoria === 'Troca (Caixa de Troco)' ? '#1d4ed8' : 'var(--color-success)', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>
           {row.categoria || 'Depósito'}
         </span>
       ),
@@ -228,7 +229,6 @@ export const Deposits = () => {
             <Printer size={20} />
           </button>
           
-          {/* BOTÕES EXCLUSIVOS PARA O ADMINISTRADOR */}
           {user.role === 'ADMIN' && (
             <>
               <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar Registro">
@@ -251,13 +251,44 @@ export const Deposits = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* Cabeçalho da Tela */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* --- BLOCO DE ESTILOS RESPONSIVOS --- */}
+      <style>{`
+        .deposito-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+        .deposito-actions { width: auto; }
+        
+        .deposito-summary-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; }
+        .deposito-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        
+        .deposito-total-box { display: flex; align-items: center; gap: 24px; background-color: #f8fafc; padding: 16px 24px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .deposito-divider { width: 1px; height: 48px; background-color: #cbd5e1; }
+        
+        .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
+        .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
+
+        /* Regras para Celulares e Telas Menores */
+        @media (max-width: 768px) {
+          .deposito-header { flex-direction: column; align-items: flex-start; }
+          .deposito-actions { width: 100%; display: flex; }
+          .deposito-actions button { width: 100%; justify-content: center; }
+          
+          .deposito-summary-area { flex-direction: column-reverse; align-items: stretch; }
+          
+          .deposito-total-box { flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
+          .deposito-total-box button { width: 100%; justify-content: center; }
+          .deposito-divider { width: 100%; height: 1px; }
+
+          .modal-buttons { flex-direction: column; }
+          .modal-buttons button { width: 100%; justify-content: center; }
+        }
+      `}</style>
+
+      {/* CABEÇALHO */}
+      <div className="deposito-header">
         <div>
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Depósito / Trocas Financeiras</h1>
           <p style={{ color: 'var(--color-text-muted)' }}>Controle de retiradas de valores da gaveta para o cofre seguro.</p>
         </div>
-        <div style={{ width: 'auto' }}>
+        <div className="deposito-actions">
           <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Depósito</Button>
         </div>
       </div>
@@ -265,24 +296,24 @@ export const Deposits = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
         <Card title={user.role === 'ADMIN' ? 'Auditoria de Retiradas' : 'Retiradas Realizadas (Turno Atual)'} icon={Banknote}>
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div className="deposito-summary-area">
             
             {/* FILTRO DE DATA EXCLUSIVO DO ADMIN */}
-            <div>
+            <div className="deposito-filter">
               {user.role === 'ADMIN' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <>
                   <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Calendar size={18} color="var(--color-primary)"/> Consultar Operações do dia:
                   </label>
                   <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
-                </div>
+                </>
               ) : (
                 <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Mostrando resultados do turno de hoje.</span>
               )}
             </div>
 
             {/* Bloco de Totais */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', backgroundColor: '#f8fafc', padding: '16px 24px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div className="deposito-total-box">
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
                   Total {user.role === 'ADMIN' ? 'Filtrado' : 'no Turno'}
@@ -291,14 +322,17 @@ export const Deposits = () => {
                   R$ {totalDepositos.toFixed(2).replace('.', ',')}
                 </span>
               </div>
-              <div style={{ width: '1px', height: '48px', backgroundColor: '#cbd5e1' }}></div>
+              <div className="deposito-divider"></div>
               <Button onClick={imprimirFechamentoDiario} icon={Printer} type="button">
                 Imprimir Total
               </Button>
             </div>
           </div>
 
-          <Table columns={columns} data={depositsList} emptyMessage={user.role === 'ADMIN' ? "Nenhum depósito encontrado na data selecionada." : "Nenhum depósito realizado neste turno."} />
+          {/* Wrapper Responsivo para a Tabela não quebrar a tela */}
+          <div className="table-responsive-wrapper">
+            <Table columns={columns} data={depositsList} emptyMessage={user.role === 'ADMIN' ? "Nenhum depósito encontrado na data selecionada." : "Nenhum depósito realizado neste turno."} />
+          </div>
         </Card>
       </div>
 
@@ -343,7 +377,7 @@ export const Deposits = () => {
             {errors.data_caixa && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.data_caixa.message}</span>}
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+          <div className="modal-buttons">
             <Button type="button" variant="secondary" onClick={fecharModal}>Cancelar</Button>
             <Button type="submit" isLoading={isActionLoading} icon={editingId ? Pencil : FileText}>
               {editingId ? "Salvar Alterações" : "Confirmar Retirada"}
