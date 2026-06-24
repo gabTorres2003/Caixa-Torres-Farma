@@ -55,8 +55,8 @@ export const PreClosing = () => {
     await salvarFechamento(payload)
   }
 
-  const ItemPagamento = ({ id, label, icon: Icon, color }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '16px', alignItems: 'start', paddingBottom: '16px', borderBottom: '1px dashed var(--color-border)', marginBottom: '16px' }}>
+  const renderItemPagamento = (id, label, Icon, color) => (
+    <div key={id} style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '16px', alignItems: 'start', paddingBottom: '16px', borderBottom: '1px dashed var(--color-border)', marginBottom: '16px' }}>
       <div>
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--color-text-main)', marginBottom: '8px' }}>
           <Icon size={18} color={color} /> {label}
@@ -80,8 +80,8 @@ export const PreClosing = () => {
     </div>
   )
 
-  const ItemImpressao = ({ label, valor, observacao }) => (
-    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+  const renderItemImpressao = (label, valor, observacao) => (
+    <tr key={label} style={{ borderBottom: '1px solid #cbd5e1' }}>
       <td style={{ padding: '8px', fontWeight: 'bold', width: '30%' }}>{label}</td>
       <td style={{ padding: '8px', width: '25%', color: '#1e40af', fontWeight: 'bold' }}>R$ {parseNum(valor).toFixed(2).replace('.', ',')}</td>
       <td style={{ padding: '8px', width: '45%', color: '#475569', fontSize: '12px' }}>{observacao || '-'}</td>
@@ -140,11 +140,12 @@ export const PreClosing = () => {
             <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Calculator size={20} color="var(--color-primary)" /> Apuração Física (Gaveta)
             </h3>
-            <ItemPagamento id="dinheiro" label="Dinheiro em Espécie" icon={DollarSign} color="#16a34a" />
-            <ItemPagamento id="cartao" label="Cartão (Maquininha POS)" icon={CreditCard} color="#2563eb" />
-            <ItemPagamento id="pix" label="Pix (QR Code / Transferência)" icon={Ticket} color="#0d9488" />
-            <ItemPagamento id="cheque" label="Cheques" icon={FileSignature} color="#d97706" />
-            <ItemPagamento id="vale" label="Vale-Compras / Convênios" icon={Wallet} color="#9333ea" />
+            
+            {renderItemPagamento('dinheiro', 'Dinheiro', DollarSign, '#16a34a')}
+            {renderItemPagamento('cartao', 'Cartão', CreditCard, '#2563eb')}
+            {renderItemPagamento('pix', 'Pix (QR Code / Transferência)', Ticket, '#0d9488')}
+            {renderItemPagamento('cheque', 'Cheques', FileSignature, '#d97706')}
+            {renderItemPagamento('vale', 'Vale-Compras', Wallet, '#9333ea')}
 
             <div style={{ marginTop: '24px' }}>
               <label style={{ display: 'block', fontWeight: 'bold', color: 'var(--color-text-main)', marginBottom: '8px' }}>Observações Gerais do Fechamento</label>
@@ -202,11 +203,11 @@ export const PreClosing = () => {
               </tr>
             </thead>
             <tbody>
-              <ItemImpressao label="Dinheiro" valor={valores.dinheiro} observacao={obs.dinheiro} />
-              <ItemImpressao label="Cartão POS" valor={valores.cartao} observacao={obs.cartao} />
-              <ItemImpressao label="Pix" valor={valores.pix} observacao={obs.pix} />
-              <ItemImpressao label="Cheques" valor={valores.cheque} observacao={obs.cheque} />
-              <ItemImpressao label="Vale-Compras" valor={valores.vale} observacao={obs.vale} />
+              {renderItemImpressao('Dinheiro', valores.dinheiro, obs.dinheiro)}
+              {renderItemImpressao('Cartão POS', valores.cartao, obs.cartao)}
+              {renderItemImpressao('Pix', valores.pix, obs.pix)}
+              {renderItemImpressao('Cheques', valores.cheque, obs.cheque)}
+              {renderItemImpressao('Vale-Compras', valores.vale, obs.vale)}
               <tr style={{ backgroundColor: '#f8fafc' }}>
                 <td style={{ padding: '8px', fontWeight: 'bold', textAlign: 'right' }}>SUBTOTAL FÍSICO:</td>
                 <td colSpan="2" style={{ padding: '8px', fontWeight: 'bold', color: '#000' }}>R$ {somaFisico.toFixed(2).replace('.', ',')}</td>
