@@ -189,7 +189,7 @@ export const Deposits = () => {
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
           <div><span class="bold">Total Bruto:</span> R$ ${totalBrutoDepositos.toFixed(2).replace('.', ',')}</div>
-          ${totalSangrias > 0 ? `<div><span class="bold">(-) Sangrias:</span> ${valorSangria}</div>` : ''}
+          ${totalSangrias > 0 ? `<div><span class="bold">(-) Troca:</span> ${valorSangria}</div>` : ''}
           <div class="divisor"></div>
           <div class="center bold" style="font-size: 18px; margin: 10px 0;">
             TOTAL LÍQUIDO: ${valorFormatado}
@@ -290,7 +290,7 @@ export const Deposits = () => {
                 {/* Mostra se teve sangria batendo o total */}
                 {totalSangrias > 0 && (
                   <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertCircle size={14}/> Abatido R$ {totalSangrias.toFixed(2).replace('.', ',')} de Sangria
+                    <AlertCircle size={14}/> Abatido R$ {totalSangrias.toFixed(2).replace('.', ',')} p/ troca.
                   </span>
                 )}
                 
