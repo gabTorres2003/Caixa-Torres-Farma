@@ -12,6 +12,7 @@ import { Dashboard } from '../../features/dashboard/Dashboard'
 import { ShiftHandover } from '../../features/shift-handover/ShiftHandover'
 import { Deposits } from '../../features/deposits/Deposits'
 import { Exchanges } from '../../features/deposits/Exchanges'
+import { Coins } from '../../features/deposits/Coins'
 import { PreClosing } from '../../features/pre-closing/PreClosing'
 import { Divergences } from '../../features/divergences/Divergences'
 import { Reports } from '../../features/reports/Reports'
@@ -68,6 +69,7 @@ export const AppRoutes = () => {
           {/* 🟢 ROTAS COMUNS */}
           <Route path="/troca-turno" element={<ShiftHandover />} />
           <Route path="/depositos" element={<Deposits />} />
+          <Route path="/moedas" element={<Coins />} />
           <Route path="/trocas" element={<Exchanges />} />
           <Route path="/pre-fechamento" element={<PreClosing />} />
 

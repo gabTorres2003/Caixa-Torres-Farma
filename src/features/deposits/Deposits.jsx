@@ -195,9 +195,6 @@ export const Deposits = () => {
           <div><span class="bold">Emitido em:</span> ${dataApenas} ${horaApenas}</div>
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
-          <div><span class="bold">Total Bruto:</span> R$ ${totalBrutoDepositos.toFixed(2).replace('.', ',')}</div>
-          ${totalTrocas > 0 ? `<div><span class="bold">(-) Trocas:</span> ${valorTroca}</div>` : ''}
-          <div class="divisor"></div>
           <div class="center bold" style="font-size: 18px; margin: 10px 0;">
             TOTAL LÍQUIDO: ${valorFormatado}
           </div>

@@ -80,6 +80,7 @@ export const MainLayout = () => {
       subItems: [
         { path: '/depositos', label: 'Depósitos', icon: Banknote },
         { path: '/trocas', label: 'Trocas', icon: ArrowLeftRight },
+        { path: '/moedas', label: 'Moedas', icon: Coins },
       ],
     },
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
@@ -99,6 +100,7 @@ export const MainLayout = () => {
             subItems: [
               { path: '/depositos', label: 'Depósitos', icon: Banknote },
               { path: '/trocas', label: 'Trocas', icon: ArrowLeftRight },
+              { path: '/moedas', label: 'Moedas', icon: Coins },
             ],
           },
           {
