@@ -31,15 +31,28 @@ export const useDeposits = (user, dataFiltro) => {
       if (editingId) {
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
-        // Regra: Subtrai do cofre apenas se for Depósito ou Troca Externa (origem = Caixa de Troco)
-        if (payload.origem === 'Caixa de Troco') {
+        
+        // Se for Troca Interna, processa a Saída e a Entrada simultaneamente
+        if (payload.categoria === 'Troca (Caixa de Troco)') {
+          // 1. Tira as notas grandes que ele pegou do cofre
           await SupabaseCashRepository.registerOutflowFromVault(
-            user.store_id,
-            user.id,
-            payload.detalhes_troca.notas,
-            payload.detalhes_troca.moedasValor,
-            payload.valor,
-            payload.categoria === 'Depósito' ? 'Depósito Bancário' : `Troca Externa (${payload.destino})`
+            user.store_id, user.id,
+            payload.detalhes_troca.notas, payload.detalhes_troca.moedasValor,
+            payload.valor, 'Gaveta do Operador (Troca Interna)'
+          )
+          // 2. Coloca as notas miúdas que ele devolveu para o cofre
+          await SupabaseCashRepository.registerInflowToVault(
+            user.store_id, user.id,
+            payload.detalhes_troca.notasEntrada, payload.detalhes_troca.moedasValorEntrada,
+            payload.valor, 'Gaveta do Operador (Troca Interna)'
+          )
+        } 
+        // Depósitos ou Trocas Externas saindo do cofre
+        else if (payload.origem === 'Caixa de Troco') {
+          await SupabaseCashRepository.registerOutflowFromVault(
+            user.store_id, user.id,
+            payload.detalhes_troca.notas, payload.detalhes_troca.moedasValor,
+            payload.valor, payload.categoria === 'Depósito' ? 'Depósito Bancário' : `Troca Externa (${payload.destino})`
           )
         }
         
@@ -66,7 +79,6 @@ export const useDeposits = (user, dataFiltro) => {
     }
   }
 
-  // Recebe o 3º parâmetro (registroOriginal) para saber de onde a troca voltou
   const receberTroca = async (id, payloadEntrada, registroOriginal) => {
     setIsActionLoading(true)
     try {
@@ -76,13 +88,10 @@ export const useDeposits = (user, dataFiltro) => {
         ...payloadEntrada 
       })
 
-      // Regra 3 e 4: O valor recebido de trocas externas OBRIGATORIAMENTE vai para o Caixa de Troco
       if (payloadEntrada.detalhes_troca && payloadEntrada.detalhes_troca.notas) {
         await SupabaseCashRepository.registerInflowToVault(
-          user.store_id,
-          user.id,
-          payloadEntrada.detalhes_troca.notas,
-          payloadEntrada.detalhes_troca.moedasValor,
+          user.store_id, user.id,
+          payloadEntrada.detalhes_troca.notas, payloadEntrada.detalhes_troca.moedasValor,
           payloadEntrada.valor_recebido,
           `Retorno de Troca Externa (${registroOriginal?.origem || 'Rua'})`
         )
