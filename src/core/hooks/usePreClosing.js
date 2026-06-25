@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
 
 export const usePreClosing = (user) => {
@@ -11,7 +11,6 @@ export const usePreClosing = (user) => {
 
     setIsLoading(true)
     try {
-      // Busca entregas pendentes para calcular o que falta receber da rua
       const { data: deliveries, error: errorDeliveries } = await supabase
         .from('pending_deliveries')
         .select('*')
@@ -21,7 +20,6 @@ export const usePreClosing = (user) => {
       if (errorDeliveries) throw errorDeliveries
       setPendingDeliveries(deliveries || [])
 
-      // Busca último pré-fechamento 
       const { data: preClosing, error: errorPreClosing } = await supabase
         .from('pre_closings')
         .select('*')
@@ -31,7 +29,7 @@ export const usePreClosing = (user) => {
         .single()
 
       if (errorPreClosing && errorPreClosing.code !== 'PGRST116') {
-         throw errorPreClosing 
+         throw errorPreClosing
       }
       setLastPreClosing(preClosing || null)
 
@@ -42,6 +40,19 @@ export const usePreClosing = (user) => {
     }
   }, [user])
 
+  const pendingTotals = useMemo(() => {
+    return pendingDeliveries.reduce((acc, curr) => {
+      const valor = Number(curr.valor) || 0;
+      const forma = (curr.forma_pagamento_real || '').toUpperCase();
+
+      if (forma.includes('DINHEIRO')) acc.dinheiro += valor;
+      else if (forma.includes('CARTAO') || forma.includes('CARTÃO')) acc.cartao += valor;
+      else if (forma.includes('PIX')) acc.pix += valor;
+      
+      return acc;
+    }, { dinheiro: 0, cartao: 0, pix: 0 });
+  }, [pendingDeliveries]);
+
   const savePreClosing = async (payload) => {
     // Nova trava de segurança
     if (!user || !user.store_id || !user.id) {
@@ -51,7 +62,6 @@ export const usePreClosing = (user) => {
 
     setIsLoading(true)
     try {
-      // O payload já deve vir da tela mapeado para as colunas do banco
       const preClosingData = {
         store_id: user.store_id,
         created_by: user.id,
@@ -60,9 +70,9 @@ export const usePreClosing = (user) => {
         pix_value: payload.pix_value || 0,
         check_value: payload.check_value || 0,
         vale_compras_value: payload.vale_compras_value || 0,
-        pending_card: payload.pending_card || 0,
-        pending_pix: payload.pending_pix || 0,
-        pending_cash: payload.pending_cash || 0,
+        pending_card: payload.pending_card || pendingTotals.cartao || 0,
+        pending_pix: payload.pending_pix || pendingTotals.pix || 0,
+        pending_cash: payload.pending_cash || pendingTotals.dinheiro || 0,
         total: payload.total || 0,
         obs_dinheiro: payload.obs_dinheiro || null,
         obs_cartao: payload.obs_cartao || null,
@@ -87,5 +97,5 @@ export const usePreClosing = (user) => {
     }
   }
 
-  return { pendingDeliveries, lastPreClosing, loadInitialData, savePreClosing, isLoading }
+  return { pendingDeliveries, pendingTotals, lastPreClosing, loadInitialData, savePreClosing, isLoading }
 }
