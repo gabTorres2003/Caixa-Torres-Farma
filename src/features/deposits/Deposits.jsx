@@ -2,84 +2,90 @@ import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '../../core/hooks/useAuth'
 import { useDeposits } from '../../core/hooks/useDeposits'
-
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Banknote, Plus, Calendar, FileText, Loader2, Printer, Pencil, Trash2, AlertCircle } from 'lucide-react'
+import { ArrowLeftRight, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 
-export const Deposits = () => {
+const formatRecebedor = (raw) => {
+  if (!raw) return 'Operador';
+  if (typeof raw === 'string' && raw.includes('"recebido_por"')) {
+    try { return JSON.parse(raw).recebido_por || 'Operador'; } catch (e) { return raw; }
+  }
+  return raw;
+};
+
+const formatDetalhes = (registro) => {
+  if (registro.detalhes_troca && Object.keys(registro.detalhes_troca).length > 0) return registro.detalhes_troca;
+  if (registro.recebido_por && typeof registro.recebido_por === 'string' && registro.recebido_por.includes('"detalhes_troca"')) {
+    try { return JSON.parse(registro.recebido_por).detalhes_troca || null; } catch(e) {}
+  }
+  return null;
+};
+
+export const Exchanges = () => {
   const { user } = useAuth()
-
   const [dataFiltro, setDataFiltro] = useState(() => {
     const tzOffset = new Date().getTimezoneOffset() * 60000
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito } = useDeposits(user, dataFiltro)
+  const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca } = useDeposits(user, dataFiltro)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [tipoTroca, setTipoTroca] = useState('INTERNA')
 
-  // Estado apenas para as notas (Moedas removidas do depósito)
+  // Agora os estados guardam o VALOR (R$) e não a quantidade de notas
   const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+  const [moedasValor, setMoedasValor] = useState('')
+
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
+  const [receivingTroca, setReceivingTroca] = useState(null)
+  const [notasRec, setNotasRec] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+  const [moedasValorRec, setMoedasValorRec] = useState('')
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
-  
   const origemSelecionada = watch('origem')
 
-  useEffect(() => {
-    carregarDepositos()
-  }, [carregarDepositos])
+  useEffect(() => { carregarDepositos() }, [carregarDepositos])
 
-  // Lógica de cálculo automático das notas
-  const valorCalculado = Object.entries(notas).reduce((acc, [nota, qtd]) => acc + (Number(nota) * qtd), 0)
+  const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
+
+  // --- CÁLCULO AUTOMÁTICO BASEADO NOS VALORES ---
+  const handleNotaChange = (nota, valor) => { setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
+  const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
+
+  // A soma agora é direta, pois o usuário já digitou o valor em Reais
+  const valorCalculado = Object.values(notas).reduce((acc, val) => acc + val, 0) + Number(moedasValor || 0)
   
   useEffect(() => {
-    if (origemSelecionada === 'Caixa de Troco') {
+    if (tipoTroca === 'INTERNA' || origemSelecionada === 'Caixa de Troco') {
       setValue('valor', valorCalculado)
     }
-  }, [notas, origemSelecionada, setValue, valorCalculado])
+  }, [notas, moedasValor, tipoTroca, origemSelecionada, setValue, valorCalculado])
 
-  // Preenche a data automaticamente para o dia de hoje ao selecionar "Caixa de Troco"
-  useEffect(() => {
-    if (origemSelecionada === 'Caixa de Troco') {
-      const tzOffset = new Date().getTimezoneOffset() * 60000
-      const today = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
-      setValue('data_caixa', today)
-    }
-  }, [origemSelecionada, setValue])
+  const somaRecebimento = Object.values(notasRec).reduce((acc, val) => acc + val, 0) + Number(moedasValorRec || 0)
+  const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
 
-  const handleNotaChange = (nota, valor) => {
-    setNotas(prev => ({ ...prev, [nota]: parseInt(valor) || 0 }))
+  // Função interna que converte o valor digitado (ex: R$ 100) na quantidade de notas (ex: 5 notas de 20) para o banco de dados
+  const converterValoresParaQuantidades = (notasEmReais) => {
+    const qtds = {};
+    Object.entries(notasEmReais).forEach(([notaFace, valorTotal]) => {
+      qtds[notaFace] = Math.round((Number(valorTotal) || 0) / Number(notaFace));
+    });
+    return qtds;
   }
-
-  // --- CÁLCULO DE DEPÓSITOS E TROCAS ---
-  const depositosFiltrados = depositsList.filter(d => d.categoria === 'Depósito' || !d.categoria)
-  const totalBrutoDepositos = depositosFiltrados.reduce((acc, curr) => acc + Number(curr.valor), 0)
-
-  const trocasRetiradas = depositsList.filter(d => d.categoria === 'Troca Externa' && d.origem === 'Sangria de Depósito')
-  const totalTrocas = trocasRetiradas.reduce((acc, curr) => acc + Number(curr.valor), 0)
-
-  const totalLiquidoDepositos = totalBrutoDepositos - totalTrocas
 
   // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
-    if(registro.origem === 'Caixa de Troco') {
-      alert("Depósitos oriundos do Caixa de Troco abatem saldo do cofre e não podem ser editados diretamente. Exclua e crie um novo se houver erro grave.")
-      return
-    }
-    setEditingId(registro.id)
-    setValue('valor', registro.valor)
-    setValue('origem', registro.origem)
-    setValue('data_caixa', registro.data_caixa)
-    setIsModalOpen(true)
+    alert("Trocas que envolvem notas do cofre não podem ser editadas, pois o dinheiro já foi retirado/adicionado fisicamente. Exclua e crie novamente se houver erro.")
   }
 
   const handleDelete = async (id) => {
-    if (window.confirm('ATENÇÃO: Você é um Administrador. Tem certeza que deseja apagar este DEPÓSITO permanentemente? (Isso NÃO estorna o valor no cofre automaticamente)')) {
+    if (window.confirm('ATENÇÃO: Deseja apagar esta troca permanentemente? (Os valores NÃO serão estornados no cofre automaticamente)')) {
       await excluirDeposito(id)
     }
   }
@@ -88,123 +94,139 @@ export const Deposits = () => {
     setIsModalOpen(false)
     setEditingId(null)
     setNotas({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    reset({ valor: '', origem: '', data_caixa: '' })
+    setMoedasValor('')
+    reset({ valor: '', origem: '', destino: '' })
+    setTipoTroca('INTERNA')
   }
 
-  const onSubmit = async (data) => {
-    const isCaixaTroco = data.origem === 'Caixa de Troco'
+  const onSubmitCreate = async (data) => {
+    const isCaixaTroco = tipoTroca === 'INTERNA' || data.origem === 'Caixa de Troco'
     const valorFinal = isCaixaTroco ? valorCalculado : parseFloat(data.valor)
 
     if (isCaixaTroco && valorFinal <= 0) {
-      alert("Informe as quantidades de notas para depositar.")
+      alert("Informe os valores trocados.")
       return
     }
+
+    const notasEmQuantidade = converterValoresParaQuantidades(notas);
 
     const payload = {
       valor: valorFinal,
       value: valorFinal,
-      origem: data.origem,
-      origin: data.origem,
-      categoria: 'Depósito',
-      data_caixa: data.data_caixa,
-      responsavel_nome: user?.nome || 'Operador',
-      // Moedas setadas como 0 fixo para respeitar a estrutura do banco
-      ...(isCaixaTroco && { detalhes_troca: { notas, moedasValor: 0 } })
+      categoria: tipoTroca === 'INTERNA' ? 'Troca (Caixa de Troco)' : 'Troca Externa',
+      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : data.origem,
+      origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : data.origem,
+      destino: tipoTroca === 'EXTERNA' ? data.destino : null,
+      detalhes_troca: isCaixaTroco ? { notas: notasEmQuantidade, moedasValor: Number(moedasValor || 0) } : null
+    }
+
+    if (!editingId) {
+      payload.status_troca = tipoTroca === 'EXTERNA' ? 'PENDENTE' : 'CONCLUIDA'
+      payload.responsavel_nome = user?.nome || 'Operador'
     }
 
     try {
       await salvarDeposito(payload, editingId)
+      
+      if (tipoTroca === 'EXTERNA' && data.origem === 'Caixa de Troco') {
+        alert("Atenção: O dinheiro físico foi subtraído do Cofre. Quando o portador retornar da rua com o troco, você OBRIGATORIAMENTE deverá registrar o Recebimento para devolver o valor ao Caixa de Troco!")
+      }
       fecharModal()
     } catch (e) {}
   }
 
-  // --- FUNÇÕES DE IMPRESSÃO ---
+  const handleOpenReceive = (troca) => {
+    setReceivingTroca(troca)
+    setNotasRec({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+    setMoedasValorRec('')
+    setIsReceiveModalOpen(true)
+  }
+
+  const onSubmitReceive = async (e) => {
+    e.preventDefault()
+    if (!isMatchRecebimento) return
+    
+    const notasRecEmQuantidade = converterValoresParaQuantidades(notasRec);
+
+    await receberTroca(receivingTroca.id, {
+      recebido_por: user?.nome || 'Operador',
+      detalhes_troca: { notas: notasRecEmQuantidade, moedasValor: Number(moedasValorRec || 0) },
+      valor_recebido: somaRecebimento
+    }, receivingTroca)
+    
+    setIsReceiveModalOpen(false)
+  }
+
+  // --- IMPRESSÃO ---
   const imprimirComprovante = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
     const horaApenas = dataObj.toLocaleTimeString('pt-BR')
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
-      
-    const origemComData = registro.data_caixa 
-      ? `${registro.origem} - ${new Date(registro.data_caixa + 'T00:00:00').toLocaleDateString('pt-BR')}`
-      : registro.origem
 
-    const conteudoCupom = `
-      <html>
-        <head>
-          <style>
-            @page { margin: 0; }
-            body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .title { font-size: 16px; font-weight: bold; }
-            .divisor { border-top: 1px dashed #000; margin: 10px 0; }
-          </style>
-        </head>
+    const detalhesLimpos = formatDetalhes(registro)
+    const recebedorLimpo = formatRecebedor(registro.recebido_por)
+
+    let detalhesHtml = '';
+    if (detalhesLimpos && detalhesLimpos.notas) {
+      detalhesHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px;">Composição do Valor:</div>';
+      [200, 100, 50, 20, 10, 5, 2].forEach(n => {
+        if (detalhesLimpos.notas[n] > 0) {
+          detalhesHtml += `<div>Notas R$ ${n}: R$ ${(detalhesLimpos.notas[n] * n).toFixed(2).replace('.',',')}</div>`
+        }
+      });
+      if (detalhesLimpos.moedasValor > 0) {
+        detalhesHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValor).toFixed(2).replace('.',',')}</div>`
+      }
+    } else if (detalhesLimpos && detalhesLimpos.valor_2) {
+      detalhesHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px;">Composição do Valor:</div>';
+      if (detalhesLimpos.valor_2) detalhesHtml += `<div>Notas R$ 2: R$ ${parseFloat(detalhesLimpos.valor_2).toFixed(2).replace('.',',')}</div>`;
+      if (detalhesLimpos.valor_5) detalhesHtml += `<div>Notas R$ 5: R$ ${parseFloat(detalhesLimpos.valor_5).toFixed(2).replace('.',',')}</div>`;
+      if (detalhesLimpos.valor_10) detalhesHtml += `<div>Notas R$ 10: R$ ${parseFloat(detalhesLimpos.valor_10).toFixed(2).replace('.',',')}</div>`;
+      if (detalhesLimpos.valor_20) detalhesHtml += `<div>Notas R$ 20: R$ ${parseFloat(detalhesLimpos.valor_20).toFixed(2).replace('.',',')}</div>`;
+      if (detalhesLimpos.valor_moedas) detalhesHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.valor_moedas).toFixed(2).replace('.',',')}</div>`;
+    }
+
+    let conteudoCupom = '';
+
+    if (registro.categoria === 'Troca (Caixa de Troco)') {
+      conteudoCupom = `
+        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
         <body>
-          <div class="center title">MARCIO GABRIEL TORRES</div>
-          <div class="center title">DROGARIA EIRELI</div>
-          <div class="center">CNPJ: 23.584.239/0001-51</div>
-          <br>
-          <div class="center bold">COMPROVANTE DE DEPÓSITO</div>
+          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA INTERNA</div>
           <div class="divisor"></div>
-          <div><span class="bold">Data Emissão:</span> ${dataApenas}</div>
-          <div><span class="bold">Hora:</span> ${horaApenas}</div>
-          <div><span class="bold">Origem:</span> ${origemComData}</div>
-          <div><span class="bold">Operador:</span> ${nomeOperador}</div>
+          <div><span class="bold">Data/Hora:</span> ${dataApenas} ${horaApenas}</div>
+          <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
+          <div><span class="bold">Origem:</span> Caixa de Troco</div>
+          ${detalhesHtml}
           <div class="divisor"></div>
-          <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
-        </body>
-      </html>
-    `
-    const janelaImpressao = window.open('', '', 'width=300,height=400')
-    janelaImpressao.document.write(conteudoCupom)
-    janelaImpressao.document.close()
-    janelaImpressao.focus()
-    setTimeout(() => { janelaImpressao.print(); janelaImpressao.close() }, 250)
-  }
-
-  const imprimirFechamentoDiario = () => {
-    const dataAtual = new Date()
-    const dataApenas = dataAtual.toLocaleDateString('pt-BR')
-    const horaApenas = dataAtual.toLocaleTimeString('pt-BR')
-    const valorFormatado = `R$ ${totalLiquidoDepositos.toFixed(2).replace('.', ',')}`
-    const valorTroca = `R$ ${totalTrocas.toFixed(2).replace('.', ',')}`
-    const nomeOperador = user?.nome || 'Operador'
-
-    const conteudoCupom = `
-      <html>
-        <head>
-          <style>
-            @page { margin: 0; }
-            body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .title { font-size: 16px; font-weight: bold; }
-            .divisor { border-top: 1px dashed #000; margin: 10px 0; }
-          </style>
-        </head>
+          <div class="bold" style="font-size: 18px;">TOTAL TROCADO: ${valorFormatado}</div>
+          <div class="divisor"></div>
+        </body></html>`;
+    } else {
+      conteudoCupom = `
+        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
         <body>
-          <div class="center title">MARCIO GABRIEL TORRES</div>
-          <div class="center title">DROGARIA EIRELI</div>
-          <div class="center">CNPJ: 23.584.239/0001-51</div>
-          <br>
-          <div class="center bold">FECHAMENTO DE DEPOSITOS</div>
+          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA EXTERNA</div>
           <div class="divisor"></div>
-          <div><span class="bold">Data Ref.:</span> ${dataFiltro.split('-').reverse().join('/')}</div>
-          <div><span class="bold">Emitido em:</span> ${dataApenas} ${horaApenas}</div>
-          <div><span class="bold">Operador:</span> ${nomeOperador}</div>
+          <div><span class="bold">Data Saída:</span> ${dataApenas} ${horaApenas}</div>
+          <div><span class="bold">Origem:</span> ${registro.origem}</div>
+          <div><span class="bold">Destino:</span> ${registro.destino}</div>
+          ${!registro.recebido_por ? detalhesHtml : ''}
           <div class="divisor"></div>
-          <div><span class="bold">Total Bruto:</span> R$ ${totalBrutoDepositos.toFixed(2).replace('.', ',')}</div>
-          ${totalTrocas > 0 ? `<div><span class="bold">(-) Trocas:</span> ${valorTroca}</div>` : ''}
+          <div class="bold" style="font-size: 18px;">VALOR RETIRADO: ${valorFormatado}</div>
+          <div class="divisor"></div><br>
+          <div><span class="bold">Registrado (Saída):</span><br>${nomeOperador}</div><br>
+          ${registro.recebido_por ? `
           <div class="divisor"></div>
-          <div class="center bold" style="font-size: 18px; margin: 10px 0;">
-            TOTAL LÍQUIDO: ${valorFormatado}
-          </div>
-        </body>
-      </html>
-    `
+          <div class="center bold">-- RETORNO DA TROCA --</div>
+          ${detalhesHtml}
+          <div class="divisor"></div>
+          <div><span class="bold">Recebido (Retorno):</span><br>${recebedorLimpo}</div><br><div class="center" style="font-size: 12px;">Entrada no Cofre: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
+        </body></html>`;
+    }
+
     const janelaImpressao = window.open('', '', 'width=300,height=400')
     janelaImpressao.document.write(conteudoCupom)
     janelaImpressao.document.close()
@@ -213,45 +235,46 @@ export const Deposits = () => {
   }
 
   const columns = [
-    { header: 'Data e Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
-    { header: 'Origem / Caixa', render: (row) => (
-        <div>
-          <strong style={{ color: 'var(--color-primary)' }}>{row.origem}</strong>
-          {row.data_caixa && <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Ref: {new Date(row.data_caixa + 'T00:00:00').toLocaleDateString('pt-BR')}</div>}
-        </div>
-      )
+    { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+    { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Troca Externa' ? '#9333ea' : '#1d4ed8' }}>{row.categoria === 'Troca (Caixa de Troco)' ? 'Interna' : 'Externa'}</span> },
+    { header: 'Destino/Origem', render: (row) => row.categoria === 'Troca Externa' ? <span style={{fontSize: '0.8rem'}}><b>{row.origem}</b> ➔ {row.destino}</span> : 'Caixa de Troco' },
+    { header: 'Valor Trocado', render: (row) => <strong style={{ color: '#0f172a' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
+    { header: 'Status', render: (row) => {
+        if (row.categoria === 'Troca (Caixa de Troco)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
+        if (row.status_troca === 'PENDENTE') return <span style={{ color: '#d97706', fontWeight: 'bold' }}>⏳ Pendente</span>
+        return <span style={{ color: '#16a34a', fontWeight: 'bold', display: 'flex', flexDirection: 'column' }}>✓ Recebido <span style={{fontSize: '0.7rem', color: '#64748b'}}>por {formatRecebedor(row.recebido_por)}</span></span>
+      }
     },
-    { header: 'Responsável', render: (row) => row.responsavel_nome || row.users?.nome || 'Operador' },
-    { header: 'Valor Retirado', render: (row) => <strong style={{ color: '#dc2626' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
     { header: 'Ações', render: (row) => (
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir"><Printer size={20} /></button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir Comprovante"><Printer size={20} /></button>
+          
+          {row.status_troca === 'PENDENTE' && (
+            <Button onClick={() => handleOpenReceive(row)} icon={CheckCircle} style={{ padding: '6px 10px', fontSize: '0.75rem', height: 'auto', backgroundColor: '#d97706', border: 'none' }}>
+              Receber Troco
+            </Button>
+          )}
+
           {user.role === 'ADMIN' && (
             <>
-              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar"><Pencil size={18} /></button>
-              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Deletar"><Trash2 size={18} /></button>
+              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }}><Pencil size={18} /></button>
+              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>
             </>
           )}
         </div>
       )
-    }
+    },
   ]
 
-  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando depósitos...</span></div>
+  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <style>{`
-        .deposito-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-        .deposito-actions { width: auto; }
-        .deposito-summary-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; }
-        .deposito-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .deposito-total-box { display: flex; align-items: center; gap: 24px; background-color: #f8fafc; padding: 16px 24px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .deposito-divider { width: 1px; height: 48px; background-color: #cbd5e1; }
+        .troca-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
         .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
-        .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
         
-        /* CSS CORRIGIDO PARA EVITAR OVERFLOW */
+        /* CSS CORRIGIDO PARA EVITAR OVERFLOW IGUAL AOS DEPÓSITOS */
         .notes-container {
           width: 100%;
           box-sizing: border-box;
@@ -273,7 +296,7 @@ export const Deposits = () => {
           display: flex; 
           flex-direction: column; 
           gap: 4px; 
-          min-width: 0; /* Previne que o item force o grid a estourar */
+          min-width: 0;
         }
         .note-input {
           width: 100%;
@@ -290,118 +313,148 @@ export const Deposits = () => {
           width: 100%;
           box-sizing: border-box;
         }
-        
-        @media (max-width: 768px) {
-          .deposito-header { flex-direction: column; align-items: flex-start; }
-          .deposito-actions { width: 100%; display: flex; }
-          .deposito-actions button { width: 100%; justify-content: center; }
-          .deposito-summary-area { flex-direction: column-reverse; align-items: stretch; }
-          .deposito-total-box { flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
-          .deposito-total-box button { width: 100%; justify-content: center; }
-          .deposito-divider { width: 100%; height: 1px; }
-          .modal-buttons { flex-direction: column; }
-          .modal-buttons button { width: 100%; justify-content: center; }
-        }
       `}</style>
 
-      <div className="deposito-header">
+      <div className="troca-header">
         <div>
-          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Depósitos</h1>
-          <p style={{ color: 'var(--color-text-muted)' }}>Controle de retiradas de valores da gaveta para o cofre seguro.</p>
+          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Trocas</h1>
+          <p style={{ color: 'var(--color-text-muted)' }}>Controle de troca de dinheiro interno (Cofre) ou externo (Bancos).</p>
         </div>
-        <div className="deposito-actions">
-          <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Depósito</Button>
-        </div>
+        <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Nova Troca</Button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
-        <Card title={user.role === 'ADMIN' ? 'Auditoria de Retiradas' : 'Retiradas Realizadas (Turno Atual)'} icon={Banknote}>
-          <div className="deposito-summary-area">
-            <div className="deposito-filter">
-              {user.role === 'ADMIN' ? (
-                <>
-                  <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={18} color="var(--color-primary)"/> Consultar Operações do dia:</label>
-                  <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
-                </>
-              ) : (
-                <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Mostrando resultados do turno de hoje.</span>
-              )}
-            </div>
-            <div className="deposito-total-box">
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total {user.role === 'ADMIN' ? 'Filtrado' : 'no Turno'}</span>
-                
-                {/* Mostra se teve troca batendo o total */}
-                {totalTrocas > 0 && (
-                  <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertCircle size={14}/> Abatido R$ {totalTrocas.toFixed(2).replace('.', ',')} de Troca
-                  </span>
-                )}
-                
-                <span style={{ fontSize: '1.875rem', fontWeight: '800', color: 'var(--color-primary)', lineHeight: '1', whiteSpace: 'nowrap', marginTop: '4px' }}>R$ {totalLiquidoDepositos.toFixed(2).replace('.', ',')}</span>
-              </div>
-              <div className="deposito-divider"></div>
-              <Button onClick={imprimirFechamentoDiario} icon={Printer} type="button">Imprimir Total</Button>
-            </div>
-          </div>
-          <div className="table-responsive-wrapper">
-            <Table columns={columns} data={depositosFiltrados} emptyMessage={user.role === 'ADMIN' ? "Nenhum depósito encontrado." : "Nenhum depósito neste turno."} />
-          </div>
-        </Card>
-      </div>
+      <Card icon={ArrowLeftRight} title={user.role === 'ADMIN' ? 'Auditoria de Trocas' : 'Trocas do Turno'}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          {user.role === 'ADMIN' && (
+            <>
+              <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={18} color="var(--color-primary)"/> Filtrar do dia:</label>
+              <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
+            </>
+          )}
+        </div>
+        <div className="table-responsive-wrapper">
+          <Table columns={columns} data={trocasList} emptyMessage="Nenhuma troca registrada." />
+        </div>
+      </Card>
 
-      <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Registro de Depósito" : "Registrar Novo Depósito"}>
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
+      {/* MODAL 1: REGISTRO DE TROCA (SAÍDA) */}
+      <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Troca" : "Registrar Nova Troca"}>
+        <form onSubmit={handleSubmit(onSubmitCreate)} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
           
-          <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
-            <label htmlFor="origem" className="input-label">Origem do Valor (Caixa)</label>
-            <select id="origem" className={`input-field ${errors.origem ? 'error' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }} {...register('origem', { required: 'A origem é obrigatória' })}>
-              <option value="">Selecione...</option>
-              <option value="Caixa Jô">Caixa Jô</option>
-              <option value="Caixa Gabriel">Caixa Gabriel</option>
-              <option value="Caixa Ana">Caixa Ana</option>
-              <option value="Caixa Bruna">Caixa Bruna</option>
-              <option value="Caixa de Troco">Caixa de Troco (Cofre)</option>
-            </select>
-            {errors.origem && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.origem.message}</span>}
+          <div style={{ display: 'flex', gap: '12px', padding: '4px', backgroundColor: '#f1f5f9', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}>
+            <button type="button" onClick={() => setTipoTroca('INTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'INTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'INTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'INTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Troca - Interna</button>
+            <button type="button" onClick={() => setTipoTroca('EXTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'EXTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'EXTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'EXTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Troca - Externa</button>
           </div>
 
-          {origemSelecionada === 'Caixa de Troco' ? (
+          {tipoTroca === 'EXTERNA' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
+              <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
+                <label htmlFor="origem" className="input-label">Origem do Valor</label>
+                <select id="origem" className="input-field" style={{ width: '100%', boxSizing: 'border-box' }} {...register('origem', { required: 'Selecione a origem' })}>
+                  <option value="">Selecione...</option>
+                  <option value="Caixa de Troco">Caixa de Troco (Cofre)</option>
+                  <option value="Caixa atual">Caixa atual</option>
+                  <option value="Sangria de Depósito">Sangria de Depósito</option>
+                </select>
+              </div>
+              <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
+                <label htmlFor="destino" className="input-label">Destino / Banco</label>
+                <select id="destino" className="input-field" style={{ width: '100%', boxSizing: 'border-box' }} {...register('destino', { required: 'Selecione o destino' })}>
+                  <option value="">Selecione...</option>
+                  <option value="Sicoob">Sicoob</option>
+                  <option value="Sicredi">Sicredi</option>
+                  <option value="Padaria/Rua">Padaria / Rua</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {(tipoTroca === 'INTERNA' || origemSelecionada === 'Caixa de Troco') ? (
             <div className="notes-container">
               <label className="input-label" style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <AlertCircle size={16}/> Informe as notas retiradas do cofre:
+                <AlertTriangle size={16}/> Informe os valores (R$) em notas retiradas:
               </label>
               <div className="notes-grid">
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {nota}</label>
-                    <input type="number" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0" />
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Notas de R$ {nota}</label>
+                    <input type="number" step="0.01" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0,00" />
                   </div>
                 ))}
+                <div className="note-item" style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
+                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasValor} onChange={(e) => setMoedasValor(e.target.value)} placeholder="0,00" />
+                </div>
               </div>
               <div className="total-wrapper">
-                <span style={{ fontWeight: 'bold', color: '#0369a1' }}>Total Retirado:</span>
+                <span style={{ fontWeight: 'bold', color: '#0369a1' }}>Soma Retirada:</span>
                 <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0369a1' }}>R$ {valorCalculado.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
           ) : (
             <div style={{ width: '100%', boxSizing: 'border-box' }}>
-              <FormInput label="Valor da Retirada (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })} error={errors.valor} />
+              <FormInput label="Valor Retirado (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Mín. R$ 1,00' } })} error={errors.valor} />
             </div>
           )}
 
-          <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
-            <label htmlFor="data_caixa" className="input-label">Data Referente ao Caixa</label>
-            <input id="data_caixa" type="date" className={`input-field ${errors.data_caixa ? 'error' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }} {...register('data_caixa', { required: 'Obrigatório' })} />
-            {errors.data_caixa && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.data_caixa.message}</span>}
-          </div>
-
-          <div className="modal-buttons">
-            <Button type="button" variant="secondary" onClick={fecharModal}>Cancelar</Button>
-            <Button type="submit" isLoading={isActionLoading} icon={editingId ? Pencil : FileText}>{editingId ? "Salvar Alterações" : "Confirmar Retirada"}</Button>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', width: '100%', boxSizing: 'border-box' }}>
+            <Button type="button" variant="secondary" onClick={fecharModal} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>
+            <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center' }} icon={editingId ? Pencil : Plus}>
+              {editingId ? "Salvar" : "Registrar"}
+            </Button>
           </div>
         </form>
       </Modal>
+
+      {/* MODAL 2: RECEBIMENTO DA TROCA EXTERNA (RETORNO) */}
+      <Modal isOpen={isReceiveModalOpen} onClose={() => setIsReceiveModalOpen(false)} title="Confirmar Retorno da Troca">
+        <form onSubmit={onSubmitReceive} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
+          
+          <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '16px', borderRadius: '8px', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>
+            <span style={{ fontSize: '0.85rem', color: '#1e40af', fontWeight: 'bold', textTransform: 'uppercase' }}>Valor Físico Aguardado</span>
+            <div style={{ fontSize: '2rem', fontWeight: '900', color: '#1d4ed8' }}>
+              R$ {receivingTroca?.valor?.toFixed(2).replace('.', ',')}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#1e40af', marginTop: '8px' }}>
+              O registro retornará para o <b>Caixa de Troco</b> em nome de: <b>{user?.nome}</b>
+            </div>
+          </div>
+
+          <div className="notes-container">
+            <label className="input-label" style={{ color: '#047857', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={16}/> Informe os valores (R$) físicos que vieram da rua:
+            </label>
+            <div className="notes-grid">
+              {[200, 100, 50, 20, 10, 5, 2].map(nota => (
+                <div key={nota} className="note-item">
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Notas de R$ {nota}</label>
+                  <input type="number" step="0.01" min="0" className="input-field note-input" value={notasRec[nota] || ''} onChange={(e) => handleNotaRecChange(nota, e.target.value)} placeholder="0,00" />
+                </div>
+              ))}
+              <div className="note-item" style={{ gridColumn: 'span 2' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
+                <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasValorRec} onChange={(e) => setMoedasValorRec(e.target.value)} placeholder="0,00" />
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: isMatchRecebimento ? '#ecfdf5' : '#fef2f2', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}>
+            <span style={{ fontWeight: 'bold', color: isMatchRecebimento ? '#065f46' : '#991b1b' }}>Soma Apurada:</span>
+            <span style={{ fontWeight: '900', fontSize: '1.2rem', color: isMatchRecebimento ? '#059669' : '#dc2626' }}>
+              R$ {somaRecebimento.toFixed(2).replace('.', ',')}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', width: '100%', boxSizing: 'border-box' }}>
+            <Button type="button" variant="secondary" onClick={() => setIsReceiveModalOpen(false)} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>
+            <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center' }} disabled={!isMatchRecebimento} icon={CheckCircle}>
+              Confirmar Recebimento
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
     </div>
   )
 }
