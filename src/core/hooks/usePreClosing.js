@@ -2,14 +2,15 @@ import { useState, useCallback, useMemo } from 'react'
 import { supabase } from '../../infrastructure/supabase/supabaseClient'
 
 export const usePreClosing = (user) => {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isPageLoading, setIsPageLoading] = useState(true)
+  const [isActionLoading, setIsActionLoading] = useState(false)
   const [pendingDeliveries, setPendingDeliveries] = useState([])
   const [lastPreClosing, setLastPreClosing] = useState(null)
 
   const loadInitialData = useCallback(async () => {
     if (!user || !user.store_id) return;
 
-    setIsLoading(true)
+    setIsPageLoading(true)
     try {
       const { data: deliveries, error: errorDeliveries } = await supabase
         .from('pending_deliveries')
@@ -36,11 +37,17 @@ export const usePreClosing = (user) => {
     } catch (err) {
       console.error("Erro ao carregar dados do pré-fechamento:", err)
     } finally {
-      setIsLoading(false)
+      setIsPageLoading(false)
     }
   }, [user])
 
   const pendingTotals = useMemo(() => {
+    const defaultTotals = { dinheiro: 0, cartao: 0, pix: 0 };
+    
+    if (!pendingDeliveries || pendingDeliveries.length === 0) {
+      return defaultTotals;
+    }
+
     return pendingDeliveries.reduce((acc, curr) => {
       const valor = Number(curr.valor) || 0;
       const forma = (curr.forma_pagamento_real || '').toUpperCase();
@@ -50,17 +57,16 @@ export const usePreClosing = (user) => {
       else if (forma.includes('PIX')) acc.pix += valor;
       
       return acc;
-    }, { dinheiro: 0, cartao: 0, pix: 0 });
+    }, defaultTotals);
   }, [pendingDeliveries]);
 
   const savePreClosing = async (payload) => {
-    // Nova trava de segurança
     if (!user || !user.store_id || !user.id) {
       alert("Erro de autenticação: Usuário não identificado.")
       return
     }
 
-    setIsLoading(true)
+    setIsActionLoading(true)
     try {
       const preClosingData = {
         store_id: user.store_id,
@@ -93,9 +99,9 @@ export const usePreClosing = (user) => {
       console.error("Erro ao salvar pré-fechamento:", err)
       alert('Erro ao salvar o registro no banco de dados. ' + err.message)
     } finally {
-      setIsLoading(false)
+      setIsActionLoading(false)
     }
   }
 
-  return { pendingDeliveries, pendingTotals, lastPreClosing, loadInitialData, savePreClosing, isLoading }
+  return { pendingDeliveries, pendingTotals, lastPreClosing, loadInitialData, savePreClosing, isPageLoading, isActionLoading }
 }

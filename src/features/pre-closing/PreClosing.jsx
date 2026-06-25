@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../core/hooks/useAuth'
 import { usePreClosing } from '../../core/hooks/usePreClosing'
 import { Card } from '../../shared/components/cards/Card'
@@ -7,7 +7,13 @@ import { Calculator, Save, Printer, Loader2, DollarSign, CreditCard, Ticket, Fil
 
 export const PreClosing = () => {
   const { user } = useAuth()
-  const { pendentes, isLoading, isPageLoading, salvarFechamento } = usePreClosing(user)
+  
+  const { pendingTotals, isPageLoading, isActionLoading, loadInitialData, savePreClosing } = usePreClosing(user)
+
+  // busca no banco de dados 
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   // Estados dos Valores Físicos
   const [valores, setValores] = useState({
@@ -21,10 +27,12 @@ export const PreClosing = () => {
   
   const [obsGeral, setObsGeral] = useState('')
 
-  // Cálculos Automáticos
+  // Cálculos Automáticos (com blindagem contra variáveis vazias)
   const parseNum = (val) => Number(val) || 0
   const somaFisico = parseNum(valores.dinheiro) + parseNum(valores.cartao) + parseNum(valores.pix) + parseNum(valores.cheque) + parseNum(valores.vale)
-  const somaPendente = pendentes.dinheiro + pendentes.cartao
+  
+  // Usa o pendingTotals com optional chaining (?) para evitar crashes
+  const somaPendente = (pendingTotals?.dinheiro || 0) + (pendingTotals?.cartao || 0)
   const totalGeral = somaFisico + somaPendente
 
   const handleValorChange = (campo, valor) => {
@@ -42,8 +50,8 @@ export const PreClosing = () => {
       pix_value: parseNum(valores.pix),
       check_value: parseNum(valores.cheque),
       vale_compras_value: parseNum(valores.vale),
-      pending_cash: pendentes.dinheiro,
-      pending_card: pendentes.cartao,
+      pending_cash: pendingTotals?.dinheiro || 0,
+      pending_card: pendingTotals?.cartao || 0,
       total: totalGeral,
       obs_dinheiro: obs.dinheiro,
       obs_cartao: obs.cartao,
@@ -52,7 +60,7 @@ export const PreClosing = () => {
       obs_vale: obs.vale,
       obs_geral: obsGeral
     }
-    await salvarFechamento(payload)
+    await savePreClosing(payload)
   }
 
   const renderItemPagamento = (id, label, Icon, color) => (
@@ -88,12 +96,11 @@ export const PreClosing = () => {
     </tr>
   )
 
-  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Calculando malotes em aberto...</span></div>
+  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando dados do banco...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* CSS DE IMPRESSÃO APRIMORADO */}
       <style>{`
         @media screen { .print-only { display: none !important; } }
         @media print {
@@ -114,7 +121,7 @@ export const PreClosing = () => {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <Button variant="secondary" onClick={() => window.print()} icon={Printer}>Exportar PDF</Button>
-          <Button onClick={handleSalvar} isLoading={isLoading} icon={Save}>Salvar Fechamento</Button>
+          <Button onClick={handleSalvar} isLoading={isActionLoading} icon={Save}>Salvar Fechamento</Button>
         </div>
       </div>
 
@@ -135,7 +142,6 @@ export const PreClosing = () => {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px' }} className="no-print">
           
-          {/* Lado Esquerdo: Formulário Físico */}
           <div>
             <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Calculator size={20} color="var(--color-primary)" /> Apuração Física (Gaveta)
@@ -157,7 +163,6 @@ export const PreClosing = () => {
             </div>
           </div>
 
-          {/* Lado Direito: Resumo e Pendentes */}
           <div>
             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '24px', position: 'sticky', top: '24px' }}>
               <h3 style={{ fontSize: '1rem', color: 'var(--color-text-main)', marginBottom: '16px', fontWeight: 'bold', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
@@ -173,11 +178,11 @@ export const PreClosing = () => {
                 <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px' }}>Entregas na Rua (Pendentes)</span>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: '#dc2626', fontSize: '0.9rem' }}>
                   <span>Dinheiro a receber:</span>
-                  <span style={{ fontWeight: 'bold' }}>+ R$ {pendentes.dinheiro.toFixed(2).replace('.', ',')}</span>
+                  <span style={{ fontWeight: 'bold' }}>+ R$ {(pendingTotals?.dinheiro || 0).toFixed(2).replace('.', ',')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#dc2626', fontSize: '0.9rem' }}>
                   <span>Cartão a receber:</span>
-                  <span style={{ fontWeight: 'bold' }}>+ R$ {pendentes.cartao.toFixed(2).replace('.', ',')}</span>
+                  <span style={{ fontWeight: 'bold' }}>+ R$ {(pendingTotals?.cartao || 0).toFixed(2).replace('.', ',')}</span>
                 </div>
               </div>
 
@@ -191,7 +196,6 @@ export const PreClosing = () => {
           </div>
         </div>
 
-        {/* ESTRUTURA EXCLUSIVA VISÍVEL APENAS NA IMPRESSÃO (PDF) */}
         <div className="print-only">
           <h3 style={{ fontSize: '16px', margin: '20px 0 10px 0', borderBottom: '1px solid #ccc', paddingBottom: '4px' }}>Detalhamento Físico (Gaveta)</h3>
           <table>
@@ -220,11 +224,11 @@ export const PreClosing = () => {
             <tbody>
               <tr>
                 <td style={{ padding: '8px', width: '30%', color: '#dc2626' }}>Dinheiro a Receber</td>
-                <td style={{ padding: '8px', fontWeight: 'bold', color: '#dc2626' }}>R$ {pendentes.dinheiro.toFixed(2).replace('.', ',')}</td>
+                <td style={{ padding: '8px', fontWeight: 'bold', color: '#dc2626' }}>R$ {(pendingTotals?.dinheiro || 0).toFixed(2).replace('.', ',')}</td>
               </tr>
               <tr>
                 <td style={{ padding: '8px', width: '30%', color: '#dc2626' }}>Cartão a Receber</td>
-                <td style={{ padding: '8px', fontWeight: 'bold', color: '#dc2626' }}>R$ {pendentes.cartao.toFixed(2).replace('.', ',')}</td>
+                <td style={{ padding: '8px', fontWeight: 'bold', color: '#dc2626' }}>R$ {(pendingTotals?.cartao || 0).toFixed(2).replace('.', ',')}</td>
               </tr>
               <tr style={{ backgroundColor: '#fef2f2' }}>
                 <td style={{ padding: '8px', fontWeight: 'bold', textAlign: 'right', color: '#991b1b' }}>SUBTOTAL PENDENTE:</td>
