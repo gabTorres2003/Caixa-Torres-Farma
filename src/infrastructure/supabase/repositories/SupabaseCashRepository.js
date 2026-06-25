@@ -44,9 +44,8 @@ export const SupabaseCashRepository = {
     return data
   },
 
-  // Dá baixa nas notas do cofre na hora do depósito ou troca
+  // Dá baixa nas notas do cofre na hora da Saída
   async registerOutflowFromVault(storeId, userId, notas, moedasValor, totalValue, destino) {
-    // 1. Busca os saldos atuais do cofre
     const { data: currentStocks, error: fetchError } = await supabase
       .from('cash_denominations')
       .select('*')
@@ -55,7 +54,6 @@ export const SupabaseCashRepository = {
       
     if (fetchError) throw fetchError;
 
-    // 2. Subtrai as quantidades informadas
     for (const [valorNota, qtdRetirada] of Object.entries(notas)) {
       if (qtdRetirada > 0) {
         const stockItem = currentStocks.find(s => s.valor === Number(valorNota));
@@ -69,7 +67,6 @@ export const SupabaseCashRepository = {
       }
     }
 
-    // 3. Registra a movimentação no histórico
     const payloadMovimento = {
       store_id: storeId,
       created_by: userId,
@@ -77,6 +74,43 @@ export const SupabaseCashRepository = {
       valor_total: totalValue,
       origem: 'Caixa de Troco',
       destino: destino,
+      detalhamento: { notas, moedasValor }
+    };
+    
+    const { error: moveError } = await supabase.from('cash_movements').insert([payloadMovimento]);
+    if (moveError) throw moveError;
+  },
+
+  // Dá Entrada nas notas no cofre no Recebimento
+  async registerInflowToVault(storeId, userId, notas, moedasValor, totalValue, origem) {
+    const { data: currentStocks, error: fetchError } = await supabase
+      .from('cash_denominations')
+      .select('*')
+      .eq('store_id', storeId)
+      .eq('tipo', 'NOTA');
+      
+    if (fetchError) throw fetchError;
+
+    for (const [valorNota, qtdEntrada] of Object.entries(notas)) {
+      if (qtdEntrada > 0) {
+        const stockItem = currentStocks.find(s => s.valor === Number(valorNota));
+        if (stockItem) {
+          const novaQtd = stockItem.quantidade_atual + qtdEntrada;
+          await supabase
+            .from('cash_denominations')
+            .update({ quantidade_atual: novaQtd, updated_at: new Date().toISOString() })
+            .eq('id', stockItem.id);
+        }
+      }
+    }
+
+    const payloadMovimento = {
+      store_id: storeId,
+      created_by: userId,
+      tipo_movimento: 'ENTRADA',
+      valor_total: totalValue,
+      origem: origem,
+      destino: 'Caixa de Troco',
       detalhamento: { notas, moedasValor }
     };
     

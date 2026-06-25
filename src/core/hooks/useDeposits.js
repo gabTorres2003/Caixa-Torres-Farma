@@ -31,6 +31,7 @@ export const useDeposits = (user, dataFiltro) => {
       if (editingId) {
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
+        // Regra: Subtrai do cofre apenas se for Depósito ou Troca Externa (origem = Caixa de Troco)
         if (payload.origem === 'Caixa de Troco') {
           await SupabaseCashRepository.registerOutflowFromVault(
             user.store_id,
@@ -38,7 +39,7 @@ export const useDeposits = (user, dataFiltro) => {
             payload.detalhes_troca.notas,
             payload.detalhes_troca.moedasValor,
             payload.valor,
-            'Depósito Bancário'
+            payload.categoria === 'Depósito' ? 'Depósito Bancário' : `Troca Externa (${payload.destino})`
           )
         }
         
@@ -65,7 +66,8 @@ export const useDeposits = (user, dataFiltro) => {
     }
   }
 
-  const receberTroca = async (id, payloadEntrada) => {
+  // Recebe o 3º parâmetro (registroOriginal) para saber de onde a troca voltou
+  const receberTroca = async (id, payloadEntrada, registroOriginal) => {
     setIsActionLoading(true)
     try {
       await DepositRepository.receiveExchange(id, {
@@ -73,8 +75,21 @@ export const useDeposits = (user, dataFiltro) => {
         recebido_em: new Date().toISOString(),
         ...payloadEntrada 
       })
+
+      // Regra 3 e 4: O valor recebido de trocas externas OBRIGATORIAMENTE vai para o Caixa de Troco
+      if (payloadEntrada.detalhes_troca && payloadEntrada.detalhes_troca.notas) {
+        await SupabaseCashRepository.registerInflowToVault(
+          user.store_id,
+          user.id,
+          payloadEntrada.detalhes_troca.notas,
+          payloadEntrada.detalhes_troca.moedasValor,
+          payloadEntrada.valor_recebido,
+          `Retorno de Troca Externa (${registroOriginal?.origem || 'Rua'})`
+        )
+      }
+
       await carregarDepositos()
-      alert('Recebimento e detalhamento confirmados com sucesso!')
+      alert('Recebimento confirmado! As notas e moedas foram adicionadas ao saldo do Caixa de Troco.')
     } catch (err) {
       alert('Erro ao confirmar recebimento: ' + err.message)
     } finally {
