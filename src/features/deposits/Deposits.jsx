@@ -251,18 +251,45 @@ export const Deposits = () => {
         .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
         .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
         
-        /* Grid atualizado para 2 colunas */
+        /* CSS CORRIGIDO PARA EVITAR OVERFLOW */
+        .notes-container {
+          width: 100%;
+          box-sizing: border-box;
+          overflow: hidden;
+        }
         .notes-grid { 
           display: grid; 
           grid-template-columns: repeat(2, 1fr); 
-          gap: 16px; 
+          gap: 12px; 
           margin-top: 8px; 
           background: #f8fafc; 
-          padding: 16px; 
+          padding: 12px; 
           border-radius: 8px; 
           border: 1px solid #e2e8f0; 
+          width: 100%;
+          box-sizing: border-box;
         }
-        .note-item { display: flex; flex-direction: column; gap: 4px; }
+        .note-item { 
+          display: flex; 
+          flex-direction: column; 
+          gap: 4px; 
+          min-width: 0; /* Previne que o item force o grid a estourar */
+        }
+        .note-input {
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .total-wrapper {
+          margin-top: 12px; 
+          padding: 12px; 
+          background-color: #e0f2fe; 
+          border-radius: 8px; 
+          display: flex; 
+          justify-content: space-between; 
+          align-items: center;
+          width: 100%;
+          box-sizing: border-box;
+        }
         
         @media (max-width: 768px) {
           .deposito-header { flex-direction: column; align-items: flex-start; }
@@ -274,7 +301,6 @@ export const Deposits = () => {
           .deposito-divider { width: 100%; height: 1px; }
           .modal-buttons { flex-direction: column; }
           .modal-buttons button { width: 100%; justify-content: center; }
-          .notes-grid { grid-template-columns: repeat(2, 1fr); }
         }
       `}</style>
 
@@ -325,11 +351,11 @@ export const Deposits = () => {
       </div>
 
       <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Registro de Depósito" : "Registrar Novo Depósito"}>
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
           
-          <div className="input-wrapper">
+          <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
             <label htmlFor="origem" className="input-label">Origem do Valor (Caixa)</label>
-            <select id="origem" className={`input-field ${errors.origem ? 'error' : ''}`} style={{ width: '100%' }} {...register('origem', { required: 'A origem é obrigatória' })}>
+            <select id="origem" className={`input-field ${errors.origem ? 'error' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }} {...register('origem', { required: 'A origem é obrigatória' })}>
               <option value="">Selecione...</option>
               <option value="Caixa Jô">Caixa Jô</option>
               <option value="Caixa Gabriel">Caixa Gabriel</option>
@@ -341,7 +367,7 @@ export const Deposits = () => {
           </div>
 
           {origemSelecionada === 'Caixa de Troco' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="notes-container">
               <label className="input-label" style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <AlertCircle size={16}/> Informe as notas retiradas do cofre:
               </label>
@@ -349,22 +375,24 @@ export const Deposits = () => {
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
                     <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {nota}</label>
-                    <input type="number" min="0" className="input-field" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0" />
+                    <input type="number" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0" />
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="total-wrapper">
                 <span style={{ fontWeight: 'bold', color: '#0369a1' }}>Total Retirado:</span>
                 <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0369a1' }}>R$ {valorCalculado.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
           ) : (
-            <FormInput label="Valor da Retirada (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })} error={errors.valor} />
+            <div style={{ width: '100%', boxSizing: 'border-box' }}>
+              <FormInput label="Valor da Retirada (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })} error={errors.valor} />
+            </div>
           )}
 
-          <div className="input-wrapper">
+          <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
             <label htmlFor="data_caixa" className="input-label">Data Referente ao Caixa</label>
-            <input id="data_caixa" type="date" className={`input-field ${errors.data_caixa ? 'error' : ''}`} style={{ width: '100%' }} {...register('data_caixa', { required: 'Obrigatório' })} />
+            <input id="data_caixa" type="date" className={`input-field ${errors.data_caixa ? 'error' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }} {...register('data_caixa', { required: 'Obrigatório' })} />
             {errors.data_caixa && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.data_caixa.message}</span>}
           </div>
 
