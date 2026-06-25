@@ -25,25 +25,62 @@ export const SupabaseCashRepository = {
     if (error) throw error
   },
 
-  // Salva o histórico exato do que foi contado
   async registerMovement(payload) {
     const { error } = await supabase.from('cash_movements').insert([payload])
     if (error) throw error
   },
 
-  // Puxa quem fez a última conferência e que horas
   async getLastConference(storeId) {
     const { data, error } = await supabase
       .from('cash_movements')
       .select('created_at, users ( nome )')
       .eq('store_id', storeId)
-      .eq('tipo_movimento', 'CONTAGEM_INICIAL') // Usaremos este tipo para as conferências de cofre
+      .eq('tipo_movimento', 'CONTAGEM_INICIAL')
       .order('created_at', { ascending: false })
       .limit(1)
       .single()
 
-    // O erro PGRST116 significa "nenhuma linha encontrada"
     if (error && error.code !== 'PGRST116') throw error
     return data
+  },
+
+  // Dá baixa nas notas do cofre na hora do depósito ou troca
+  async registerOutflowFromVault(storeId, userId, notas, moedasValor, totalValue, destino) {
+    // 1. Busca os saldos atuais do cofre
+    const { data: currentStocks, error: fetchError } = await supabase
+      .from('cash_denominations')
+      .select('*')
+      .eq('store_id', storeId)
+      .eq('tipo', 'NOTA');
+      
+    if (fetchError) throw fetchError;
+
+    // 2. Subtrai as quantidades informadas
+    for (const [valorNota, qtdRetirada] of Object.entries(notas)) {
+      if (qtdRetirada > 0) {
+        const stockItem = currentStocks.find(s => s.valor === Number(valorNota));
+        if (stockItem) {
+          const novaQtd = stockItem.quantidade_atual - qtdRetirada;
+          await supabase
+            .from('cash_denominations')
+            .update({ quantidade_atual: novaQtd, updated_at: new Date().toISOString() })
+            .eq('id', stockItem.id);
+        }
+      }
+    }
+
+    // 3. Registra a movimentação no histórico
+    const payloadMovimento = {
+      store_id: storeId,
+      created_by: userId,
+      tipo_movimento: 'SAIDA',
+      valor_total: totalValue,
+      origem: 'Caixa de Troco',
+      destino: destino,
+      detalhamento: { notas, moedasValor }
+    };
+    
+    const { error: moveError } = await supabase.from('cash_movements').insert([payloadMovimento]);
+    if (moveError) throw moveError;
   }
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { DepositRepository } from '../../infrastructure/supabase/repositories/SupabaseDepositRepository'
+import { SupabaseCashRepository } from '../../infrastructure/supabase/repositories/SupabaseCashRepository'
 
 export const useDeposits = (user, dataFiltro) => {
   const [depositsList, setDepositsList] = useState([])
@@ -30,6 +31,17 @@ export const useDeposits = (user, dataFiltro) => {
       if (editingId) {
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
+        if (payload.origem === 'Caixa de Troco') {
+          await SupabaseCashRepository.registerOutflowFromVault(
+            user.store_id,
+            user.id,
+            payload.detalhes_troca.notas,
+            payload.detalhes_troca.moedasValor,
+            payload.valor,
+            'Depósito Bancário'
+          )
+        }
+        
         await DepositRepository.addDeposit({ ...payload, store_id: user.store_id, created_by: user.id })
       }
       await carregarDepositos()

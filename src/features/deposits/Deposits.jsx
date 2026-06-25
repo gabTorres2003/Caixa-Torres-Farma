@@ -8,7 +8,7 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Banknote, Plus, Calendar, FileText, Loader2, Printer, Pencil, Trash2 } from 'lucide-react'
+import { Banknote, Plus, Calendar, FileText, Loader2, Printer, Pencil, Trash2, AlertCircle } from 'lucide-react'
 
 export const Deposits = () => {
   const { user } = useAuth()
@@ -23,19 +23,46 @@ export const Deposits = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
+  // Estado para contagem de notas do Caixa de Troco
+  const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+  const [moedasValor, setMoedasValor] = useState('')
+
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
+  
+  const origemSelecionada = watch('origem')
 
   useEffect(() => {
     carregarDepositos()
   }, [carregarDepositos])
 
-  // CORREÇÃO: Filtrando para mostrar APENAS os depósitos reais, ignorando as Trocas!
-  const depositosFiltrados = depositsList.filter(d => d.categoria === 'Depósito' || !d.categoria)
+  // Lógica de cálculo automático se for do Caixa de Troco
+  const valorCalculado = Object.entries(notas).reduce((acc, [nota, qtd]) => acc + (Number(nota) * qtd), 0) + Number(moedasValor || 0)
+  
+  useEffect(() => {
+    if (origemSelecionada === 'Caixa de Troco') {
+      setValue('valor', valorCalculado)
+    }
+  }, [notas, moedasValor, origemSelecionada, setValue, valorCalculado])
 
-  const totalDepositos = depositosFiltrados.reduce((acc, curr) => acc + Number(curr.valor), 0)
+  const handleNotaChange = (nota, valor) => {
+    setNotas(prev => ({ ...prev, [nota]: parseInt(valor) || 0 }))
+  }
+
+  // --- Cálculo de Depósitos - Sangrias ---
+  const depositosFiltrados = depositsList.filter(d => d.categoria === 'Depósito' || !d.categoria)
+  const totalBrutoDepositos = depositosFiltrados.reduce((acc, curr) => acc + Number(curr.valor), 0)
+
+  const sangriasRetiradas = depositsList.filter(d => d.categoria === 'Troca Externa' && d.origem === 'Sangria de Depósito')
+  const totalSangrias = sangriasRetiradas.reduce((acc, curr) => acc + Number(curr.valor), 0)
+
+  const totalLiquidoDepositos = totalBrutoDepositos - totalSangrias
 
   // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
+    if(registro.origem === 'Caixa de Troco') {
+      alert("Depósitos oriundos do Caixa de Troco abatem saldo do cofre e não podem ser editados diretamente. Exclua e crie um novo se houver erro grave.")
+      return
+    }
     setEditingId(registro.id)
     setValue('valor', registro.valor)
     setValue('origem', registro.origem)
@@ -44,7 +71,7 @@ export const Deposits = () => {
   }
 
   const handleDelete = async (id) => {
-    if (window.confirm('ATENÇÃO: Você é um Administrador. Tem certeza que deseja apagar este DEPÓSITO permanentemente?')) {
+    if (window.confirm('ATENÇÃO: Você é um Administrador. Tem certeza que deseja apagar este DEPÓSITO permanentemente? (Isso NÃO estorna o valor no cofre automaticamente)')) {
       await excluirDeposito(id)
     }
   }
@@ -52,18 +79,29 @@ export const Deposits = () => {
   const fecharModal = () => {
     setIsModalOpen(false)
     setEditingId(null)
+    setNotas({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+    setMoedasValor('')
     reset({ valor: '', origem: '', data_caixa: '' })
   }
 
   const onSubmit = async (data) => {
+    const isCaixaTroco = data.origem === 'Caixa de Troco'
+    const valorFinal = isCaixaTroco ? valorCalculado : parseFloat(data.valor)
+
+    if (isCaixaTroco && valorFinal <= 0) {
+      alert("Informe as quantidades de notas para depositar.")
+      return
+    }
+
     const payload = {
-      valor: parseFloat(data.valor),
-      value: parseFloat(data.valor),
+      valor: valorFinal,
+      value: valorFinal,
       origem: data.origem,
       origin: data.origem,
       categoria: 'Depósito',
       data_caixa: data.data_caixa,
       responsavel_nome: user?.nome || 'Operador',
+      ...(isCaixaTroco && { detalhes_troca: { notas, moedasValor: Number(moedasValor || 0) } })
     }
 
     try {
@@ -123,7 +161,8 @@ export const Deposits = () => {
     const dataAtual = new Date()
     const dataApenas = dataAtual.toLocaleDateString('pt-BR')
     const horaApenas = dataAtual.toLocaleTimeString('pt-BR')
-    const valorFormatado = `R$ ${totalDepositos.toFixed(2).replace('.', ',')}`
+    const valorFormatado = `R$ ${totalLiquidoDepositos.toFixed(2).replace('.', ',')}`
+    const valorSangria = `R$ ${totalSangrias.toFixed(2).replace('.', ',')}`
     const nomeOperador = user?.nome || 'Operador'
 
     const conteudoCupom = `
@@ -149,8 +188,11 @@ export const Deposits = () => {
           <div><span class="bold">Emitido em:</span> ${dataApenas} ${horaApenas}</div>
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
+          <div><span class="bold">Total Bruto:</span> R$ ${totalBrutoDepositos.toFixed(2).replace('.', ',')}</div>
+          ${totalSangrias > 0 ? `<div><span class="bold">(-) Sangrias:</span> ${valorSangria}</div>` : ''}
+          <div class="divisor"></div>
           <div class="center bold" style="font-size: 18px; margin: 10px 0;">
-            TOTAL: ${valorFormatado}
+            TOTAL LÍQUIDO: ${valorFormatado}
           </div>
         </body>
       </html>
@@ -200,6 +242,10 @@ export const Deposits = () => {
         .deposito-divider { width: 1px; height: 48px; background-color: #cbd5e1; }
         .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
         .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
+        
+        .notes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .note-item { display: flex; flex-direction: column; gap: 4px; }
+        
         @media (max-width: 768px) {
           .deposito-header { flex-direction: column; align-items: flex-start; }
           .deposito-actions { width: 100%; display: flex; }
@@ -210,6 +256,7 @@ export const Deposits = () => {
           .deposito-divider { width: 100%; height: 1px; }
           .modal-buttons { flex-direction: column; }
           .modal-buttons button { width: 100%; justify-content: center; }
+          .notes-grid { grid-template-columns: repeat(2, 1fr); }
         }
       `}</style>
 
@@ -239,7 +286,15 @@ export const Deposits = () => {
             <div className="deposito-total-box">
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total {user.role === 'ADMIN' ? 'Filtrado' : 'no Turno'}</span>
-                <span style={{ fontSize: '1.875rem', fontWeight: '800', color: 'var(--color-primary)', lineHeight: '1', whiteSpace: 'nowrap' }}>R$ {totalDepositos.toFixed(2).replace('.', ',')}</span>
+                
+                {/* Mostra se teve sangria batendo o total */}
+                {totalSangrias > 0 && (
+                  <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <AlertCircle size={14}/> Abatido R$ {totalSangrias.toFixed(2).replace('.', ',')} de Sangria
+                  </span>
+                )}
+                
+                <span style={{ fontSize: '1.875rem', fontWeight: '800', color: 'var(--color-primary)', lineHeight: '1', whiteSpace: 'nowrap', marginTop: '4px' }}>R$ {totalLiquidoDepositos.toFixed(2).replace('.', ',')}</span>
               </div>
               <div className="deposito-divider"></div>
               <Button onClick={imprimirFechamentoDiario} icon={Printer} type="button">Imprimir Total</Button>
@@ -253,7 +308,7 @@ export const Deposits = () => {
 
       <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Registro de Depósito" : "Registrar Novo Depósito"}>
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <FormInput label="Valor da Retirada (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })} error={errors.valor} />
+          
           <div className="input-wrapper">
             <label htmlFor="origem" className="input-label">Origem do Valor (Caixa)</label>
             <select id="origem" className={`input-field ${errors.origem ? 'error' : ''}`} style={{ width: '100%' }} {...register('origem', { required: 'A origem é obrigatória' })}>
@@ -262,15 +317,43 @@ export const Deposits = () => {
               <option value="Caixa Gabriel">Caixa Gabriel</option>
               <option value="Caixa Ana">Caixa Ana</option>
               <option value="Caixa Bruna">Caixa Bruna</option>
-              <option value="Caixa de Troco">Caixa de Troco</option>
+              <option value="Caixa de Troco">Caixa de Troco (Cofre)</option>
             </select>
             {errors.origem && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.origem.message}</span>}
           </div>
+
+          {origemSelecionada === 'Caixa de Troco' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label className="input-label" style={{ color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <AlertCircle size={16}/> Informe as notas retiradas do cofre:
+              </label>
+              <div className="notes-grid">
+                {[200, 100, 50, 20, 10, 5, 2].map(nota => (
+                  <div key={nota} className="note-item">
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {nota}</label>
+                    <input type="number" min="0" className="input-field" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0" />
+                  </div>
+                ))}
+                <div className="note-item" style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
+                  <input type="number" step="0.01" min="0" className="input-field" value={moedasValor} onChange={(e) => setMoedasValor(e.target.value)} placeholder="0,00" />
+                </div>
+              </div>
+              <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 'bold', color: '#0369a1' }}>Total Retirado:</span>
+                <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0369a1' }}>R$ {valorCalculado.toFixed(2).replace('.', ',')}</span>
+              </div>
+            </div>
+          ) : (
+            <FormInput label="Valor da Retirada (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })} error={errors.valor} />
+          )}
+
           <div className="input-wrapper">
             <label htmlFor="data_caixa" className="input-label">Data Referente ao Caixa</label>
             <input id="data_caixa" type="date" className={`input-field ${errors.data_caixa ? 'error' : ''}`} style={{ width: '100%' }} {...register('data_caixa', { required: 'Obrigatório' })} />
             {errors.data_caixa && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.data_caixa.message}</span>}
           </div>
+
           <div className="modal-buttons">
             <Button type="button" variant="secondary" onClick={fecharModal}>Cancelar</Button>
             <Button type="submit" isLoading={isActionLoading} icon={editingId ? Pencil : FileText}>{editingId ? "Salvar Alterações" : "Confirmar Retirada"}</Button>
