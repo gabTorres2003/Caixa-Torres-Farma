@@ -22,26 +22,28 @@ export const Exchanges = () => {
   const [editingId, setEditingId] = useState(null)
   const [tipoTroca, setTipoTroca] = useState('INTERNA') // 'INTERNA' ou 'EXTERNA'
 
-  // "watch" para monitorar a digitação das notas em tempo real
+  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
+  const [receivingTroca, setReceivingTroca] = useState(null)
+
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
+  const { register: regRec, handleSubmit: handleSubRec, reset: resetRec, watch: watchRec } = useForm()
 
   useEffect(() => { carregarDepositos() }, [carregarDepositos])
 
   const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
 
-  // --- CÁLCULO AUTOMÁTICO DO TOTAL (TROCA INTERNA) ---
-  const val2 = watch('valor_2')
-  const val5 = watch('valor_5')
-  const val10 = watch('valor_10')
-  const val20 = watch('valor_20')
-  const valM = watch('valor_moedas')
-
+  // --- CÁLCULO AUTOMÁTICO DO TOTAL (TROCA INTERNA E RECEBIMENTO) ---
+  const val2 = watch('valor_2'); const val5 = watch('valor_5'); const val10 = watch('valor_10'); const val20 = watch('valor_20'); const valM = watch('valor_moedas');
   useEffect(() => {
     if (tipoTroca === 'INTERNA') {
       const sum = (parseFloat(val2) || 0) + (parseFloat(val5) || 0) + (parseFloat(val10) || 0) + (parseFloat(val20) || 0) + (parseFloat(valM) || 0)
       setValue('valor', sum > 0 ? sum.toFixed(2) : '')
     }
   }, [val2, val5, val10, val20, valM, tipoTroca, setValue])
+
+  const rVal2 = watchRec('valor_2'); const rVal5 = watchRec('valor_5'); const rVal10 = watchRec('valor_10'); const rVal20 = watchRec('valor_20'); const rValM = watchRec('valor_moedas');
+  const somaRecebimento = (parseFloat(rVal2) || 0) + (parseFloat(rVal5) || 0) + (parseFloat(rVal10) || 0) + (parseFloat(rVal20) || 0) + (parseFloat(rValM) || 0)
+  const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
 
   // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
@@ -50,13 +52,14 @@ export const Exchanges = () => {
     setTipoTroca(isExterna ? 'EXTERNA' : 'INTERNA')
     
     setValue('valor', registro.valor)
-    setValue('destino', registro.destino || '')
+    if (isExterna) {
+      setValue('origem', registro.origem || '')
+      setValue('destino', registro.destino || '')
+    }
 
     if (!isExterna && registro.detalhes_troca) {
-      setValue('valor_2', registro.detalhes_troca.valor_2 || '')
-      setValue('valor_5', registro.detalhes_troca.valor_5 || '')
-      setValue('valor_10', registro.detalhes_troca.valor_10 || '')
-      setValue('valor_20', registro.detalhes_troca.valor_20 || '')
+      setValue('valor_2', registro.detalhes_troca.valor_2 || ''); setValue('valor_5', registro.detalhes_troca.valor_5 || '')
+      setValue('valor_10', registro.detalhes_troca.valor_10 || ''); setValue('valor_20', registro.detalhes_troca.valor_20 || '')
       setValue('valor_moedas', registro.detalhes_troca.valor_moedas || '')
     } else {
       setValue('valor_2', ''); setValue('valor_5', ''); setValue('valor_10', ''); setValue('valor_20', ''); setValue('valor_moedas', '');
@@ -74,20 +77,19 @@ export const Exchanges = () => {
   const fecharModal = () => {
     setIsModalOpen(false)
     setEditingId(null)
-    reset({ valor: '', destino: '', valor_2: '', valor_5: '', valor_10: '', valor_20: '', valor_moedas: '' })
+    reset({ valor: '', origem: '', destino: '', valor_2: '', valor_5: '', valor_10: '', valor_20: '', valor_moedas: '' })
     setTipoTroca('INTERNA')
   }
 
-  const onSubmit = async (data) => {
+  const onSubmitCreate = async (data) => {
     const payload = {
       valor: parseFloat(data.valor),
       value: parseFloat(data.valor),
       categoria: tipoTroca === 'INTERNA' ? 'Troca (Caixa de Troco)' : 'Troca Externa',
-      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa',
-      origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : 'Troca Externa',
+      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : data.origem,
+      origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : data.origem,
       destino: tipoTroca === 'EXTERNA' ? data.destino : null,
       
-      // Salva a composição das notas apenas se for interna
       detalhes_troca: tipoTroca === 'INTERNA' ? {
         valor_2: parseFloat(data.valor_2) || 0,
         valor_5: parseFloat(data.valor_5) || 0,
@@ -108,14 +110,32 @@ export const Exchanges = () => {
     } catch (e) { /* Tratado no Hook */ }
   }
 
-  const handleReceber = async (id) => {
-    const nome = window.prompt('Digite o nome da pessoa que trouxe/recebeu o dinheiro trocado:')
-    if (nome && nome.trim() !== '') {
-      await receberTroca(id, nome)
-    }
+  const handleOpenReceive = (troca) => {
+    setReceivingTroca(troca)
+    resetRec({ valor_2: '', valor_5: '', valor_10: '', valor_20: '', valor_moedas: '' })
+    setIsReceiveModalOpen(true)
   }
 
-  // --- IMPRESSÃO ---
+  const onSubmitReceive = async (data) => {
+    if (!isMatchRecebimento) {
+      alert(`Atenção: A composição (R$ ${somaRecebimento.toFixed(2)}) não bate com a saída solicitada (R$ ${receivingTroca.valor.toFixed(2)}).`)
+      return
+    }
+
+    await receberTroca(receivingTroca.id, {
+      recebido_por: user?.nome || 'Operador',
+      detalhes_troca: {
+        valor_2: parseFloat(data.valor_2) || 0,
+        valor_5: parseFloat(data.valor_5) || 0,
+        valor_10: parseFloat(data.valor_10) || 0,
+        valor_20: parseFloat(data.valor_20) || 0,
+        valor_moedas: parseFloat(data.valor_moedas) || 0,
+      }
+    })
+    setIsReceiveModalOpen(false)
+  }
+
+  // --- IMPRESSÃO DIFERENCIADA ---
   const imprimirComprovante = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
@@ -123,88 +143,52 @@ export const Exchanges = () => {
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
 
+    let detalhesHtml = '';
+    if (registro.detalhes_troca) {
+      const d = registro.detalhes_troca;
+      detalhesHtml = `
+        <div class="divisor"></div>
+        <div class="bold" style="margin-bottom: 4px;">Composição do Valor:</div>
+        ${d.valor_2 ? `<div>Notas R$ 2: R$ ${parseFloat(d.valor_2).toFixed(2).replace('.',',')}</div>` : ''}
+        ${d.valor_5 ? `<div>Notas R$ 5: R$ ${parseFloat(d.valor_5).toFixed(2).replace('.',',')}</div>` : ''}
+        ${d.valor_10 ? `<div>Notas R$ 10: R$ ${parseFloat(d.valor_10).toFixed(2).replace('.',',')}</div>` : ''}
+        ${d.valor_20 ? `<div>Notas R$ 20: R$ ${parseFloat(d.valor_20).toFixed(2).replace('.',',')}</div>` : ''}
+        ${d.valor_moedas ? `<div>Moedas: R$ ${parseFloat(d.valor_moedas).toFixed(2).replace('.',',')}</div>` : ''}
+      `;
+    }
+
     let conteudoCupom = '';
 
     if (registro.categoria === 'Troca (Caixa de Troco)') {
-      // ---> LAYOUT 1: TROCA INTERNA 
-      let detalhesHtml = '';
-      if (registro.detalhes_troca) {
-        const d = registro.detalhes_troca;
-        detalhesHtml = `
+      conteudoCupom = `
+        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
+        <body>
+          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA INTERNA</div>
           <div class="divisor"></div>
-          <div class="bold" style="margin-bottom: 4px;">Composição da Retirada:</div>
-          ${d.valor_2 ? `<div>Em Notas de R$ 2: R$ ${parseFloat(d.valor_2).toFixed(2).replace('.',',')}</div>` : ''}
-          ${d.valor_5 ? `<div>Em Notas de R$ 5: R$ ${parseFloat(d.valor_5).toFixed(2).replace('.',',')}</div>` : ''}
-          ${d.valor_10 ? `<div>Em Notas de R$ 10: R$ ${parseFloat(d.valor_10).toFixed(2).replace('.',',')}</div>` : ''}
-          ${d.valor_20 ? `<div>Em Notas de R$ 20: R$ ${parseFloat(d.valor_20).toFixed(2).replace('.',',')}</div>` : ''}
-          ${d.valor_moedas ? `<div>Em Moedas: R$ ${parseFloat(d.valor_moedas).toFixed(2).replace('.',',')}</div>` : ''}
-        `;
-      }
-
-      conteudoCupom = `
-        <html>
-          <head>
-            <style>
-              @page { margin: 0; }
-              body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
-              .center { text-align: center; }
-              .bold { font-weight: bold; }
-              .title { font-size: 16px; font-weight: bold; }
-              .divisor { border-top: 1px dashed #000; margin: 10px 0; }
-            </style>
-          </head>
-          <body>
-            <div class="center title">MARCIO GABRIEL TORRES</div>
-            <div class="center title">DROGARIA EIRELI</div>
-            <div class="center">CNPJ: 23.584.239/0001-51</div>
-            <br>
-            <div class="center bold">COMPROVANTE DE TROCA INTERNA</div>
-            <div class="divisor"></div>
-            <div><span class="bold">Data Emissão:</span> ${dataApenas}</div>
-            <div><span class="bold">Hora:</span> ${horaApenas}</div>
-            <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
-            <div class="divisor"></div>
-            <div><span class="bold">Origem:</span> Caixa de Troco</div>
-            ${detalhesHtml}
-            <div class="divisor"></div>
-            <div class="bold" style="font-size: 18px;">TOTAL TROCADO: ${valorFormatado}</div>
-            <div class="divisor"></div>
-          </body>
-        </html>
-      `;
+          <div><span class="bold">Data/Hora:</span> ${dataApenas} ${horaApenas}</div>
+          <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
+          <div><span class="bold">Origem:</span> Caixa de Troco</div>
+          ${detalhesHtml}
+          <div class="divisor"></div>
+          <div class="bold" style="font-size: 18px;">TOTAL TROCADO: ${valorFormatado}</div>
+          <div class="divisor"></div>
+        </body></html>`;
     } else {
-      // ---> LAYOUT 2: TROCA EXTERNA 
       conteudoCupom = `
-        <html>
-          <head>
-            <style>
-              @page { margin: 0; }
-              body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; color: #000; }
-              .center { text-align: center; }
-              .bold { font-weight: bold; }
-              .title { font-size: 16px; font-weight: bold; }
-              .divisor { border-top: 1px dashed #000; margin: 10px 0; }
-            </style>
-          </head>
-          <body>
-            <div class="center title">MARCIO GABRIEL TORRES</div>
-            <div class="center title">DROGARIA EIRELI</div>
-            <div class="center">CNPJ: 23.584.239/0001-51</div>
-            <br>
-            <div class="center bold">COMPROVANTE DE TROCA EXTERNA</div>
-            <div class="divisor"></div>
-            <div><span class="bold">Data Emissão:</span> ${dataApenas}</div>
-            <div><span class="bold">Hora:</span> ${horaApenas}</div>
-            <div><span class="bold">Usuário (Saída):</span> ${nomeOperador}</div>
-            ${registro.recebido_por ? `<div><span class="bold">Recebido por (Retorno):</span> ${registro.recebido_por}</div>` : ''}
-            <div class="divisor"></div>
-            <div><span class="bold">Destino / Banco:</span> ${registro.destino}</div>
-            <div class="divisor"></div>
-            <div class="bold" style="font-size: 18px;">TOTAL TROCADO: ${valorFormatado}</div>
-            <div class="divisor"></div>
-          </body>
-        </html>
-      `;
+        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
+        <body>
+          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA EXTERNA</div>
+          <div class="divisor"></div>
+          <div><span class="bold">Data Saída:</span> ${dataApenas} ${horaApenas}</div>
+          <div><span class="bold">Origem:</span> ${registro.origem}</div>
+          <div><span class="bold">Destino:</span> ${registro.destino}</div>
+          ${registro.recebido_por ? detalhesHtml : ''}
+          <div class="divisor"></div>
+          <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
+          <div class="divisor"></div><br>
+          <div><span class="bold">Registrado (Saída):</span><br>${nomeOperador}</div><br>
+          ${registro.recebido_por ? `<div><span class="bold">Recebido (Retorno):</span><br>${registro.recebido_por}</div><br><div class="center" style="font-size: 12px;">Baixa Sistêmica: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
+        </body></html>`;
     }
 
     const janelaImpressao = window.open('', '', 'width=300,height=400')
@@ -218,7 +202,7 @@ export const Exchanges = () => {
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
     { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Troca Externa' ? '#9333ea' : '#1d4ed8' }}>{row.categoria === 'Troca (Caixa de Troco)' ? 'Interna' : 'Externa'}</span> },
-    { header: 'Destino/Origem', render: (row) => row.categoria === 'Troca Externa' ? row.destino : 'Caixa de Troco' },
+    { header: 'Destino/Origem', render: (row) => row.categoria === 'Troca Externa' ? <span style={{fontSize: '0.8rem'}}><b>{row.origem}</b> ➔ {row.destino}</span> : 'Caixa de Troco' },
     { header: 'Valor Trocado', render: (row) => <strong style={{ color: '#0f172a' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
     { header: 'Status', render: (row) => {
         if (row.categoria === 'Troca (Caixa de Troco)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
@@ -228,20 +212,18 @@ export const Exchanges = () => {
     },
     { header: 'Ações', render: (row) => (
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir Comprovante">
-            <Printer size={20} />
-          </button>
+          <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir Comprovante"><Printer size={20} /></button>
           
           {row.status_troca === 'PENDENTE' && (
-            <Button onClick={() => handleReceber(row.id)} icon={CheckCircle} style={{ padding: '6px 10px', fontSize: '0.75rem', height: 'auto', backgroundColor: '#d97706', border: 'none' }}>
+            <Button onClick={() => handleOpenReceive(row)} icon={CheckCircle} style={{ padding: '6px 10px', fontSize: '0.75rem', height: 'auto', backgroundColor: '#d97706', border: 'none' }}>
               Receber Troco
             </Button>
           )}
 
           {user.role === 'ADMIN' && (
             <>
-              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar Troca"><Pencil size={18} /></button>
-              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Deletar Troca"><Trash2 size={18} /></button>
+              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }}><Pencil size={18} /></button>
+              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>
             </>
           )}
         </div>
@@ -249,31 +231,20 @@ export const Exchanges = () => {
     },
   ]
 
-  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando trocas...</span></div>
+  if (isPageLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      
-      {/* CSS PARA O GRID DE NOTAS E PREVENIR VAZAMENTOS */}
       <style>{`
-        .notas-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-          width: 100%;
-        }
-        .notas-grid > div {
-          min-width: 0;
-          width: 100%;
-        }
-        @media (max-width: 480px) {
-          .notas-grid {
-            grid-template-columns: 1fr;
-          }
-        }
+        .troca-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+        .notas-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; }
+        .notas-grid > div { min-width: 0; width: 100%; }
+        .notas-grid > div:last-child { grid-column: span 2; }
+        .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
+        @media (max-width: 480px) { .notas-grid { grid-template-columns: 1fr; } .notas-grid > div:last-child { grid-column: span 1; } }
       `}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      <div className="troca-header">
         <div>
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Trocas</h1>
           <p style={{ color: 'var(--color-text-muted)' }}>Controle de troca de dinheiro interno (Cofre) ou externo (Bancos).</p>
@@ -283,78 +254,122 @@ export const Exchanges = () => {
 
       <Card icon={ArrowLeftRight} title={user.role === 'ADMIN' ? 'Auditoria de Trocas' : 'Trocas do Turno'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-            {user.role === 'ADMIN' ? (
+          {user.role === 'ADMIN' ? (
             <>
-              <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={18} color="var(--color-primary)"/> Filtrar Operações do dia:</label>
+              <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={18} color="var(--color-primary)"/> Filtrar do dia:</label>
               <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
             </>
           ) : (
             <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Mostrando resultados do turno de hoje.</span>
           )}
         </div>
-        <div style={{ overflowX: 'auto', width: '100%', borderRadius: '8px' }}>
+        <div className="table-responsive-wrapper">
           <Table columns={columns} data={trocasList} emptyMessage="Nenhuma troca registrada." />
         </div>
       </Card>
 
+      {/* MODAL 1: REGISTRAR NOVA TROCA OU EDITAR */}
       <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Troca" : "Registrar Nova Troca"}>
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit(onSubmitCreate)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           <div style={{ display: 'flex', gap: '12px', padding: '4px', backgroundColor: '#f1f5f9', borderRadius: '8px' }}>
-            <button 
-              type="button" onClick={() => setTipoTroca('INTERNA')}
-              style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'INTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'INTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'INTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}
-            >
-              Troca - Caixa Troco
-            </button>
-            <button 
-              type="button" onClick={() => setTipoTroca('EXTERNA')}
-              style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'EXTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'EXTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'EXTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}
-            >
-              Troca - Externa
-            </button>
+            <button type="button" onClick={() => setTipoTroca('INTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'INTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'INTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'INTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Troca - Interna</button>
+            <button type="button" onClick={() => setTipoTroca('EXTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'EXTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'EXTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'EXTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Troca - Externa</button>
           </div>
 
-          {/* CÁLCULO E DETALHAMENTO DE TROCA INTERNA */}
           {tipoTroca === 'INTERNA' ? (
             <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%', boxSizing: 'border-box' }}>
               <p style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '0.9rem', color: 'var(--color-text-main)' }}>Valores retirados do Caixa de Troco (R$):</p>
               <div className="notas-grid">
-                <div><FormInput label="Em Notas de R$ 2" id="valor_2" type="number" step="0.01" register={register('valor_2')} placeholder="0,00" /></div>
-                <div><FormInput label="Em Notas de R$ 5" id="valor_5" type="number" step="0.01" register={register('valor_5')} placeholder="0,00" /></div>
-                <div><FormInput label="Em Notas de R$ 10" id="valor_10" type="number" step="0.01" register={register('valor_10')} placeholder="0,00" /></div>
-                <div><FormInput label="Em Notas de R$ 20" id="valor_20" type="number" step="0.01" register={register('valor_20')} placeholder="0,00" /></div>
+                <div><FormInput label="Notas de R$ 2" id="valor_2" type="number" step="0.01" register={register('valor_2')} placeholder="0,00" /></div>
+                <div><FormInput label="Notas de R$ 5" id="valor_5" type="number" step="0.01" register={register('valor_5')} placeholder="0,00" /></div>
+                <div><FormInput label="Notas de R$ 10" id="valor_10" type="number" step="0.01" register={register('valor_10')} placeholder="0,00" /></div>
+                <div><FormInput label="Notas de R$ 20" id="valor_20" type="number" step="0.01" register={register('valor_20')} placeholder="0,00" /></div>
                 <div><FormInput label="Em Moedas" id="valor_moedas" type="number" step="0.01" register={register('valor_moedas')} placeholder="0,00" /></div>
               </div>
             </div>
           ) : (
-            <div className="input-wrapper">
-              <label htmlFor="destino" className="input-label">Destino da Troca</label>
-              <select id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Selecione o destino' })}>
-                <option value="">Selecione...</option>
-                <option value="Sicoob">Sicoob</option>
-                <option value="Sicredi">Sicredi</option>
-                <option value="Outros">Outros</option>
-              </select>
-              {errors.destino && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.destino.message}</span>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="input-wrapper">
+                <label htmlFor="origem" className="input-label">Origem do Valor</label>
+                <select id="origem" className="input-field" style={{ width: '100%' }} {...register('origem', { required: 'Selecione a origem' })}>
+                  <option value="">Selecione...</option>
+                  <option value="Caixa de Troco">Caixa de Troco</option>
+                  <option value="Caixa atual">Caixa atual</option>
+                  <option value="Sangria de Depósito">Sangria de Depósito</option>
+                </select>
+                {errors.origem && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.origem.message}</span>}
+              </div>
+              
+              <div className="input-wrapper">
+                <label htmlFor="destino" className="input-label">Destino / Banco</label>
+                <select id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Selecione o destino' })}>
+                  <option value="">Selecione...</option>
+                  <option value="Sicoob">Sicoob</option>
+                  <option value="Sicredi">Sicredi</option>
+                  <option value="Outros">Outros</option>
+                </select>
+                {errors.destino && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.destino.message}</span>}
+              </div>
             </div>
           )}
 
           <FormInput
             label="Total Trocado (R$)" id="valor" type="number" step="0.01" placeholder="0,00"
-            register={register('valor', { required: 'O valor é obrigatório', min: { value: 1, message: 'Valor mínimo R$ 1,00' } })}
-            error={errors.valor}
-            disabled={tipoTroca === 'INTERNA'} // Bloqueia o campo se for Interna (calcula sozinho)
+            register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Mín. R$ 1,00' } })}
+            error={errors.valor} disabled={tipoTroca === 'INTERNA'}
           />
 
-          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexDirection: window.innerWidth <= 768 ? 'column' : 'row' }}>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
             <Button type="button" variant="secondary" onClick={fecharModal} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>
             <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center' }} icon={editingId ? Pencil : Plus}>
-              {editingId ? "Salvar Alterações" : "Registrar Troca"}
+              {editingId ? "Salvar" : "Registrar"}
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* MODAL 2: RECEBIMENTO DA TROCA EXTERNA */}
+      <Modal isOpen={isReceiveModalOpen} onClose={() => setIsReceiveModalOpen(false)} title="Confirmar Retorno da Troca">
+        <form onSubmit={handleSubRec(onSubmitReceive)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '16px', borderRadius: '8px', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: '#1e40af', fontWeight: 'bold', textTransform: 'uppercase' }}>Valor Físico Aguardado</span>
+            <div style={{ fontSize: '2rem', fontWeight: '900', color: '#1d4ed8' }}>
+              R$ {receivingTroca?.valor?.toFixed(2).replace('.', ',')}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#1e40af', marginTop: '8px' }}>
+              O registro será recebido automaticamente em nome de: <b>{user?.nome}</b>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%', boxSizing: 'border-box' }}>
+            <p style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '0.9rem', color: 'var(--color-text-main)' }}>Detalhamento da Entrada (R$):</p>
+            <div className="notas-grid">
+              <div><FormInput label="Notas de R$ 2" id="valor_2" type="number" step="0.01" register={regRec('valor_2')} /></div>
+              <div><FormInput label="Notas de R$ 5" id="valor_5" type="number" step="0.01" register={regRec('valor_5')} /></div>
+              <div><FormInput label="Notas de R$ 10" id="valor_10" type="number" step="0.01" register={regRec('valor_10')} /></div>
+              <div><FormInput label="Notas de R$ 20" id="valor_20" type="number" step="0.01" register={regRec('valor_20')} /></div>
+              <div><FormInput label="Em Moedas" id="valor_moedas" type="number" step="0.01" register={regRec('valor_moedas')} /></div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', backgroundColor: isMatchRecebimento ? '#ecfdf5' : '#fef2f2', borderRadius: '8px' }}>
+            <span style={{ fontWeight: 'bold', color: isMatchRecebimento ? '#065f46' : '#991b1b' }}>Soma Apurada:</span>
+            <span style={{ fontWeight: '900', fontSize: '1.2rem', color: isMatchRecebimento ? '#059669' : '#dc2626' }}>
+              R$ {somaRecebimento.toFixed(2).replace('.', ',')}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <Button type="button" variant="secondary" onClick={() => setIsReceiveModalOpen(false)} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>
+            <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center' }} disabled={!isMatchRecebimento} icon={CheckCircle}>
+              Confirmar Recebimento
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
     </div>
   )
 }
