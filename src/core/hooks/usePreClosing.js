@@ -1,65 +1,91 @@
-import { useState, useCallback, useEffect } from 'react'
-import { PreClosingRepository } from '../../infrastructure/supabase/repositories/SupabasePreClosingRepository'
+import { useState, useCallback } from 'react'
+import { supabase } from '../../infrastructure/supabase/supabaseClient'
 
 export const usePreClosing = (user) => {
   const [isLoading, setIsLoading] = useState(false)
-  const [isPageLoading, setIsPageLoading] = useState(true)
-  
-  // Estado para armazenar a soma das entregas pendentes
-  const [pendentes, setPendentes] = useState({ dinheiro: 0, cartao: 0 })
+  const [pendingDeliveries, setPendingDeliveries] = useState([])
+  const [lastPreClosing, setLastPreClosing] = useState(null)
 
-  const carregarPendentes = useCallback(async () => {
-    if (!user?.store_id) return
-    setIsPageLoading(true)
-    
+  const loadInitialData = useCallback(async () => {
+    if (!user || !user.store_id) return;
+
+    setIsLoading(true)
     try {
-      const tzOffset = new Date().getTimezoneOffset() * 60000
-      const dateStr = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
+      // Busca entregas pendentes para calcular o que falta receber da rua
+      const { data: deliveries, error: errorDeliveries } = await supabase
+        .from('pending_deliveries')
+        .select('*')
+        .eq('store_id', user.store_id)
+        .eq('conferido', false)
 
-      const data = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id, dateStr)
+      if (errorDeliveries) throw errorDeliveries
+      setPendingDeliveries(deliveries || [])
 
-      let totalDinheiro = 0
-      let totalCartao = 0
+      // Busca último pré-fechamento 
+      const { data: preClosing, error: errorPreClosing } = await supabase
+        .from('pre_closings')
+        .select('*')
+        .eq('store_id', user.store_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
 
-      data.forEach(d => {
-        const forma = d.forma_pagamento_real || d.tipo_saida
-        if (forma === 'D') totalDinheiro += Number(d.valor)
-        if (forma === 'C') totalCartao += Number(d.valor)
-      })
+      if (errorPreClosing && errorPreClosing.code !== 'PGRST116') {
+         throw errorPreClosing 
+      }
+      setLastPreClosing(preClosing || null)
 
-      setPendentes({ dinheiro: totalDinheiro, cartao: totalCartao })
-    } catch (error) {
-      console.error('Erro ao buscar entregas pendentes:', error)
+    } catch (err) {
+      console.error("Erro ao carregar dados do pré-fechamento:", err)
     } finally {
-      setIsPageLoading(false)
+      setIsLoading(false)
     }
   }, [user])
 
-  useEffect(() => {
-    carregarPendentes()
-  }, [carregarPendentes])
+  const savePreClosing = async (payload) => {
+    // Nova trava de segurança
+    if (!user || !user.store_id || !user.id) {
+      alert("Erro de autenticação: Usuário não identificado.")
+      return
+    }
 
-  const salvarFechamento = async (payload) => {
     setIsLoading(true)
     try {
-      await PreClosingRepository.savePreClosing({
-        ...payload,
+      // O payload já deve vir da tela mapeado para as colunas do banco
+      const preClosingData = {
         store_id: user.store_id,
-        created_by: user.id
-      })
-      alert('Pré-fechamento salvo com sucesso no banco de dados!')
-    } catch (error) {
-      alert('Erro ao salvar fechamento: ' + error.message)
+        created_by: user.id,
+        cash_value: payload.cash_value || 0,
+        card_value: payload.card_value || 0,
+        pix_value: payload.pix_value || 0,
+        check_value: payload.check_value || 0,
+        vale_compras_value: payload.vale_compras_value || 0,
+        pending_card: payload.pending_card || 0,
+        pending_pix: payload.pending_pix || 0,
+        pending_cash: payload.pending_cash || 0,
+        total: payload.total || 0,
+        obs_dinheiro: payload.obs_dinheiro || null,
+        obs_cartao: payload.obs_cartao || null,
+        obs_pix: payload.obs_pix || null,
+        obs_cheque: payload.obs_cheque || null,
+        obs_vale: payload.obs_vale || null,
+        obs_geral: payload.obs_geral || null
+      }
+
+      const { error } = await supabase
+        .from('pre_closings')
+        .insert([preClosingData])
+
+      if (error) throw error
+      alert('Pré-fechamento salvo com sucesso!')
+      
+    } catch (err) {
+      console.error("Erro ao salvar pré-fechamento:", err)
+      alert('Erro ao salvar o registro no banco de dados. ' + err.message)
     } finally {
       setIsLoading(false)
     }
   }
 
-  return { 
-    pendentes, 
-    isLoading, 
-    isPageLoading,
-    salvarFechamento, 
-    carregarPendentes 
-  }
+  return { pendingDeliveries, lastPreClosing, loadInitialData, savePreClosing, isLoading }
 }
