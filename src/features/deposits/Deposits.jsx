@@ -262,6 +262,7 @@ export const Deposits = () => {
               <option value="Caixa Gabriel">Caixa Gabriel</option>
               <option value="Caixa Ana">Caixa Ana</option>
               <option value="Caixa Bruna">Caixa Bruna</option>
+              <option value="Caixa de Troco">Caixa de Troco</option>
             </select>
             {errors.origem && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.origem.message}</span>}
           </div>
