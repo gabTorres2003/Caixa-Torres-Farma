@@ -23,9 +23,8 @@ export const Deposits = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  // Estado para contagem de notas do Caixa de Troco
+  // Estado apenas para as notas (Moedas removidas do depósito)
   const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedasValor, setMoedasValor] = useState('')
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
   
@@ -35,27 +34,36 @@ export const Deposits = () => {
     carregarDepositos()
   }, [carregarDepositos])
 
-  // Lógica de cálculo automático se for do Caixa de Troco
-  const valorCalculado = Object.entries(notas).reduce((acc, [nota, qtd]) => acc + (Number(nota) * qtd), 0) + Number(moedasValor || 0)
+  // Lógica de cálculo automático das notas
+  const valorCalculado = Object.entries(notas).reduce((acc, [nota, qtd]) => acc + (Number(nota) * qtd), 0)
   
   useEffect(() => {
     if (origemSelecionada === 'Caixa de Troco') {
       setValue('valor', valorCalculado)
     }
-  }, [notas, moedasValor, origemSelecionada, setValue, valorCalculado])
+  }, [notas, origemSelecionada, setValue, valorCalculado])
+
+  // Preenche a data automaticamente para o dia de hoje ao selecionar "Caixa de Troco"
+  useEffect(() => {
+    if (origemSelecionada === 'Caixa de Troco') {
+      const tzOffset = new Date().getTimezoneOffset() * 60000
+      const today = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
+      setValue('data_caixa', today)
+    }
+  }, [origemSelecionada, setValue])
 
   const handleNotaChange = (nota, valor) => {
     setNotas(prev => ({ ...prev, [nota]: parseInt(valor) || 0 }))
   }
 
-  // --- Cálculo de Depósitos - Sangrias ---
+  // --- CÁLCULO DE DEPÓSITOS E TROCAS ---
   const depositosFiltrados = depositsList.filter(d => d.categoria === 'Depósito' || !d.categoria)
   const totalBrutoDepositos = depositosFiltrados.reduce((acc, curr) => acc + Number(curr.valor), 0)
 
-  const sangriasRetiradas = depositsList.filter(d => d.categoria === 'Troca Externa' && d.origem === 'Sangria de Depósito')
-  const totalSangrias = sangriasRetiradas.reduce((acc, curr) => acc + Number(curr.valor), 0)
+  const trocasRetiradas = depositsList.filter(d => d.categoria === 'Troca Externa' && d.origem === 'Sangria de Depósito')
+  const totalTrocas = trocasRetiradas.reduce((acc, curr) => acc + Number(curr.valor), 0)
 
-  const totalLiquidoDepositos = totalBrutoDepositos - totalSangrias
+  const totalLiquidoDepositos = totalBrutoDepositos - totalTrocas
 
   // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
@@ -80,7 +88,6 @@ export const Deposits = () => {
     setIsModalOpen(false)
     setEditingId(null)
     setNotas({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedasValor('')
     reset({ valor: '', origem: '', data_caixa: '' })
   }
 
@@ -101,7 +108,8 @@ export const Deposits = () => {
       categoria: 'Depósito',
       data_caixa: data.data_caixa,
       responsavel_nome: user?.nome || 'Operador',
-      ...(isCaixaTroco && { detalhes_troca: { notas, moedasValor: Number(moedasValor || 0) } })
+      // Moedas setadas como 0 fixo para respeitar a estrutura do banco
+      ...(isCaixaTroco && { detalhes_troca: { notas, moedasValor: 0 } })
     }
 
     try {
@@ -162,7 +170,7 @@ export const Deposits = () => {
     const dataApenas = dataAtual.toLocaleDateString('pt-BR')
     const horaApenas = dataAtual.toLocaleTimeString('pt-BR')
     const valorFormatado = `R$ ${totalLiquidoDepositos.toFixed(2).replace('.', ',')}`
-    const valorSangria = `R$ ${totalSangrias.toFixed(2).replace('.', ',')}`
+    const valorTroca = `R$ ${totalTrocas.toFixed(2).replace('.', ',')}`
     const nomeOperador = user?.nome || 'Operador'
 
     const conteudoCupom = `
@@ -189,7 +197,7 @@ export const Deposits = () => {
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
           <div><span class="bold">Total Bruto:</span> R$ ${totalBrutoDepositos.toFixed(2).replace('.', ',')}</div>
-          ${totalSangrias > 0 ? `<div><span class="bold">(-) Troca:</span> ${valorSangria}</div>` : ''}
+          ${totalTrocas > 0 ? `<div><span class="bold">(-) Trocas:</span> ${valorTroca}</div>` : ''}
           <div class="divisor"></div>
           <div class="center bold" style="font-size: 18px; margin: 10px 0;">
             TOTAL LÍQUIDO: ${valorFormatado}
@@ -243,7 +251,17 @@ export const Deposits = () => {
         .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
         .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
         
-        .notes-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 8px; background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        /* Grid atualizado para 2 colunas */
+        .notes-grid { 
+          display: grid; 
+          grid-template-columns: repeat(2, 1fr); 
+          gap: 16px; 
+          margin-top: 8px; 
+          background: #f8fafc; 
+          padding: 16px; 
+          border-radius: 8px; 
+          border: 1px solid #e2e8f0; 
+        }
         .note-item { display: flex; flex-direction: column; gap: 4px; }
         
         @media (max-width: 768px) {
@@ -287,10 +305,10 @@ export const Deposits = () => {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total {user.role === 'ADMIN' ? 'Filtrado' : 'no Turno'}</span>
                 
-                {/* Mostra se teve sangria batendo o total */}
-                {totalSangrias > 0 && (
+                {/* Mostra se teve troca batendo o total */}
+                {totalTrocas > 0 && (
                   <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <AlertCircle size={14}/> Abatido R$ {totalSangrias.toFixed(2).replace('.', ',')} p/ troca.
+                    <AlertCircle size={14}/> Abatido R$ {totalTrocas.toFixed(2).replace('.', ',')} de Troca
                   </span>
                 )}
                 
@@ -334,10 +352,6 @@ export const Deposits = () => {
                     <input type="number" min="0" className="input-field" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0" />
                   </div>
                 ))}
-                <div className="note-item" style={{ gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
-                  <input type="number" step="0.01" min="0" className="input-field" value={moedasValor} onChange={(e) => setMoedasValor(e.target.value)} placeholder="0,00" />
-                </div>
               </div>
               <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 'bold', color: '#0369a1' }}>Total Retirado:</span>
