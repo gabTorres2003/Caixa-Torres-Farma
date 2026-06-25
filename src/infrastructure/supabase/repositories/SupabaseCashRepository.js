@@ -4,7 +4,7 @@ export const SupabaseCashRepository = {
   async getDenominations(storeId) {
     const { data, error } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId).order('valor', { ascending: false })
     if (error) throw error
-    return data
+    return data || []
   },
 
   async initializeDenominations(storeId) {
@@ -30,7 +30,6 @@ export const SupabaseCashRepository = {
     return data
   },
 
-  // Dá baixa nas notas e moedas do cofre na hora da Saída
   async registerOutflowFromVault(storeId, userId, notas, moedasValor, totalValue, destino, moedasIndividuais = null) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     
@@ -62,7 +61,6 @@ export const SupabaseCashRepository = {
     await supabase.from('cash_movements').insert([payloadMovimento]);
   },
 
-  // Dá Entrada nas notas e moedas no cofre no Recebimento
   async registerInflowToVault(storeId, userId, notas, moedasValor, totalValue, origem, moedasIndividuais = null) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     
