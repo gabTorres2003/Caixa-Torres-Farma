@@ -235,8 +235,8 @@ export const Coins = () => {
                   </select>
                 </div>
                 <div className="input-wrapper">
-                  <label htmlFor="destino" className="input-label">Destino (Rua/Banco)</label>
-                  <input type="text" id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Obrigatório' })} placeholder="Ex: Padaria" />
+                  <label htmlFor="destino" className="input-label">Destino (Rua/Banco/Pessoa)</label>
+                  <input type="text" id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Obrigatório' })} placeholder="Ex: Baixinho" />
                 </div>
               </div>
 
