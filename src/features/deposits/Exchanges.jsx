@@ -9,6 +9,22 @@ import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
 import { ArrowLeftRight, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2 } from 'lucide-react'
 
+const formatRecebedor = (raw) => {
+  if (!raw) return 'Operador';
+  if (typeof raw === 'string' && raw.includes('"recebido_por"')) {
+    try { return JSON.parse(raw).recebido_por || 'Operador'; } catch (e) { return raw; }
+  }
+  return raw;
+};
+
+const formatDetalhes = (registro) => {
+  if (registro.detalhes_troca && Object.keys(registro.detalhes_troca).length > 0) return registro.detalhes_troca;
+  if (registro.recebido_por && typeof registro.recebido_por === 'string' && registro.recebido_por.includes('"detalhes_troca"')) {
+    try { return JSON.parse(registro.recebido_por).detalhes_troca || null; } catch(e) {}
+  }
+  return null;
+};
+
 export const Exchanges = () => {
   const { user } = useAuth()
   const [dataFiltro, setDataFiltro] = useState(() => {
@@ -20,7 +36,7 @@ export const Exchanges = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [tipoTroca, setTipoTroca] = useState('INTERNA') // 'INTERNA' ou 'EXTERNA'
+  const [tipoTroca, setTipoTroca] = useState('INTERNA')
 
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
@@ -32,7 +48,7 @@ export const Exchanges = () => {
 
   const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
 
-  // --- CÁLCULO AUTOMÁTICO DO TOTAL (TROCA INTERNA E RECEBIMENTO) ---
+  // --- CÁLCULO AUTOMÁTICO DO TOTAL ---
   const val2 = watch('valor_2'); const val5 = watch('valor_5'); const val10 = watch('valor_10'); const val20 = watch('valor_20'); const valM = watch('valor_moedas');
   useEffect(() => {
     if (tipoTroca === 'INTERNA') {
@@ -57,10 +73,11 @@ export const Exchanges = () => {
       setValue('destino', registro.destino || '')
     }
 
-    if (!isExterna && registro.detalhes_troca) {
-      setValue('valor_2', registro.detalhes_troca.valor_2 || ''); setValue('valor_5', registro.detalhes_troca.valor_5 || '')
-      setValue('valor_10', registro.detalhes_troca.valor_10 || ''); setValue('valor_20', registro.detalhes_troca.valor_20 || '')
-      setValue('valor_moedas', registro.detalhes_troca.valor_moedas || '')
+    const detalhesLimpos = formatDetalhes(registro)
+    if (!isExterna && detalhesLimpos) {
+      setValue('valor_2', detalhesLimpos.valor_2 || ''); setValue('valor_5', detalhesLimpos.valor_5 || '')
+      setValue('valor_10', detalhesLimpos.valor_10 || ''); setValue('valor_20', detalhesLimpos.valor_20 || '')
+      setValue('valor_moedas', detalhesLimpos.valor_moedas || '')
     } else {
       setValue('valor_2', ''); setValue('valor_5', ''); setValue('valor_10', ''); setValue('valor_20', ''); setValue('valor_moedas', '');
     }
@@ -89,7 +106,6 @@ export const Exchanges = () => {
       origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : data.origem,
       origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco' : data.origem,
       destino: tipoTroca === 'EXTERNA' ? data.destino : null,
-      
       detalhes_troca: tipoTroca === 'INTERNA' ? {
         valor_2: parseFloat(data.valor_2) || 0,
         valor_5: parseFloat(data.valor_5) || 0,
@@ -107,7 +123,7 @@ export const Exchanges = () => {
     try {
       await salvarDeposito(payload, editingId)
       fecharModal()
-    } catch (e) { /* Tratado no Hook */ }
+    } catch (e) {}
   }
 
   const handleOpenReceive = (troca) => {
@@ -117,11 +133,8 @@ export const Exchanges = () => {
   }
 
   const onSubmitReceive = async (data) => {
-    if (!isMatchRecebimento) {
-      alert(`Atenção: A composição (R$ ${somaRecebimento.toFixed(2)}) não bate com a saída solicitada (R$ ${receivingTroca.valor.toFixed(2)}).`)
-      return
-    }
-
+    if (!isMatchRecebimento) return
+    
     await receberTroca(receivingTroca.id, {
       recebido_por: user?.nome || 'Operador',
       detalhes_troca: {
@@ -135,7 +148,7 @@ export const Exchanges = () => {
     setIsReceiveModalOpen(false)
   }
 
-  // --- IMPRESSÃO DIFERENCIADA ---
+  // --- IMPRESSÃO ---
   const imprimirComprovante = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
@@ -143,9 +156,12 @@ export const Exchanges = () => {
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
 
+    const detalhesLimpos = formatDetalhes(registro)
+    const recebedorLimpo = formatRecebedor(registro.recebido_por)
+
     let detalhesHtml = '';
-    if (registro.detalhes_troca) {
-      const d = registro.detalhes_troca;
+    if (detalhesLimpos) {
+      const d = detalhesLimpos;
       detalhesHtml = `
         <div class="divisor"></div>
         <div class="bold" style="margin-bottom: 4px;">Composição do Valor:</div>
@@ -187,7 +203,7 @@ export const Exchanges = () => {
           <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
           <div class="divisor"></div><br>
           <div><span class="bold">Registrado (Saída):</span><br>${nomeOperador}</div><br>
-          ${registro.recebido_por ? `<div><span class="bold">Recebido (Retorno):</span><br>${registro.recebido_por}</div><br><div class="center" style="font-size: 12px;">Baixa Sistêmica: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
+          ${registro.recebido_por ? `<div><span class="bold">Recebido (Retorno):</span><br>${recebedorLimpo}</div><br><div class="center" style="font-size: 12px;">Baixa Sistêmica: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
         </body></html>`;
     }
 
@@ -198,7 +214,6 @@ export const Exchanges = () => {
     setTimeout(() => { janelaImpressao.print(); janelaImpressao.close() }, 250)
   }
 
-  // --- COLUNAS DA TABELA ---
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
     { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Troca Externa' ? '#9333ea' : '#1d4ed8' }}>{row.categoria === 'Troca (Caixa de Troco)' ? 'Interna' : 'Externa'}</span> },
@@ -207,7 +222,8 @@ export const Exchanges = () => {
     { header: 'Status', render: (row) => {
         if (row.categoria === 'Troca (Caixa de Troco)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
         if (row.status_troca === 'PENDENTE') return <span style={{ color: '#d97706', fontWeight: 'bold' }}>⏳ Pendente</span>
-        return <span style={{ color: '#16a34a', fontWeight: 'bold', display: 'flex', flexDirection: 'column' }}>✓ Recebido <span style={{fontSize: '0.7rem', color: '#64748b'}}>por {row.recebido_por}</span></span>
+        // Usa a função inteligente para limpar o nome
+        return <span style={{ color: '#16a34a', fontWeight: 'bold', display: 'flex', flexDirection: 'column' }}>✓ Recebido <span style={{fontSize: '0.7rem', color: '#64748b'}}>por {formatRecebedor(row.recebido_por)}</span></span>
       }
     },
     { header: 'Ações', render: (row) => (
@@ -254,13 +270,11 @@ export const Exchanges = () => {
 
       <Card icon={ArrowLeftRight} title={user.role === 'ADMIN' ? 'Auditoria de Trocas' : 'Trocas do Turno'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-          {user.role === 'ADMIN' ? (
+          {user.role === 'ADMIN' && (
             <>
               <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={18} color="var(--color-primary)"/> Filtrar do dia:</label>
               <input type="date" className="input-field" style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} value={dataFiltro} onChange={(e) => setDataFiltro(e.target.value)} />
             </>
-          ) : (
-            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>Mostrando resultados do turno de hoje.</span>
           )}
         </div>
         <div className="table-responsive-wrapper">
@@ -268,7 +282,6 @@ export const Exchanges = () => {
         </div>
       </Card>
 
-      {/* MODAL 1: REGISTRAR NOVA TROCA OU EDITAR */}
       <Modal isOpen={isModalOpen} onClose={fecharModal} title={editingId ? "Editar Troca" : "Registrar Nova Troca"}>
         <form onSubmit={handleSubmit(onSubmitCreate)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
@@ -298,9 +311,7 @@ export const Exchanges = () => {
                   <option value="Caixa atual">Caixa atual</option>
                   <option value="Sangria de Depósito">Sangria de Depósito</option>
                 </select>
-                {errors.origem && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.origem.message}</span>}
               </div>
-              
               <div className="input-wrapper">
                 <label htmlFor="destino" className="input-label">Destino / Banco</label>
                 <select id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Selecione o destino' })}>
@@ -309,7 +320,6 @@ export const Exchanges = () => {
                   <option value="Sicredi">Sicredi</option>
                   <option value="Outros">Outros</option>
                 </select>
-                {errors.destino && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.destino.message}</span>}
               </div>
             </div>
           )}

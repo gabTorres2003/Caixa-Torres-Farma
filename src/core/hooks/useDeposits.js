@@ -53,16 +53,16 @@ export const useDeposits = (user, dataFiltro) => {
     }
   }
 
-  const receberTroca = async (id, recebido_por) => {
+  const receberTroca = async (id, payloadEntrada) => {
     setIsActionLoading(true)
     try {
       await DepositRepository.receiveExchange(id, {
         status_troca: 'CONCLUIDA',
-        recebido_por,
-        recebido_em: new Date().toISOString()
+        recebido_em: new Date().toISOString(),
+        ...payloadEntrada 
       })
       await carregarDepositos()
-      alert('Recebimento confirmado com sucesso!')
+      alert('Recebimento e detalhamento confirmados com sucesso!')
     } catch (err) {
       alert('Erro ao confirmar recebimento: ' + err.message)
     } finally {
