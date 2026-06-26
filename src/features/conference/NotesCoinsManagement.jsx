@@ -20,18 +20,18 @@ export const NotesCoinsManagement = () => {
 
   // ================= ESTADOS =================
   
-  // Edição de Mínimos/Ideais (Agora em Reais)
+  // Edição de Mínimos/Ideais (Em Reais)
   const [isEditingMetrics, setIsEditingMetrics] = useState(false)
   const [metricsEdits, setMetricsEdits] = useState({})
 
-  // Sobra de Caixa (Continua em Unidades, conforme padrão de auditoria de sobra)
+  // Sobra de Caixa
   const [isSobraModalOpen, setIsSobraModalOpen] = useState(false)
   const [sobraValues, setSobraValues] = useState({})
   const [sobraObs, setSobraObs] = useState('')
   const [sobraOperador, setSobraOperador] = useState('') 
   const [sobraData, setSobraData] = useState(() => new Date().toISOString().split('T')[0]) 
 
-  // Ajuste de Saldo (Agora em Reais)
+  // Ajuste de Saldo
   const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false)
   const [ajusteValues, setAjusteValues] = useState({})
   const [ajusteOrigem, setAjusteOrigem] = useState('')
@@ -42,7 +42,6 @@ export const NotesCoinsManagement = () => {
     if (!isEditingMetrics) {
       const initialEdits = {}
       denominations.forEach(d => {
-        // Converte as unidades do banco para Reais na hora de editar
         initialEdits[d.id] = { 
           minimaReais: (d.quantidade_minima || 0) * d.valor, 
           idealReais: (d.quantidade_ideal || 0) * d.valor,
@@ -62,7 +61,6 @@ export const NotesCoinsManagement = () => {
   }
 
   const handleSaveMetrics = async () => {
-    // Converte os Reais preenchidos de volta para unidades antes de salvar
     const payload = Object.entries(metricsEdits).map(([id, values]) => ({
       id, 
       minima: Math.round(values.minimaReais / values.valorFace), 
@@ -105,7 +103,6 @@ export const NotesCoinsManagement = () => {
   const openAjusteModal = () => {
     const currentQtyReais = {}
     denominations.forEach(d => { 
-      // Carrega o estoque atual em Reais para o input
       currentQtyReais[d.valor] = (d.quantidade_atual || 0) * d.valor 
     })
     setAjusteValues(currentQtyReais)
@@ -125,7 +122,6 @@ export const NotesCoinsManagement = () => {
       return
     }
 
-    // Converte os Reais preenchidos de volta para unidades para o backend
     const unidadesAjustadas = {}
     denominations.forEach(d => {
       const valReais = ajusteValues[d.valor]
@@ -142,7 +138,6 @@ export const NotesCoinsManagement = () => {
   const totalCofre = denominations.reduce((acc, curr) => acc + ((curr.quantidade_atual || 0) * curr.valor), 0)
   const totalSobraReais = denominations.reduce((acc, curr) => acc + ((sobraValues[curr.valor] || 0) * curr.valor), 0)
   
-  // Total do Ajuste de Saldo sendo simulado em Reais
   let diffSoma = 0
   denominations.forEach(d => {
     const currentReais = (d.quantidade_atual || 0) * d.valor
@@ -222,36 +217,46 @@ export const NotesCoinsManagement = () => {
             </thead>
             <tbody>
               {denominations.map(d => {
-                // ================= LÓGICA DE ALERTA DE CORES E FALTA EM R$ =================
+                // ================= LÓGICA DE ALERTA DE CORES E FALTAS =================
                 const current = d.quantidade_atual || 0;
                 const minima = d.quantidade_minima || 0;
                 const ideal = d.quantidade_ideal || 0;
                 
                 let statusColor = '#166534'; // Verde (Normal)
                 let statusBg = '#f0fdf4';
+                let statusBorder = '#86efac';
                 let isCritical = false;
                 let isWarning = false;
-                let faltaParaMinimoReais = 0;
+                let faltaUnidades = 0;
+                let faltaReais = 0;
+                let labelFalta = '';
 
                 if (minima > 0 && current < minima) {
                   statusColor = '#dc2626'; // Vermelho (Crítico)
                   statusBg = '#fef2f2';
+                  statusBorder = '#fca5a5';
                   isCritical = true;
-                  faltaParaMinimoReais = (minima - current) * d.valor;
+                  faltaUnidades = minima - current;
+                  faltaReais = faltaUnidades * d.valor;
+                  labelFalta = '(Mín)';
                 } else if (ideal > 0 && current < ideal) {
                   statusColor = '#d97706'; // Laranja (Atenção)
                   statusBg = '#fffbeb';
+                  statusBorder = '#fcd34d';
                   isWarning = true;
+                  faltaUnidades = ideal - current;
+                  faltaReais = faltaUnidades * d.valor;
+                  labelFalta = '(Ideal)';
                 }
                 // ==============================================================================
 
                 return (
                   <tr key={d.id}>
-                    <td style={{ fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.', ',')}</td>
-                    <td><span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: d.tipo === 'NOTA' ? '#dbeafe' : '#fef3c7', color: d.tipo === 'NOTA' ? '#1e40af' : '#b45309' }}>{d.tipo}</span></td>
+                    <td style={{ fontWeight: 'bold', borderBottom: '1px solid #e2e8f0' }}>R$ {d.valor.toFixed(2).replace('.', ',')}</td>
+                    <td style={{ borderBottom: '1px solid #e2e8f0' }}><span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: d.tipo === 'NOTA' ? '#dbeafe' : '#fef3c7', color: d.tipo === 'NOTA' ? '#1e40af' : '#b45309' }}>{d.tipo}</span></td>
                     
                     {/* COLUNA MÍNIMO EM REAIS */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
                       {isEditingMetrics ? (
                         <div style={{ position: 'relative', display: 'inline-block', width: '100px' }}>
                           <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
@@ -268,7 +273,7 @@ export const NotesCoinsManagement = () => {
                     </td>
                     
                     {/* COLUNA IDEAL EM REAIS */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
                       {isEditingMetrics ? (
                         <div style={{ position: 'relative', display: 'inline-block', width: '100px' }}>
                           <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
@@ -284,24 +289,34 @@ export const NotesCoinsManagement = () => {
                       )}
                     </td>
                     
-                    {/* COLUNA DE UNIDADES COM STATUS DE CORES E INFORMAÇÃO DA FALTA FINANCEIRA */}
-                    <td style={{ textAlign: 'center', backgroundColor: statusBg }}>
+                    {/* COLUNA DE UNIDADES COM STATUS DE CORES */}
+                    <td style={{ textAlign: 'center', backgroundColor: statusBg, borderBottom: '1px solid #e2e8f0' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: statusColor }}>
                           {isCritical && <AlertTriangle size={16} title="Abaixo do Mínimo!" />}
                           {isWarning && <Info size={16} title="Abaixo do Ideal" />}
                           <span style={{ fontSize: '1.1rem', fontWeight: '900' }}>{current} un.</span>
                         </div>
-                        {isCritical && (
-                          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#dc2626', backgroundColor: '#fef2f2', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
-                            Falta R$ {faltaParaMinimoReais.toFixed(2).replace('.', ',')}
+                        {(isCritical || isWarning) && (
+                          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
+                            Falta {faltaUnidades} un. {labelFalta}
                           </span>
                         )}
                       </div>
                     </td>
                     
-                    <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-text-main)' }}>
-                      R$ {(current * d.valor).toFixed(2).replace('.', ',')}
+                    {/* COLUNA TOTAL (R$) COM STATUS DE CORES */}
+                    <td style={{ textAlign: 'right', backgroundColor: statusBg, borderBottom: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span style={{ fontWeight: 'bold', color: statusColor, fontSize: '1.1rem' }}>
+                          R$ {(current * d.valor).toFixed(2).replace('.', ',')}
+                        </span>
+                        {(isCritical || isWarning) && (
+                          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
+                            Falta R$ {faltaReais.toFixed(2).replace('.', ',')} {labelFalta}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -311,7 +326,7 @@ export const NotesCoinsManagement = () => {
         </div>
       </Card>
 
-      {/* MODAL DE SOBRA DE CAIXA (CONTINUA EM UNIDADES) */}
+      {/* MODAL DE SOBRA DE CAIXA (EM UNIDADES) */}
       <Modal isOpen={isSobraModalOpen} onClose={() => setIsSobraModalOpen(false)} title="Registrar Sobra de Caixa">
         <form onSubmit={handleSalvarSobra} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
@@ -373,7 +388,7 @@ export const NotesCoinsManagement = () => {
         </form>
       </Modal>
 
-      {/* MODAL DE AJUSTE DE SALDO (AGORA EM REAIS) */}
+      {/* MODAL DE AJUSTE DE SALDO (EM REAIS) */}
       <Modal isOpen={isAjusteModalOpen} onClose={() => setIsAjusteModalOpen(false)} title="Ajuste de Saldo">
         <form onSubmit={handleSalvarAjuste} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
