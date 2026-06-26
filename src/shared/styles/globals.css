@@ -205,3 +205,16 @@ body {
   font-weight: 500;
   margin-bottom: 16px;
 }
+
+/* Firefox e Padrão Moderno W3C */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield; 
+}
+
+/* Chrome, Safari, Edge, Opera */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

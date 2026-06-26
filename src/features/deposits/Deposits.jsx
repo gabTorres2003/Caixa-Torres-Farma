@@ -35,7 +35,7 @@ export const Deposits = () => {
   }, [carregarDepositos])
 
   // Lógica de cálculo automático das notas
-  const valorCalculado = Object.entries(notas).reduce((acc, [nota, qtd]) => acc + (Number(nota) * qtd), 0)
+  const valorCalculado = Object.values(notas).reduce((acc, val) => acc + val, 0)
   
   useEffect(() => {
     if (origemSelecionada === 'Caixa de Troco') {
@@ -53,7 +53,15 @@ export const Deposits = () => {
   }, [origemSelecionada, setValue])
 
   const handleNotaChange = (nota, valor) => {
-    setNotas(prev => ({ ...prev, [nota]: parseInt(valor) || 0 }))
+    setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 }))
+  }
+
+  const converterValoresParaQuantidades = (notasEmReais) => {
+    const qtds = {};
+    Object.entries(notasEmReais).forEach(([notaFace, valorTotal]) => {
+      qtds[notaFace] = Math.round((Number(valorTotal) || 0) / Number(notaFace));
+    });
+    return qtds;
   }
 
   // --- CÁLCULO DE DEPÓSITOS E TROCAS ---
@@ -108,7 +116,7 @@ export const Deposits = () => {
       categoria: 'Depósito',
       data_caixa: data.data_caixa,
       responsavel_nome: user?.nome || 'Operador',
-      ...(isCaixaTroco && { detalhes_troca: { notas, moedasValor: 0 } })
+      ...(isCaixaTroco && { detalhes_troca: { notas: converterValoresParaQuantidades(notas), moedasValor: 0 } })
     }
 
     try {
@@ -370,8 +378,8 @@ export const Deposits = () => {
               <div className="notes-grid">
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {nota}</label>
-                    <input type="number" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0" />
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Notas de R$ {nota}</label>
+                    <input type="number" step="0.01" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0,00" />
                   </div>
                 ))}
               </div>

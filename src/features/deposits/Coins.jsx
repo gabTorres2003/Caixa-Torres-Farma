@@ -187,7 +187,21 @@ export const Coins = () => {
         <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Novo Registro</Button>
       </div>
 
-      <Card icon={CoinsIcon} title="Movimentações de Moedas do Turno">
+      <Card icon={CoinsIcon} title={user.role === 'ADMIN' ? "Auditoria de Moedas" : "Movimentações de Moedas do Turno"}>
+        {user.role === 'ADMIN' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Calendar size={18} color="var(--color-primary)"/> Filtrar do dia:
+            </label>
+            <input 
+              type="date" 
+              className="input-field" 
+              style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }} 
+              value={dataFiltro} 
+              onChange={(e) => setDataFiltro(e.target.value)} 
+            />
+          </div>
+        )}
         <div className="table-responsive-wrapper">
           <Table columns={columns} data={moedasList} emptyMessage="Nenhuma movimentação de moedas registrada." />
         </div>

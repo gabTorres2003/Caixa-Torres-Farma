@@ -34,23 +34,36 @@ export const SupabaseCashRepository = {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     
     const updates = [];
+    
+    // VERIFICAÇÃO DE SALDO: NOTAS
     if (notas) {
       for (const [v, q] of Object.entries(notas)) {
         if (q > 0) {
           const stock = currentStocks.find(s => s.tipo === 'NOTA' && s.valor === Number(v));
-          if (stock) updates.push({ id: stock.id, novaQtd: stock.quantidade_atual - q });
+          // Validação da Regra de Negócio
+          if (!stock || stock.quantidade_atual < q) {
+            throw new Error(`Saldo insuficiente no cofre. Você tentou retirar mais notas de R$ ${v} do que há disponível.`);
+          }
+          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual - q });
         }
       }
     }
+    
+    // VERIFICAÇÃO DE SALDO: MOEDAS INDIVIDUAIS
     if (moedasIndividuais) {
       for (const [v, q] of Object.entries(moedasIndividuais)) {
         if (q > 0) {
           const stock = currentStocks.find(s => s.tipo === 'MOEDA' && s.valor === Number(v));
-          if (stock) updates.push({ id: stock.id, novaQtd: stock.quantidade_atual - q });
+          // Validação da Regra de Negócio
+          if (!stock || stock.quantidade_atual < q) {
+            throw new Error(`Saldo insuficiente no cofre. Você tentou retirar mais moedas de R$ ${v} do que há disponível.`);
+          }
+          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual - q });
         }
       }
     }
 
+    // Executa as atualizações se passou pelas validações
     for (const u of updates) {
       await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
     }
@@ -60,7 +73,7 @@ export const SupabaseCashRepository = {
     };
     await supabase.from('cash_movements').insert([payloadMovimento]);
   },
-
+  
   async registerInflowToVault(storeId, userId, notas, moedasValor, totalValue, origem, moedasIndividuais = null) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     
