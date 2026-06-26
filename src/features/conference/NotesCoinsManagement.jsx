@@ -24,6 +24,9 @@ export const NotesCoinsManagement = () => {
   const [isEditingMetrics, setIsEditingMetrics] = useState(false)
   const [metricsEdits, setMetricsEdits] = useState({})
 
+  // Visualização de Faltantes ('NONE' | 'MINIMUM' | 'IDEAL')
+  const [missingView, setMissingView] = useState('NONE')
+
   // Sobra de Caixa
   const [isSobraModalOpen, setIsSobraModalOpen] = useState(false)
   const [sobraValues, setSobraValues] = useState({})
@@ -190,17 +193,47 @@ export const NotesCoinsManagement = () => {
           </div>
         </div>
 
-        {/* LEGENDA DE ALERTAS */}
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '0.85rem', flexWrap: 'wrap' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: 'bold' }}>
-            <div style={{ width: 14, height: 14, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '50%' }}></div> Abaixo do Mínimo (Crítico)
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: 'bold' }}>
-            <div style={{ width: 14, height: 14, backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '50%' }}></div> Abaixo do Ideal (Atenção)
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 'bold' }}>
-            <div style={{ width: 14, height: 14, backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '50%' }}></div> Acima ou no Ideal (OK)
-          </span>
+        {/* CONTROLES DE VISUALIZAÇÃO: LEGENDA E BOTÕES FALTANTES */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '16px' }}>
+          
+          {/* Legenda */}
+          <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', flexWrap: 'wrap' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: 'bold' }}>
+              <div style={{ width: 14, height: 14, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '50%' }}></div> Abaixo do Mínimo (Crítico)
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: 'bold' }}>
+              <div style={{ width: 14, height: 14, backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '50%' }}></div> Abaixo do Ideal (Atenção)
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 'bold' }}>
+              <div style={{ width: 14, height: 14, backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '50%' }}></div> Acima ou no Ideal (OK)
+            </span>
+          </div>
+
+          {/* Botões de Filtro de Faltantes */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={() => setMissingView(prev => prev === 'MINIMUM' ? 'NONE' : 'MINIMUM')}
+              style={{
+                padding: '6px 12px', fontSize: '0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s',
+                border: missingView === 'MINIMUM' ? '1px solid #dc2626' : '1px solid var(--color-border)',
+                backgroundColor: missingView === 'MINIMUM' ? '#fef2f2' : 'var(--color-surface)',
+                color: missingView === 'MINIMUM' ? '#dc2626' : 'var(--color-text-muted)'
+              }}
+            >
+              Falta para o Mínimo
+            </button>
+            <button
+              onClick={() => setMissingView(prev => prev === 'IDEAL' ? 'NONE' : 'IDEAL')}
+              style={{
+                padding: '6px 12px', fontSize: '0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s',
+                border: missingView === 'IDEAL' ? '1px solid #0369a1' : '1px solid var(--color-border)',
+                backgroundColor: missingView === 'IDEAL' ? '#e0f2fe' : 'var(--color-surface)',
+                color: missingView === 'IDEAL' ? '#0369a1' : 'var(--color-text-muted)'
+              }}
+            >
+              Falta para o Ideal
+            </button>
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -217,38 +250,46 @@ export const NotesCoinsManagement = () => {
             </thead>
             <tbody>
               {denominations.map(d => {
-                // ================= LÓGICA DE ALERTA DE CORES E FALTAS =================
                 const current = d.quantidade_atual || 0;
                 const minima = d.quantidade_minima || 0;
                 const ideal = d.quantidade_ideal || 0;
                 
-                let statusColor = '#166534'; // Verde (Normal)
+                // Cores de Status da Linha (Baseadas puramente em estar abaixo do mínimo/ideal)
+                let statusColor = '#166534'; // Verde
                 let statusBg = '#f0fdf4';
                 let statusBorder = '#86efac';
                 let isCritical = false;
                 let isWarning = false;
-                let faltaUnidades = 0;
-                let faltaReais = 0;
 
-                // A referência de quanto falta será SEMPRE o Ideal
-                if (ideal > 0 && current < ideal) {
-                  faltaUnidades = ideal - current;
-                  faltaReais = faltaUnidades * d.valor;
-                }
-
-                // A definição da cor e gravidade respeita o Mínimo
                 if (minima > 0 && current < minima) {
-                  statusColor = '#dc2626'; // Vermelho (Crítico)
+                  statusColor = '#dc2626';
                   statusBg = '#fef2f2';
                   statusBorder = '#fca5a5';
                   isCritical = true;
                 } else if (ideal > 0 && current < ideal) {
-                  statusColor = '#d97706'; // Laranja (Atenção)
+                  statusColor = '#d97706';
                   statusBg = '#fffbeb';
                   statusBorder = '#fcd34d';
                   isWarning = true;
                 }
-                // ==============================================================================
+
+                // Lógica dos Badges Faltantes (Controlada pelos Botões)
+                let showBadge = false;
+                let badgeUnidades = 0;
+                let badgeReais = 0;
+                let badgeLabel = '';
+
+                if (missingView === 'IDEAL' && ideal > 0 && current < ideal) {
+                  showBadge = true;
+                  badgeUnidades = ideal - current;
+                  badgeReais = badgeUnidades * d.valor;
+                  badgeLabel = '(Ideal)';
+                } else if (missingView === 'MINIMUM' && minima > 0 && current < minima) {
+                  showBadge = true;
+                  badgeUnidades = minima - current;
+                  badgeReais = badgeUnidades * d.valor;
+                  badgeLabel = '(Mín)';
+                }
 
                 return (
                   <tr key={d.id}>
@@ -289,31 +330,31 @@ export const NotesCoinsManagement = () => {
                       )}
                     </td>
                     
-                    {/* COLUNA DE UNIDADES COM STATUS DE CORES */}
-                    <td style={{ textAlign: 'center', backgroundColor: statusBg, borderBottom: '1px solid #e2e8f0' }}>
+                    {/* COLUNA DE UNIDADES COM STATUS E BADGE CONDICIONAL */}
+                    <td style={{ textAlign: 'center', backgroundColor: statusBg, borderBottom: '1px solid #e2e8f0', transition: 'background-color 0.3s' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: statusColor }}>
                           {isCritical && <AlertTriangle size={16} title="Abaixo do Mínimo!" />}
                           {isWarning && <Info size={16} title="Abaixo do Ideal" />}
                           <span style={{ fontSize: '1.1rem', fontWeight: '900' }}>{current} un.</span>
                         </div>
-                        {(isCritical || isWarning) && (
+                        {showBadge && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta {faltaUnidades} un. (Ideal)
+                            Falta {badgeUnidades} un. {badgeLabel}
                           </span>
                         )}
                       </div>
                     </td>
                     
-                    {/* COLUNA TOTAL (R$) COM STATUS DE CORES */}
-                    <td style={{ textAlign: 'right', backgroundColor: statusBg, borderBottom: '1px solid #e2e8f0' }}>
+                    {/* COLUNA TOTAL (R$) COM STATUS E BADGE CONDICIONAL */}
+                    <td style={{ textAlign: 'right', backgroundColor: statusBg, borderBottom: '1px solid #e2e8f0', transition: 'background-color 0.3s' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                         <span style={{ fontWeight: 'bold', color: statusColor, fontSize: '1.1rem' }}>
                           R$ {(current * d.valor).toFixed(2).replace('.', ',')}
                         </span>
-                        {(isCritical || isWarning) && (
+                        {showBadge && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta R$ {faltaReais.toFixed(2).replace('.', ',')} (Ideal)
+                            Falta R$ {badgeReais.toFixed(2).replace('.', ',')} {badgeLabel}
                           </span>
                         )}
                       </div>
@@ -326,7 +367,7 @@ export const NotesCoinsManagement = () => {
         </div>
       </Card>
 
-      {/* MODAL DE SOBRA DE CAIXA (EM UNIDADES) */}
+      {/* MODAL DE SOBRA DE CAIXA */}
       <Modal isOpen={isSobraModalOpen} onClose={() => setIsSobraModalOpen(false)} title="Registrar Sobra de Caixa">
         <form onSubmit={handleSalvarSobra} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
@@ -388,7 +429,7 @@ export const NotesCoinsManagement = () => {
         </form>
       </Modal>
 
-      {/* MODAL DE AJUSTE DE SALDO (EM REAIS) */}
+      {/* MODAL DE AJUSTE DE SALDO */}
       <Modal isOpen={isAjusteModalOpen} onClose={() => setIsAjusteModalOpen(false)} title="Ajuste de Saldo">
         <form onSubmit={handleSalvarAjuste} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
