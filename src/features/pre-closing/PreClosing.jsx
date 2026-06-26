@@ -3,12 +3,17 @@ import { useAuth } from '../../core/hooks/useAuth'
 import { usePreClosing } from '../../core/hooks/usePreClosing'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
-import { Calculator, Save, Printer, Loader2, DollarSign, CreditCard, Ticket, FileSignature, Wallet } from 'lucide-react'
+import { Table } from '../../shared/components/tables/Table' // Import da Tabela
+import { Calculator, Save, Printer, Loader2, DollarSign, CreditCard, Ticket, FileSignature, Wallet, Calendar, Eye } from 'lucide-react'
 
 export const PreClosing = () => {
   const { user } = useAuth()
   
-  const { pendingTotals, isPageLoading, isActionLoading, loadInitialData, savePreClosing } = usePreClosing(user)
+  // Agora desestruturamos as novas variáveis de histórico do hook
+  const { 
+    pendingTotals, isPageLoading, isActionLoading, loadInitialData, savePreClosing,
+    history, dataFiltro, setDataFiltro 
+  } = usePreClosing(user)
 
   // busca no banco de dados 
   useEffect(() => {
@@ -27,11 +32,10 @@ export const PreClosing = () => {
   
   const [obsGeral, setObsGeral] = useState('')
 
-  // Cálculos Automáticos (com blindagem contra variáveis vazias)
+  // Cálculos Automáticos
   const parseNum = (val) => Number(val) || 0
   const somaFisico = parseNum(valores.dinheiro) + parseNum(valores.cartao) + parseNum(valores.pix) + parseNum(valores.cheque) + parseNum(valores.vale)
   
-  // Usa o pendingTotals com optional chaining (?) para evitar crashes
   const somaPendente = (pendingTotals?.dinheiro || 0) + (pendingTotals?.cartao || 0)
   const totalGeral = somaFisico + somaPendente
 
@@ -52,6 +56,7 @@ export const PreClosing = () => {
       vale_compras_value: parseNum(valores.vale),
       pending_cash: pendingTotals?.dinheiro || 0,
       pending_card: pendingTotals?.cartao || 0,
+      pending_pix: pendingTotals?.pix || 0,
       total: totalGeral,
       obs_dinheiro: obs.dinheiro,
       obs_cartao: obs.cartao,
@@ -60,7 +65,15 @@ export const PreClosing = () => {
       obs_vale: obs.vale,
       obs_geral: obsGeral
     }
-    await savePreClosing(payload)
+    
+    const sucesso = await savePreClosing(payload)
+    
+    // Limpa os formulários se salvou com sucesso
+    if (sucesso) {
+      setValores({ dinheiro: '', cartao: '', pix: '', cheque: '', vale: '' })
+      setObs({ dinheiro: '', cartao: '', pix: '', cheque: '', vale: '' })
+      setObsGeral('')
+    }
   }
 
   const renderItemPagamento = (id, label, Icon, color) => (
@@ -247,8 +260,68 @@ export const PreClosing = () => {
             <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>{obsGeral || 'Nenhuma anotação geral registrada.'}</p>
           </div>
         </div>
-
       </Card>
+
+      {/* SEÇÃO DE HISTÓRICO E AUDITORIA */}
+      <Card className="no-print" icon={Calendar} title="Histórico de Pré-Fechamentos">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+          <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Calendar size={18} color="var(--color-primary)"/> Consultar Data:
+          </label>
+          <input 
+            type="date" 
+            className="input-field" 
+            style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer', maxWidth: '200px' }} 
+            value={dataFiltro} 
+            onChange={(e) => setDataFiltro(e.target.value)} 
+          />
+        </div>
+
+        <div className="table-responsive-wrapper">
+          <Table 
+            columns={[
+              { 
+                header: 'Hora', 
+                render: (row) => new Date(row.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+              },
+              { 
+                header: 'Operador', 
+                render: (row) => row.users?.nome || 'Operador' 
+              },
+              { 
+                header: 'Total Dinheiro', 
+                render: (row) => `R$ ${(row.cash_value || 0).toFixed(2).replace('.', ',')}` 
+              },
+              { 
+                header: 'Total Cartão', 
+                render: (row) => `R$ ${(row.card_value || 0).toFixed(2).replace('.', ',')}` 
+              },
+              { 
+                header: 'Total Pix', 
+                render: (row) => `R$ ${(row.pix_value || 0).toFixed(2).replace('.', ',')}` 
+              },
+              { 
+                header: 'Total Geral', 
+                render: (row) => <strong style={{ color: 'var(--color-primary)' }}>R$ ${(row.total || 0).toFixed(2).replace('.', ',')}</strong> 
+              },
+              {
+                header: 'Observações',
+                render: (row) => (
+                  <button 
+                    onClick={() => alert(`Observações do Fechamento:\n\nDinheiro: ${row.obs_dinheiro || 'Nenhuma'}\nCartão: ${row.obs_cartao || 'Nenhuma'}\nPix: ${row.obs_pix || 'Nenhuma'}\nGeral: ${row.obs_geral || 'Nenhuma'}`)}
+                    style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Eye size={18} /> Ver Detalhes
+                  </button>
+                )
+              }
+            ]} 
+            data={history} 
+            emptyMessage="Nenhum pré-fechamento registrado para esta data." 
+          />
+        </div>
+      </Card>
+      
     </div>
   )
 }

@@ -9,14 +9,34 @@ export const PreClosingRepository = {
       .eq('store_id', storeId)
       .gte('created_at', `${dataConsulta}T00:00:00-03:00`)
       .lte('created_at', `${dataConsulta}T23:59:59-03:00`)
-      .eq('conciliado', false) // Pega apenas o que está na rua ou na cestinha sem baixa
+      .eq('conciliado', false) 
 
     if (error) throw error
     return data || []
   },
 
+  // Salva o novo pré-fechamento
   async savePreClosing(payload) {
     const { error } = await supabase.from('pre_closings').insert([payload])
     if (error) throw error
+  },
+
+  // Busca o histórico filtrado por data
+  async getPreClosingsHistory(storeId, dateFilter) {
+    let query = supabase
+      .from('pre_closings')
+      .select('*, users:created_by (nome)') // Traz o nome do operador
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false })
+
+    if (dateFilter) {
+      query = query
+        .gte('created_at', `${dateFilter}T00:00:00-03:00`)
+        .lte('created_at', `${dateFilter}T23:59:59-03:00`)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return data || []
   }
 }
