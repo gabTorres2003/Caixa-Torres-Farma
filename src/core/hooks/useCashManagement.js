@@ -6,7 +6,7 @@ export const useCashManagement = (user) => {
   const storeId = user?.store_id
   const [denominations, setDenominations] = useState([])
   const [lastConference, setLastConference] = useState(null)
-  const [movements, setMovements] = useState([]) // Novo estado para Auditoria
+  const [movements, setMovements] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
 
@@ -24,20 +24,11 @@ export const useCashManagement = (user) => {
         data = await SupabaseCashRepository.getDenominations(storeId)
       }
 
-      // Garante que as moedas sempre tenham a meta 50 estabelecida
-      for (let d of data) {
-        if (d.tipo === 'MOEDA' && d.quantidade_ideal !== 50) {
-           await supabase.from('cash_denominations').update({ quantidade_ideal: 50 }).eq('id', d.id);
-           d.quantidade_ideal = 50;
-        }
-      }
-
       setDenominations(data)
 
       const ultima = await SupabaseCashRepository.getLastConference(storeId)
       setLastConference(ultima)
 
-      // Carrega Auditoria de Movimentações para a tabela de histórico
       const { data: movs } = await supabase
         .from('cash_movements')
         .select('*, users ( nome )')
@@ -54,89 +45,6 @@ export const useCashManagement = (user) => {
     }
   }, [storeId])
 
-  const calcularUnidadesPorTotal = (valorFace, valorTotalDigitado) => {
-    if (!valorTotalDigitado || isNaN(valorTotalDigitado)) return 0
-    return Math.floor(parseFloat(valorTotalDigitado) / parseFloat(valorFace))
-  }
-
-  const salvarLimitesEContagem = async (estoqueLocal, bolsasPendentes = 0) => {
-    if (!user) {
-      alert('Sessão do usuário não encontrada. Recarregue a página.')
-      return
-    }
-
-    setIsActionLoading(true)
-    try {
-      // 1. Salva a quantidade e limites atuais
-      const promises = Object.entries(estoqueLocal).map(([id, dados]) => {
-        return supabase
-          .from('cash_denominations')
-          .update({
-            quantidade_atual: Number(dados.unidades_atual) || 0,
-            quantidade_minima: Number(dados.minima) || 0,
-            quantidade_ideal: Number(dados.ideal) || 0,
-          })
-          .eq('id', id)
-      })
-      await Promise.all(promises)
-
-      // 2. Prepara detalhamento da contagem
-      let valor_total_cofre = 0
-      let detalhamento_cofre = {}
-
-      Object.entries(estoqueLocal).forEach(([id, dados]) => {
-        const denom = denominations.find((d) => d.id === id)
-        if (denom) {
-          valor_total_cofre += (Number(dados.unidades_atual) || 0) * denom.valor
-          detalhamento_cofre[denom.valor.toString()] = Number(dados.unidades_atual) || 0
-        }
-      })
-
-      // 3. Registra a conferência
-      await SupabaseCashRepository.registerMovement({
-        store_id: user.store_id,
-        created_by: user.id,
-        tipo_movimento: 'CONTAGEM_INICIAL',
-        valor_total: valor_total_cofre,
-        origem: 'Cofre Central',
-        destino: 'Cofre Central',
-        detalhamento: detalhamento_cofre,
-      })
-
-      // 4. Registra as bolsas montadas
-      if (bolsasPendentes > 0) {
-        const regraBolsa = [
-          { valorFace: 20, qtd: 5 }, { valorFace: 10, qtd: 10 }, { valorFace: 5, qtd: 20 },
-          { valorFace: 2, qtd: 50 }, { valorFace: 1, qtd: 5 }, { valorFace: 0.5, qtd: 20 },
-          { valorFace: 0.25, qtd: 40 }, { valorFace: 0.1, qtd: 30 }, { valorFace: 0.05, qtd: 40 },
-        ]
-        let detalhamentoBolsa = {}
-        let valorTotalBolsa = 0
-
-        denominations.forEach((d) => {
-          const regra = regraBolsa.find((r) => r.valorFace === Number(d.valor))
-          if (regra) {
-            const qtdDescontada = regra.qtd * bolsasPendentes
-            detalhamentoBolsa[d.valor.toString()] = qtdDescontada
-            valorTotalBolsa += qtdDescontada * d.valor
-          }
-        })
-
-        await SupabaseCashRepository.registerMovement({
-          store_id: user.store_id, created_by: user.id, tipo_movimento: 'SAIDA',
-          valor_total: valorTotalBolsa, origem: 'Cofre Central', destino: 'Bolsa de Abertura (Caixa)', detalhamento: detalhamentoBolsa,
-        })
-      }
-
-      alert('Estoque do cofre salvo com sucesso!')
-      await carregarEstoque()
-    } catch (err) {
-      alert('Erro ao salvar as configurações: ' + err.message)
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
   const adjustBalance = async (newQuantities, manualOriginDest, observation) => {
     setIsActionLoading(true);
     try {
@@ -152,8 +60,42 @@ export const useCashManagement = (user) => {
     }
   };
 
+  // Salva apenas as edições das colunas de Mínimo e Ideal
+  const updateMetrics = async (metricsData) => {
+    setIsActionLoading(true)
+    try {
+      await SupabaseCashRepository.updateMetricsBatch(metricsData)
+      await carregarEstoque()
+      alert('Métricas atualizadas com sucesso!')
+      return true
+    } catch (error) {
+      console.error(error)
+      alert('Erro ao atualizar métricas: ' + error.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  // Registra as unidades inseridas no modal de Sobra de Caixa
+  const registrarSobraCaixa = async (unidadesExtras, observacao) => {
+    setIsActionLoading(true)
+    try {
+      await SupabaseCashRepository.registerSobraCaixa(storeId, user.id, unidadesExtras, observacao)
+      await carregarEstoque()
+      alert('Sobra de caixa registrada com sucesso no cofre!')
+      return true
+    } catch (error) {
+      console.error(error)
+      alert('Erro ao registrar sobra: ' + error.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   return {
     denominations, lastConference, movements, isLoading, isActionLoading,
-    carregarEstoque, calcularUnidadesPorTotal, salvarLimitesEContagem, adjustBalance
+    carregarEstoque, adjustBalance, updateMetrics, registrarSobraCaixa
   }
 }
