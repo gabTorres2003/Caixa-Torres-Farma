@@ -4,7 +4,7 @@ import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2 } from 'lucide-react'
+import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
@@ -20,18 +20,18 @@ export const NotesCoinsManagement = () => {
 
   // ================= ESTADOS =================
   
-  // Edição de Mínimos/Ideais
+  // Edição de Mínimos/Ideais (Agora em Reais)
   const [isEditingMetrics, setIsEditingMetrics] = useState(false)
   const [metricsEdits, setMetricsEdits] = useState({})
 
-  // Sobra de Caixa
+  // Sobra de Caixa (Continua em Unidades, conforme padrão de auditoria de sobra)
   const [isSobraModalOpen, setIsSobraModalOpen] = useState(false)
   const [sobraValues, setSobraValues] = useState({})
   const [sobraObs, setSobraObs] = useState('')
-  const [sobraOperador, setSobraOperador] = useState('') // Novo Campo
-  const [sobraData, setSobraData] = useState(() => new Date().toISOString().split('T')[0]) // Novo Campo
+  const [sobraOperador, setSobraOperador] = useState('') 
+  const [sobraData, setSobraData] = useState(() => new Date().toISOString().split('T')[0]) 
 
-  // Ajuste de Saldo (Restaurado)
+  // Ajuste de Saldo (Agora em Reais)
   const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false)
   const [ajusteValues, setAjusteValues] = useState({})
   const [ajusteOrigem, setAjusteOrigem] = useState('')
@@ -42,7 +42,12 @@ export const NotesCoinsManagement = () => {
     if (!isEditingMetrics) {
       const initialEdits = {}
       denominations.forEach(d => {
-        initialEdits[d.id] = { minima: d.quantidade_minima || 0, ideal: d.quantidade_ideal || 0 }
+        // Converte as unidades do banco para Reais na hora de editar
+        initialEdits[d.id] = { 
+          minimaReais: (d.quantidade_minima || 0) * d.valor, 
+          idealReais: (d.quantidade_ideal || 0) * d.valor,
+          valorFace: d.valor
+        }
       })
       setMetricsEdits(initialEdits)
     }
@@ -52,14 +57,18 @@ export const NotesCoinsManagement = () => {
   const handleMetricChange = (id, field, value) => {
     setMetricsEdits(prev => ({
       ...prev,
-      [id]: { ...prev[id], [field]: parseInt(value) || 0 }
+      [id]: { ...prev[id], [field]: parseFloat(value) || 0 }
     }))
   }
 
   const handleSaveMetrics = async () => {
+    // Converte os Reais preenchidos de volta para unidades antes de salvar
     const payload = Object.entries(metricsEdits).map(([id, values]) => ({
-      id, minima: values.minima, ideal: values.ideal
+      id, 
+      minima: Math.round(values.minimaReais / values.valorFace), 
+      ideal: Math.round(values.idealReais / values.valorFace)
     }))
+    
     const success = await updateMetrics(payload)
     if (success) setIsEditingMetrics(false)
   }
@@ -94,16 +103,19 @@ export const NotesCoinsManagement = () => {
 
   // ================= FUNÇÕES DE AJUSTE DE SALDO =================
   const openAjusteModal = () => {
-    const currentQty = {}
-    denominations.forEach(d => { currentQty[d.valor] = d.quantidade_atual || 0 })
-    setAjusteValues(currentQty)
+    const currentQtyReais = {}
+    denominations.forEach(d => { 
+      // Carrega o estoque atual em Reais para o input
+      currentQtyReais[d.valor] = (d.quantidade_atual || 0) * d.valor 
+    })
+    setAjusteValues(currentQtyReais)
     setAjusteOrigem('')
     setAjusteObs('')
     setIsAjusteModalOpen(true)
   }
 
   const handleAjusteChange = (valorFace, val) => {
-    setAjusteValues(prev => ({ ...prev, [valorFace]: parseInt(val) || 0 }))
+    setAjusteValues(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
   }
 
   const handleSalvarAjuste = async (e) => {
@@ -112,20 +124,30 @@ export const NotesCoinsManagement = () => {
       alert("A origem/destino do ajuste é obrigatória.")
       return
     }
-    const success = await adjustBalance(ajusteValues, ajusteOrigem, ajusteObs)
+
+    // Converte os Reais preenchidos de volta para unidades para o backend
+    const unidadesAjustadas = {}
+    denominations.forEach(d => {
+      const valReais = ajusteValues[d.valor]
+      if (valReais !== undefined) {
+        unidadesAjustadas[d.valor] = Math.round(valReais / d.valor)
+      }
+    })
+
+    const success = await adjustBalance(unidadesAjustadas, ajusteOrigem, ajusteObs)
     if (success) setIsAjusteModalOpen(false)
   }
 
-  // ================= CÁLCULOS =================
+  // ================= CÁLCULOS GERAIS =================
   const totalCofre = denominations.reduce((acc, curr) => acc + ((curr.quantidade_atual || 0) * curr.valor), 0)
   const totalSobraReais = denominations.reduce((acc, curr) => acc + ((sobraValues[curr.valor] || 0) * curr.valor), 0)
   
-  // Total do Ajuste de Saldo sendo simulado
+  // Total do Ajuste de Saldo sendo simulado em Reais
   let diffSoma = 0
   denominations.forEach(d => {
-    const current = d.quantidade_atual || 0
-    const novo = ajusteValues[d.valor] ?? current
-    diffSoma += (novo - current) * d.valor
+    const currentReais = (d.quantidade_atual || 0) * d.valor
+    const novoReais = ajusteValues[d.valor] ?? currentReais
+    diffSoma += (novoReais - currentReais)
   })
 
   if (isLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando cofre...</span></div>
@@ -173,78 +195,136 @@ export const NotesCoinsManagement = () => {
           </div>
         </div>
 
+        {/* LEGENDA DE ALERTAS */}
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '0.85rem', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: 'bold' }}>
+            <div style={{ width: 14, height: 14, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '50%' }}></div> Abaixo do Mínimo (Crítico)
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: 'bold' }}>
+            <div style={{ width: 14, height: 14, backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '50%' }}></div> Abaixo do Ideal (Atenção)
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 'bold' }}>
+            <div style={{ width: 14, height: 14, backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '50%' }}></div> Acima ou no Ideal (OK)
+          </span>
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ width: '100%', minWidth: '700px' }}>
             <thead>
               <tr>
                 <th>Valor da Face</th>
                 <th>Tipo</th>
-                <th style={{ textAlign: 'center', color: '#d97706' }}>Qtd. Mínima</th>
-                <th style={{ textAlign: 'center', color: '#0369a1' }}>Qtd. Ideal</th>
-                <th style={{ textAlign: 'center', color: '#16a34a' }}>Total (em unidades)</th>
-                <th style={{ textAlign: 'right' }}>Total (em R$)</th>
+                <th style={{ textAlign: 'center', color: '#d97706' }}>Mínimo (R$)</th>
+                <th style={{ textAlign: 'center', color: '#0369a1' }}>Ideal (R$)</th>
+                <th style={{ textAlign: 'center', color: '#16a34a' }}>Estoque Atual (Unid.)</th>
+                <th style={{ textAlign: 'right' }}>Total (R$)</th>
               </tr>
             </thead>
             <tbody>
-              {denominations.map(d => (
-                <tr key={d.id}>
-                  <td style={{ fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.', ',')}</td>
-                  <td><span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: d.tipo === 'NOTA' ? '#dbeafe' : '#fef3c7', color: d.tipo === 'NOTA' ? '#1e40af' : '#b45309' }}>{d.tipo}</span></td>
-                  
-                  <td style={{ textAlign: 'center' }}>
-                    {isEditingMetrics ? (
-                      <input 
-                        type="number" min="0" className="input-field" 
-                        style={{ width: '80px', textAlign: 'center', padding: '6px' }}
-                        value={metricsEdits[d.id]?.minima ?? ''} 
-                        onChange={(e) => handleMetricChange(d.id, 'minima', e.target.value)}
-                      />
-                    ) : (
-                      <span style={{ fontWeight: 'bold', color: '#b45309' }}>{d.quantidade_minima || 0}</span>
-                    )}
-                  </td>
-                  
-                  <td style={{ textAlign: 'center' }}>
-                    {isEditingMetrics ? (
-                      <input 
-                        type="number" min="0" className="input-field" 
-                        style={{ width: '80px', textAlign: 'center', padding: '6px' }}
-                        value={metricsEdits[d.id]?.ideal ?? ''} 
-                        onChange={(e) => handleMetricChange(d.id, 'ideal', e.target.value)}
-                      />
-                    ) : (
-                      <span style={{ fontWeight: 'bold', color: '#0369a1' }}>{d.quantidade_ideal || 0}</span>
-                    )}
-                  </td>
-                  
-                  <td style={{ textAlign: 'center', fontWeight: '900', fontSize: '1.1rem', color: '#166534', backgroundColor: '#f0fdf4' }}>
-                    {d.quantidade_atual || 0}
-                  </td>
-                  
-                  <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-text-main)' }}>
-                    R$ {((d.quantidade_atual || 0) * d.valor).toFixed(2).replace('.', ',')}
-                  </td>
-                </tr>
-              ))}
+              {denominations.map(d => {
+                // ================= LÓGICA DE ALERTA DE CORES E FALTA EM R$ =================
+                const current = d.quantidade_atual || 0;
+                const minima = d.quantidade_minima || 0;
+                const ideal = d.quantidade_ideal || 0;
+                
+                let statusColor = '#166534'; // Verde (Normal)
+                let statusBg = '#f0fdf4';
+                let isCritical = false;
+                let isWarning = false;
+                let faltaParaMinimoReais = 0;
+
+                if (minima > 0 && current < minima) {
+                  statusColor = '#dc2626'; // Vermelho (Crítico)
+                  statusBg = '#fef2f2';
+                  isCritical = true;
+                  faltaParaMinimoReais = (minima - current) * d.valor;
+                } else if (ideal > 0 && current < ideal) {
+                  statusColor = '#d97706'; // Laranja (Atenção)
+                  statusBg = '#fffbeb';
+                  isWarning = true;
+                }
+                // ==============================================================================
+
+                return (
+                  <tr key={d.id}>
+                    <td style={{ fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.', ',')}</td>
+                    <td><span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: d.tipo === 'NOTA' ? '#dbeafe' : '#fef3c7', color: d.tipo === 'NOTA' ? '#1e40af' : '#b45309' }}>{d.tipo}</span></td>
+                    
+                    {/* COLUNA MÍNIMO EM REAIS */}
+                    <td style={{ textAlign: 'center' }}>
+                      {isEditingMetrics ? (
+                        <div style={{ position: 'relative', display: 'inline-block', width: '100px' }}>
+                          <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
+                          <input 
+                            type="number" step={d.valor} min="0" className="input-field" 
+                            style={{ width: '100%', textAlign: 'center', padding: '10px 8px 10px 24px', fontSize: '0.9rem' }}
+                            value={metricsEdits[d.id]?.minimaReais ?? ''} 
+                            onChange={(e) => handleMetricChange(d.id, 'minimaReais', e.target.value)}
+                          />
+                        </div>
+                      ) : (
+                        <span style={{ fontWeight: 'bold', color: '#b45309' }}>R$ {(minima * d.valor).toFixed(2).replace('.', ',')}</span>
+                      )}
+                    </td>
+                    
+                    {/* COLUNA IDEAL EM REAIS */}
+                    <td style={{ textAlign: 'center' }}>
+                      {isEditingMetrics ? (
+                        <div style={{ position: 'relative', display: 'inline-block', width: '100px' }}>
+                          <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
+                          <input 
+                            type="number" step={d.valor} min="0" className="input-field" 
+                            style={{ width: '100%', textAlign: 'center', padding: '10px 8px 10px 24px', fontSize: '0.9rem' }}
+                            value={metricsEdits[d.id]?.idealReais ?? ''} 
+                            onChange={(e) => handleMetricChange(d.id, 'idealReais', e.target.value)}
+                          />
+                        </div>
+                      ) : (
+                        <span style={{ fontWeight: 'bold', color: '#0369a1' }}>R$ {(ideal * d.valor).toFixed(2).replace('.', ',')}</span>
+                      )}
+                    </td>
+                    
+                    {/* COLUNA DE UNIDADES COM STATUS DE CORES E INFORMAÇÃO DA FALTA FINANCEIRA */}
+                    <td style={{ textAlign: 'center', backgroundColor: statusBg }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: statusColor }}>
+                          {isCritical && <AlertTriangle size={16} title="Abaixo do Mínimo!" />}
+                          {isWarning && <Info size={16} title="Abaixo do Ideal" />}
+                          <span style={{ fontSize: '1.1rem', fontWeight: '900' }}>{current} un.</span>
+                        </div>
+                        {isCritical && (
+                          <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#dc2626', backgroundColor: '#fef2f2', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
+                            Falta R$ {faltaParaMinimoReais.toFixed(2).replace('.', ',')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    
+                    <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--color-text-main)' }}>
+                      R$ {(current * d.valor).toFixed(2).replace('.', ',')}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {/* MODAL DE SOBRA DE CAIXA */}
+      {/* MODAL DE SOBRA DE CAIXA (CONTINUA EM UNIDADES) */}
       <Modal isOpen={isSobraModalOpen} onClose={() => setIsSobraModalOpen(false)} title="Registrar Sobra de Caixa">
         <form onSubmit={handleSalvarSobra} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem' }}>
             <AlertTriangle size={18} style={{ display: 'inline', marginBottom: '-4px', marginRight: '6px' }}/>
-            <strong>Atenção:</strong> Os valores preenchidos abaixo serão <b>SOMADOS</b> ao cofre central e registrados como <b>ENTRADA</b> na auditoria. Preencha apenas a quantidade de notas/moedas excedentes encontradas.
+            <strong>Atenção:</strong> Os valores preenchidos abaixo serão <b>SOMADOS</b> ao cofre central. Preencha a quantidade em <b>unidades</b> de cada nota/moeda encontrada.
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Operador Responsável</label>
               <select className="input-field" value={sobraOperador} onChange={(e) => setSobraOperador(e.target.value)} required>
-                <option value="">Selecione o Operador...</option>
+                <option value="">Selecione...</option>
                 <option value="Caixa Jô">Caixa Jô</option>
                 <option value="Caixa Bruna">Caixa Bruna</option>
                 <option value="Caixa Ana">Caixa Ana</option>
@@ -281,7 +361,7 @@ export const NotesCoinsManagement = () => {
             <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Observação (Opcional)</label>
             <input 
               type="text" className="input-field" style={{ width: '100%' }}
-              placeholder="Descreva o motivo desta sobra (ex: cliente não esperou o troco)"
+              placeholder="Descreva o motivo desta sobra"
               value={sobraObs} onChange={(e) => setSobraObs(e.target.value)}
             />
           </div>
@@ -293,13 +373,13 @@ export const NotesCoinsManagement = () => {
         </form>
       </Modal>
 
-      {/* MODAL DE AJUSTE DE SALDO (Restaurado) */}
+      {/* MODAL DE AJUSTE DE SALDO (AGORA EM REAIS) */}
       <Modal isOpen={isAjusteModalOpen} onClose={() => setIsAjusteModalOpen(false)} title="Ajuste de Saldo">
         <form onSubmit={handleSalvarAjuste} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem' }}>
             <AlertTriangle size={18} style={{ display: 'inline', marginBottom: '-4px', marginRight: '6px' }}/>
-            Modifique a quantidade atual de cada nota/moeda para refletir a realidade. Isso gerará um registro de entrada ou saída no histórico.
+            Modifique o total financeiro (R$) de cada nota para refletir a realidade do cofre. 
           </div>
 
           <div>
@@ -313,14 +393,17 @@ export const NotesCoinsManagement = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', maxHeight: '35vh', overflowY: 'auto', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             {denominations.map(d => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyItems: 'space-between', gap: '12px' }}>
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{d.tipo} R$ {d.valor.toFixed(2).replace('.', ',')}</label>
-                <input 
-                  type="number" min="0" className="input-field" 
-                  style={{ width: '80px', textAlign: 'center' }} 
-                  value={ajusteValues[d.valor] ?? ''} 
-                  onChange={(e) => handleAjusteChange(d.valor, e.target.value)}
-                />
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
+                  <input 
+                    type="number" step={d.valor} min="0" className="input-field" 
+                    style={{ width: '110px', textAlign: 'center', paddingLeft: '28px' }} 
+                    value={ajusteValues[d.valor] ?? ''} 
+                    onChange={(e) => handleAjusteChange(d.valor, e.target.value)}
+                  />
+                </div>
               </div>
             ))}
           </div>
