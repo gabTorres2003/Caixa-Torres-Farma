@@ -115,7 +115,6 @@ export const SupabaseCashRepository = {
     }
   },
 
-  // Atualiza Mínimo e Ideal em lote
   async updateMetricsBatch(metricsData) {
     const promises = metricsData.map(m =>
       supabase.from('cash_denominations')
@@ -125,11 +124,11 @@ export const SupabaseCashRepository = {
     await Promise.all(promises);
   },
 
-  // Injeta quantidades avulsas de Sobra e registra como Entrada
-  async registerSobraCaixa(storeId, userId, unidadesExtras, observacao) {
+  async registerSobraCaixa(storeId, userId, unidadesExtras, observacao, operador, dataReferente) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     let totalSobra = 0;
-    const detalhamento = { notas: {}, moedas: {}, observacao };
+    
+    const detalhamento = { notas: {}, moedas: {}, observacao, operador, data_referente: dataReferente };
 
     for (const stock of currentStocks) {
       const extra = unidadesExtras[stock.valor];
@@ -151,7 +150,8 @@ export const SupabaseCashRepository = {
         created_by: userId,
         tipo_movimento: 'ENTRADA',
         valor_total: totalSobra,
-        origem: 'Sobra de Caixa (Gaveta/Rua)',
+        // Customiza a origem para mostrar rápido no relatório
+        origem: `Sobra de Caixa${operador ? ` (${operador})` : ''}`,
         destino: 'Cofre Central',
         detalhamento
       }]);

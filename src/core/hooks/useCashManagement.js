@@ -51,16 +51,16 @@ export const useCashManagement = (user) => {
       await SupabaseCashRepository.adjustBalance(storeId, user.id, newQuantities, manualOriginDest, observation);
       await carregarEstoque();
       alert("Ajuste de saldo registrado com sucesso na auditoria!");
+      return true;
     } catch (error) {
       console.error("Erro no ajuste:", error);
       alert("Erro ao realizar ajuste: " + error.message);
-      throw error;
+      return false;
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  // Salva apenas as edições das colunas de Mínimo e Ideal
   const updateMetrics = async (metricsData) => {
     setIsActionLoading(true)
     try {
@@ -77,11 +77,10 @@ export const useCashManagement = (user) => {
     }
   }
 
-  // Registra as unidades inseridas no modal de Sobra de Caixa
-  const registrarSobraCaixa = async (unidadesExtras, observacao) => {
+  const registrarSobraCaixa = async (unidadesExtras, observacao, operador, dataReferente) => {
     setIsActionLoading(true)
     try {
-      await SupabaseCashRepository.registerSobraCaixa(storeId, user.id, unidadesExtras, observacao)
+      await SupabaseCashRepository.registerSobraCaixa(storeId, user.id, unidadesExtras, observacao, operador, dataReferente)
       await carregarEstoque()
       alert('Sobra de caixa registrada com sucesso no cofre!')
       return true
