@@ -229,24 +229,24 @@ export const NotesCoinsManagement = () => {
                 let isWarning = false;
                 let faltaUnidades = 0;
                 let faltaReais = 0;
-                let labelFalta = '';
 
+                // A referência de quanto falta será SEMPRE o Ideal
+                if (ideal > 0 && current < ideal) {
+                  faltaUnidades = ideal - current;
+                  faltaReais = faltaUnidades * d.valor;
+                }
+
+                // A definição da cor e gravidade respeita o Mínimo
                 if (minima > 0 && current < minima) {
                   statusColor = '#dc2626'; // Vermelho (Crítico)
                   statusBg = '#fef2f2';
                   statusBorder = '#fca5a5';
                   isCritical = true;
-                  faltaUnidades = minima - current;
-                  faltaReais = faltaUnidades * d.valor;
-                  labelFalta = '(Mín)';
                 } else if (ideal > 0 && current < ideal) {
                   statusColor = '#d97706'; // Laranja (Atenção)
                   statusBg = '#fffbeb';
                   statusBorder = '#fcd34d';
                   isWarning = true;
-                  faltaUnidades = ideal - current;
-                  faltaReais = faltaUnidades * d.valor;
-                  labelFalta = '(Ideal)';
                 }
                 // ==============================================================================
 
@@ -299,7 +299,7 @@ export const NotesCoinsManagement = () => {
                         </div>
                         {(isCritical || isWarning) && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta {faltaUnidades} un. {labelFalta}
+                            Falta {faltaUnidades} un. (Ideal)
                           </span>
                         )}
                       </div>
@@ -313,7 +313,7 @@ export const NotesCoinsManagement = () => {
                         </span>
                         {(isCritical || isWarning) && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta R$ {faltaReais.toFixed(2).replace('.', ',')} {labelFalta}
+                            Falta R$ {faltaReais.toFixed(2).replace('.', ',')} (Ideal)
                           </span>
                         )}
                       </div>
