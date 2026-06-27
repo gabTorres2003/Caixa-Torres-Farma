@@ -4,13 +4,14 @@ import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info } from 'lucide-react'
+import { Table } from '../../shared/components/tables/Table'
+import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info, Clock } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
   
   const { 
-    denominations, isLoading, isActionLoading, 
+    denominations, movements, isLoading, isActionLoading, 
     carregarEstoque, updateMetrics, registrarSobraCaixa, adjustBalance
   } = useCashManagement(user)
 
@@ -148,7 +149,65 @@ export const NotesCoinsManagement = () => {
     diffSoma += (novoReais - currentReais)
   })
 
-  if (isLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando cofre...</span></div>
+  // ================= COLUNAS DA TABELA DE AUDITORIA =================
+  const movementColumns = [
+    { 
+      header: 'Data/Hora', 
+      render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) 
+    },
+    { 
+      header: 'Operador', 
+      render: (row) => row.users?.nome || 'Sistema' 
+    },
+    { 
+      header: 'Tipo', 
+      render: (row) => (
+        <span style={{ 
+          color: row.tipo_movimento === 'ENTRADA' ? '#166534' : '#991b1b',
+          fontWeight: 'bold',
+          backgroundColor: row.tipo_movimento === 'ENTRADA' ? '#dcfce7' : '#fee2e2',
+          padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem'
+        }}>
+          {row.tipo_movimento}
+        </span>
+      ) 
+    },
+    { 
+      header: 'Origem / Destino', 
+      render: (row) => (
+        <span style={{ fontSize: '0.9rem' }}>
+          {row.tipo_movimento === 'ENTRADA' ? (
+            <><strong style={{color: '#64748b'}}>De:</strong> {row.origem} <br/><strong style={{color: '#64748b'}}>Para:</strong> {row.destino}</>
+          ) : (
+            <><strong style={{color: '#64748b'}}>De:</strong> {row.origem} <br/><strong style={{color: '#64748b'}}>Para:</strong> {row.destino}</>
+          )}
+        </span>
+      )
+    },
+    { 
+      header: 'Valor Total', 
+      render: (row) => <strong style={{ color: 'var(--color-text-main)', fontSize: '1.05rem' }}>R$ {Number(row.valor_total || 0).toFixed(2).replace('.', ',')}</strong> 
+    },
+    {
+      header: 'Observações',
+      render: (row) => {
+        const obs = row.detalhamento?.observacao || 'Nenhuma observação';
+        const operadorRef = row.detalhamento?.operador ? `\nOperador: ${row.detalhamento.operador}` : '';
+        const dataRef = row.detalhamento?.data_referente ? `\nData: ${new Date(row.detalhamento.data_referente).toLocaleDateString('pt-BR')}` : '';
+        
+        return (
+          <button 
+            onClick={() => alert(`Detalhes da Movimentação:\n\n${obs}${operadorRef}${dataRef}`)}
+            style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+          >
+            <Info size={16} /> Ver
+          </button>
+        )
+      }
+    }
+  ]
+
+  if (isLoading) return <div style={{ height: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Loader2 className="animate-spin" size={32} color="var(--color-primary)" /><span>Carregando cofre...</span></div>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -340,7 +399,7 @@ export const NotesCoinsManagement = () => {
                         </div>
                         {showBadge && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta {badgeUnidades} un. {badgeLabel}
+                            Falta {badgeUnidades} un.
                           </span>
                         )}
                       </div>
@@ -354,7 +413,7 @@ export const NotesCoinsManagement = () => {
                         </span>
                         {showBadge && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta R$ {badgeReais.toFixed(2).replace('.', ',')} {badgeLabel}
+                            Falta R$ {badgeReais.toFixed(2).replace('.', ',')}
                           </span>
                         )}
                       </div>
@@ -367,7 +426,24 @@ export const NotesCoinsManagement = () => {
         </div>
       </Card>
 
-      {/* MODAL DE SOBRA DE CAIXA */}
+      {/* TABELA DE AUDITORIA (Últimas Movimentações) */}
+      <Card>
+        <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Clock size={24} color="var(--color-primary)" />
+          <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text-main)', fontWeight: 'bold', margin: 0 }}>
+            Auditoria de Movimentações (Últimos 30 registros)
+          </h2>
+        </div>
+        <div className="table-responsive-wrapper">
+          <Table 
+            columns={movementColumns} 
+            data={movements} 
+            emptyMessage="Nenhuma movimentação de cofre registrada recentemente." 
+          />
+        </div>
+      </Card>
+
+      {/* MODAL DE SOBRA DE CAIXA (EM UNIDADES) */}
       <Modal isOpen={isSobraModalOpen} onClose={() => setIsSobraModalOpen(false)} title="Registrar Sobra de Caixa">
         <form onSubmit={handleSalvarSobra} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
@@ -429,7 +505,7 @@ export const NotesCoinsManagement = () => {
         </form>
       </Modal>
 
-      {/* MODAL DE AJUSTE DE SALDO */}
+      {/* MODAL DE AJUSTE DE SALDO (EM REAIS) */}
       <Modal isOpen={isAjusteModalOpen} onClose={() => setIsAjusteModalOpen(false)} title="Ajuste de Saldo">
         <form onSubmit={handleSalvarAjuste} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
