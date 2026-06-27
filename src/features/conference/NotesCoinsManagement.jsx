@@ -149,6 +149,37 @@ export const NotesCoinsManagement = () => {
     diffSoma += (novoReais - currentReais)
   })
 
+  // ================= HELPER PARA LER O JSON DA MOVIMENTAÇÃO =================
+  const formatarValoresMovimentados = (detalhamento) => {
+    if (!detalhamento) return 'Sem detalhes físicos registrados.'
+    
+    let texto = ''
+    
+    if (detalhamento.notas && Object.keys(detalhamento.notas).length > 0) {
+      texto += 'NOTAS:\n'
+      Object.entries(detalhamento.notas).forEach(([valor, qtd]) => {
+        if (qtd !== 0) {
+          texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`
+        }
+      })
+    }
+
+    if (detalhamento.moedas && Object.keys(detalhamento.moedas).length > 0) {
+      texto += '\nMOEDAS:\n'
+      Object.entries(detalhamento.moedas).forEach(([valor, qtd]) => {
+        if (qtd !== 0) {
+          texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`
+        }
+      })
+    }
+
+    if (detalhamento.moedasValor && (!detalhamento.moedas || Object.keys(detalhamento.moedas).length === 0)) {
+      texto += `\nMOEDAS (Valor Solto): R$ ${Number(detalhamento.moedasValor).toFixed(2).replace('.', ',')}\n`
+    }
+
+    return texto === '' ? 'Nenhum valor físico detalhado.' : texto
+  }
+
   // ================= COLUNAS DA TABELA DE AUDITORIA =================
   const movementColumns = [
     { 
@@ -176,11 +207,8 @@ export const NotesCoinsManagement = () => {
       header: 'Origem / Destino', 
       render: (row) => (
         <span style={{ fontSize: '0.9rem' }}>
-          {row.tipo_movimento === 'ENTRADA' ? (
-            <><strong style={{color: '#64748b'}}>De:</strong> {row.origem} <br/><strong style={{color: '#64748b'}}>Para:</strong> {row.destino}</>
-          ) : (
-            <><strong style={{color: '#64748b'}}>De:</strong> {row.origem} <br/><strong style={{color: '#64748b'}}>Para:</strong> {row.destino}</>
-          )}
+          <strong style={{color: '#64748b'}}>De:</strong> {row.origem} <br/>
+          <strong style={{color: '#64748b'}}>Para:</strong> {row.destino}
         </span>
       )
     },
@@ -189,18 +217,19 @@ export const NotesCoinsManagement = () => {
       render: (row) => <strong style={{ color: 'var(--color-text-main)', fontSize: '1.05rem' }}>R$ {Number(row.valor_total || 0).toFixed(2).replace('.', ',')}</strong> 
     },
     {
-      header: 'Observações',
+      header: 'Valores e Observações',
       render: (row) => {
-        const obs = row.detalhamento?.observacao || 'Nenhuma observação';
-        const operadorRef = row.detalhamento?.operador ? `\nOperador: ${row.detalhamento.operador}` : '';
-        const dataRef = row.detalhamento?.data_referente ? `\nData: ${new Date(row.detalhamento.data_referente).toLocaleDateString('pt-BR')}` : '';
-        
+        const obs = row.detalhamento?.observacao ? `\nOBSERVAÇÃO:\n"${row.detalhamento.observacao}"` : '';
+        const operadorRef = row.detalhamento?.operador ? `\n\nOperador de Caixa: ${row.detalhamento.operador}` : '';
+        const dataRef = row.detalhamento?.data_referente ? `\nData Ref.: ${new Date(row.detalhamento.data_referente).toLocaleDateString('pt-BR')}` : '';
+        const detalhamentoValores = formatarValoresMovimentados(row.detalhamento);
+
         return (
           <button 
-            onClick={() => alert(`Detalhes da Movimentação:\n\n${obs}${operadorRef}${dataRef}`)}
-            style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+            onClick={() => alert(`=== DETALHES DA MOVIMENTAÇÃO ===\n\n${detalhamentoValores}${obs}${operadorRef}${dataRef}`)}
+            style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
           >
-            <Info size={16} /> Ver
+            <Info size={16} /> Ver Valores
           </button>
         )
       }
@@ -399,7 +428,7 @@ export const NotesCoinsManagement = () => {
                         </div>
                         {showBadge && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta {badgeUnidades} un.
+                            Falta {badgeUnidades} un. {badgeLabel}
                           </span>
                         )}
                       </div>
@@ -413,7 +442,7 @@ export const NotesCoinsManagement = () => {
                         </span>
                         {showBadge && (
                           <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: statusColor, backgroundColor: '#ffffff', padding: '2px 8px', borderRadius: '4px', border: `1px solid ${statusBorder}` }}>
-                            Falta R$ {badgeReais.toFixed(2).replace('.', ',')}
+                            Falta R$ {badgeReais.toFixed(2).replace('.', ',')} {badgeLabel}
                           </span>
                         )}
                       </div>
