@@ -31,7 +31,6 @@ export const useDeposits = (user, dataFiltro) => {
       if (editingId) {
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
-        // CORREÇÃO: Aceita qualquer variação de "Cofre" ou "Troco"
         const isOrigemCofre = payload.origem?.includes('Troco') || payload.origem?.includes('Cofre');
 
         if (payload.categoria === 'Troca (Caixa de Troco)') {
@@ -40,6 +39,10 @@ export const useDeposits = (user, dataFiltro) => {
         } 
         else if (payload.categoria === 'Moedas (Crédito)') {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca.moedas);
+        }
+        // NOVA REGRA: Sangria de Moedas
+        else if (payload.categoria === 'Sangria de Moedas') {
+          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payload.valor, 'Sangria do Caixa Atual', payload.detalhes_troca.moedas);
         }
         else if (payload.categoria === 'Moedas (Troca Externa)' && isOrigemCofre) {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, 0, payload.valor, `Troca de Moedas (${payload.destino})`);
@@ -85,13 +88,6 @@ export const useDeposits = (user, dataFiltro) => {
       }
       else if (payloadEntrada.detalhes_troca && payloadEntrada.detalhes_troca.moedas && isOrigemCofre) {
         await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, payloadEntrada.detalhes_troca.moedas);
-      }
-      // ADIÇÃO AQUI: Garante que "Sangria do Caixa Atual" também injeta moedas no cofre
-      else if (registroOriginal?.categoria === 'Moedas (Troca Externa)' && 
-               (registroOriginal?.origem === 'Caixa Atual' || registroOriginal?.origem === 'Sangria do Caixa Atual') && 
-               registroOriginal?.detalhes_troca?.moedasSangria) {
-         const valorSangria = Object.entries(registroOriginal.detalhes_troca.moedasSangria).reduce((acc, [v, q]) => acc + (Number(v)*q), 0);
-         await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, valorSangria, `Sangria de Moedas (Troca Externa)`, registroOriginal.detalhes_troca.moedasSangria);
       }
 
       await carregarDepositos()

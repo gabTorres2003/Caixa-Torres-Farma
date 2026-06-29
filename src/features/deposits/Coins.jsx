@@ -7,7 +7,7 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Coins as CoinsIcon, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2, ArrowRightCircle, Info } from 'lucide-react'
+import { Coins as CoinsIcon, Plus, Loader2, CheckCircle, Calendar, Trash2, ArrowRightCircle, ArrowDownCircle, Info } from 'lucide-react'
 
 const formatRecebedor = (raw) => {
   if (!raw) return 'Operador';
@@ -32,6 +32,7 @@ const formatarValoresMovimentados = (detalhamento) => {
     Object.entries(detalhamento.moedas).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
   }
 
+  // Mantido por retrocompatibilidade com registros antigos
   if (detalhamento.moedasSangria && Object.keys(detalhamento.moedasSangria).length > 0) {
     texto += '\nMOEDAS (SANGRIA DEPOSITADA NO COFRE):\n';
     Object.entries(detalhamento.moedasSangria).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
@@ -49,15 +50,19 @@ export const Coins = () => {
 
   const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca } = useDeposits(user, dataFiltro)
 
+  // Modais de Criação
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [tipoMoeda, setTipoMoeda] = useState('CREDITO') 
   
-  const [moedasCredito, setMoedasCredito] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
-  const [notasSaida, setNotasSaida] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+  // Modal de Sangria Isolada
+  const [isSangriaModalOpen, setIsSangriaModalOpen] = useState(false)
   const [moedasSangria, setMoedasSangria] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
   
-  const [fazerSangria, setFazerSangria] = useState(false)
+  // Valores do formulário base
+  const [moedasCredito, setMoedasCredito] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
+  const [notasSaida, setNotasSaida] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
 
+  // Modal de Recebimento
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
   const [moedasRec, setMoedasRec] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
@@ -67,7 +72,7 @@ export const Coins = () => {
 
   useEffect(() => { carregarDepositos() }, [carregarDepositos])
 
-  const moedasList = depositsList.filter(d => d.categoria?.startsWith('Moedas'))
+  const moedasList = depositsList.filter(d => d.categoria?.startsWith('Moedas') || d.categoria === 'Sangria de Moedas')
 
   const handleMoedaCreditoChange = (moeda, valor) => { setMoedasCredito(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
   const handleNotaSaidaChange = (nota, valor) => { setNotasSaida(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
@@ -96,17 +101,39 @@ export const Coins = () => {
 
   const fecharModal = () => {
     setIsModalOpen(false)
+    setIsSangriaModalOpen(false)
     setMoedasCredito({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
     setNotasSaida({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
     setMoedasSangria({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
-    setFazerSangria(false)
     reset({ valor: '', origem: '', destino: '' })
     setTipoMoeda('CREDITO')
   }
 
+  // Submit da Sangria Independente
+  const onSubmitSangria = async (e) => {
+    e.preventDefault()
+    if (totalSangria <= 0) return alert("Informe os valores das moedas.")
+
+    const payload = {
+      valor: totalSangria, value: totalSangria,
+      categoria: 'Sangria de Moedas',
+      origem: 'Caixa Atual', origin: 'Caixa Atual',
+      destino: 'Cofre Central',
+      status_troca: 'CONCLUIDA',
+      responsavel_nome: user?.nome || 'Operador',
+      detalhes_troca: { moedas: converterReaisParaQtd(moedasSangria) }
+    }
+
+    try {
+      await salvarDeposito(payload)
+      fecharModal()
+      alert("Sangria registrada e moedas depositadas com sucesso no Cofre Central!")
+    } catch (e) {}
+  }
+
+  // Submit das Trocas Originais
   const onSubmitCreate = async (data) => {
     const valorFinal = tipoMoeda === 'CREDITO' ? totalCredito : (origemSelecionada === 'Caixa de Troco' ? totalNotasSaida : parseFloat(data.valor))
-
     if (valorFinal <= 0) return alert("Informe os valores.")
 
     const payload = {
@@ -122,20 +149,13 @@ export const Coins = () => {
 
     if (tipoMoeda === 'CREDITO') {
       payload.detalhes_troca.moedas = converterReaisParaQtd(moedasCredito)
-    } else if (tipoMoeda === 'EXTERNA') {
-      if (data.origem === 'Caixa de Troco') payload.detalhes_troca.notas = converterReaisParaQtd(notasSaida)
-      // Ajustado para reconhecer a nova origem "Sangria do Caixa Atual"
-      if ((data.origem === 'Caixa Atual' || data.origem === 'Sangria do Caixa Atual') && fazerSangria) {
-        payload.detalhes_troca.moedasSangria = converterReaisParaQtd(moedasSangria)
-      }
+    } else if (tipoMoeda === 'EXTERNA' && data.origem === 'Caixa de Troco') {
+      payload.detalhes_troca.notas = converterReaisParaQtd(notasSaida)
     }
 
     try {
       await salvarDeposito(payload)
       fecharModal()
-      if (tipoMoeda === 'EXTERNA' && (data.origem === 'Caixa Atual' || data.origem === 'Sangria do Caixa Atual') && fazerSangria) {
-        alert("Não esqueça de registrar a sangria do total guardado no DNA.")
-      }
     } catch (e) {}
   }
 
@@ -170,12 +190,22 @@ export const Coins = () => {
 
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
-    { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Moedas (Crédito)' ? '#16a34a' : '#d97706' }}>{row.categoria === 'Moedas (Crédito)' ? 'Crédito' : 'Troca Externa'}</span> },
-    { header: 'Destino/Origem', render: (row) => row.categoria === 'Moedas (Crédito)' ? 'Caixa de Troco ➔ Caixa' : <span style={{fontSize: '0.8rem'}}><b>{row.origem}</b> ➔ {row.destino}</span> },
+    { header: 'Tipo', render: (row) => {
+        if (row.categoria === 'Moedas (Crédito)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>Crédito</span>;
+        if (row.categoria === 'Sangria de Moedas') return <span style={{ color: '#6366f1', fontWeight: 'bold' }}>Sangria</span>;
+        return <span style={{ color: '#d97706', fontWeight: 'bold' }}>Troca Externa</span>;
+      }
+    },
+    { header: 'Destino/Origem', render: (row) => {
+        if (row.categoria === 'Moedas (Crédito)') return <span style={{fontSize: '0.85rem'}}><b>Caixa de Troco</b> ➔ Caixa</span>;
+        if (row.categoria === 'Sangria de Moedas') return <span style={{fontSize: '0.85rem'}}><b>Caixa Atual</b> ➔ Cofre Central</span>;
+        return <span style={{fontSize: '0.85rem'}}><b>{row.origem}</b> ➔ {row.destino}</span>;
+      }
+    },
     { header: 'Valor', render: (row) => <strong style={{ color: '#0f172a' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
     { header: 'Status', render: (row) => {
-        if (row.categoria === 'Moedas (Crédito)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
-        if (row.status_troca === 'PENDENTE') return <span style={{ color: '#d97706', fontWeight: 'bold' }}>⏳ Pendente</span>
+        if (row.categoria === 'Moedas (Crédito)' || row.categoria === 'Sangria de Moedas') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
+        if (row.status_troca === 'PENDENTE') return <span style={{ color: '#dc2626', fontWeight: 'bold', backgroundColor: '#fef2f2', padding: '4px 8px', borderRadius: '4px', border: '1px solid #fca5a5' }}>Pendente</span>
         return <span style={{ color: '#16a34a', fontWeight: 'bold', display: 'flex', flexDirection: 'column' }}>✓ Recebido <span style={{fontSize: '0.7rem', color: '#64748b'}}>por {formatRecebedor(row.recebido_por)}</span></span>
       }
     },
@@ -194,7 +224,10 @@ export const Coins = () => {
                 Confirmar
               </Button>
             )}
-            {user.role === 'ADMIN' && <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>}
+            
+            {user.role === 'ADMIN' && isPendente && (
+              <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Estornar/Apagar"><Trash2 size={18} /></button>
+            )}
           </div>
         )
       }
@@ -220,7 +253,10 @@ export const Coins = () => {
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Trocas Moedas</h1>
           <p style={{ color: 'var(--color-text-muted)' }}>Controle de créditos em caixa ou busca de moedas em rua.</p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Novo Registro</Button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={() => setIsSangriaModalOpen(true)} icon={ArrowDownCircle} style={{ borderColor: '#6366f1', color: '#6366f1' }}>Sangria de Moedas</Button>
+          <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Novo Registro</Button>
+        </div>
       </div>
 
       <Card icon={CoinsIcon} title={user.role === 'ADMIN' ? "Auditoria de Trocas Moedas" : "Movimentações de Trocas Moedas do Turno"}>
@@ -282,12 +318,10 @@ export const Coins = () => {
                     <option value="Caixa de Troco">Caixa de Troco</option>
                     <option value="Sangria de Depósito">Sangria Depósito</option>
                     <option value="Caixa Atual">Caixa Atual</option>
-                    {/* ADIÇÃO AQUI: Sangria do Caixa Atual */}
-                    <option value="Sangria do Caixa Atual">Sangria do Caixa Atual</option>
                   </select>
                 </div>
                 <div className="input-wrapper">
-                  <label htmlFor="destino" className="input-label">Destino (Rua/Banco/Pessoa)</label>
+                  <label htmlFor="destino" className="input-label">Destino (Rua/Banco)</label>
                   <input type="text" id="destino" className="input-field" style={{ width: '100%' }} {...register('destino', { required: 'Obrigatório' })} placeholder="Ex: Baixinho" />
                 </div>
               </div>
@@ -312,35 +346,8 @@ export const Coins = () => {
                 </div>
               )}
 
-              {(origemSelecionada === 'Sangria de Depósito' || origemSelecionada === 'Caixa Atual' || origemSelecionada === 'Sangria do Caixa Atual') && (
+              {(origemSelecionada === 'Sangria de Depósito' || origemSelecionada === 'Caixa Atual') && (
                 <FormInput label="Valor a ser Trocado (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: 1 })} error={errors.valor} />
-              )}
-
-              {(origemSelecionada === 'Caixa Atual' || origemSelecionada === 'Sangria do Caixa Atual') && (
-                <div style={{ backgroundColor: '#fffbeb', padding: '12px', borderRadius: '8px', border: '1px solid #fde68a', marginTop: '12px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', color: '#92400e', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={fazerSangria} onChange={e => setFazerSangria(e.target.checked)} style={{ width: '18px', height: '18px' }} />
-                    Fazer sangria para guardar as moedas no Cofre?
-                  </label>
-                  
-                  {fazerSangria && (
-                    <div className="notes-container" style={{ marginTop: '12px' }}>
-                      <label className="input-label">Informe os valores (R$) em moedas que ficarão no cofre:</label>
-                      <div className="notes-grid">
-                        {[1, 0.50, 0.25, 0.10, 0.05].map(moeda => (
-                          <div key={moeda} className="note-item">
-                            <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>¢ {moeda.toFixed(2)}</label>
-                            <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasSangria[moeda] || ''} onChange={(e) => handleMoedaSangriaChange(moeda, e.target.value)} placeholder="0,00" />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="total-wrapper">
-                        <span style={{ fontWeight: 'bold' }}>Total Guardado:</span>
-                        <span style={{ fontSize: '1.1rem', fontWeight: '900' }}>R$ {totalSangria.toFixed(2).replace('.', ',')}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
               )}
             </>
           )}
@@ -352,7 +359,39 @@ export const Coins = () => {
         </form>
       </Modal>
 
-      {/* MODAL 2: RECEBIMENTO DA TROCA EXTERNA DE MOEDAS */}
+      {/* MODAL NOVO: SANGRIA DE MOEDAS */}
+      <Modal isOpen={isSangriaModalOpen} onClose={fecharModal} title="Sangria de Moedas (Caixa ➔ Cofre)">
+        <form onSubmit={onSubmitSangria} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ backgroundColor: '#eef2ff', padding: '16px', borderRadius: '8px', border: '1px solid #c7d2fe', color: '#312e81', fontSize: '0.85rem' }}>
+            Transfira as moedas excedentes do seu <b>Caixa Atual</b> diretamente para o <b>Cofre Central</b> de forma rápida.
+          </div>
+
+          <div className="notes-container">
+            <label className="input-label" style={{ color: '#4338ca', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ArrowDownCircle size={16}/> Informe os valores (R$) em moedas que serão enviadas:
+            </label>
+            <div className="notes-grid" style={{ backgroundColor: '#eef2ff', borderColor: '#c7d2fe' }}>
+              {[1, 0.50, 0.25, 0.10, 0.05].map(moeda => (
+                <div key={moeda} className="note-item">
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Moedas de ¢ {moeda.toFixed(2)}</label>
+                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasSangria[moeda] || ''} onChange={(e) => handleMoedaSangriaChange(moeda, e.target.value)} placeholder="0,00" />
+                </div>
+              ))}
+            </div>
+            <div className="total-wrapper" style={{ backgroundColor: '#c7d2fe' }}>
+              <span style={{ fontWeight: 'bold', color: '#312e81' }}>Total a Enviar:</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#312e81' }}>R$ {totalSangria.toFixed(2).replace('.', ',')}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <Button type="button" variant="secondary" onClick={fecharModal} style={{ width: '100%', justifyContent: 'center' }}>Cancelar</Button>
+            <Button type="submit" isLoading={isActionLoading} style={{ width: '100%', justifyContent: 'center', backgroundColor: '#4f46e5', border: 'none' }}>Registrar Sangria</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODAL 3: RECEBIMENTO DA TROCA EXTERNA DE MOEDAS */}
       <Modal isOpen={isReceiveModalOpen} onClose={() => setIsReceiveModalOpen(false)} title="Confirmar Retorno de Moedas">
         <form onSubmit={onSubmitReceive} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
           
@@ -381,7 +420,6 @@ export const Coins = () => {
             <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', color: '#334155' }}>
               Esta troca foi originada no seu <b>{receivingTroca?.origem}</b>.<br/><br/>
               Confirma o recebimento físico total em moedas? 
-              {receivingTroca?.detalhes_troca?.moedasSangria && <b> As moedas marcadas como Sangria serão automaticamente inseridas no Cofre Central.</b>}
             </div>
           )}
 
