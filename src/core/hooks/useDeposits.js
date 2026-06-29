@@ -31,22 +31,19 @@ export const useDeposits = (user, dataFiltro) => {
       if (editingId) {
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
+        // CORREÇÃO: Aceita qualquer variação de "Cofre" ou "Troco"
         const isOrigemCofre = payload.origem?.includes('Troco') || payload.origem?.includes('Cofre');
 
-        // Regra: Troca Interna Comum
         if (payload.categoria === 'Troca (Caixa de Troco)') {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, payload.detalhes_troca.moedasValor, payload.valor, 'Gaveta do Operador (Troca Interna)');
           await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, payload.detalhes_troca.notasEntrada, payload.detalhes_troca.moedasValorEntrada, payload.valor, 'Gaveta do Operador (Troca Interna)');
         } 
-        // Regra: Crédito no Caixa (Pegar moedas do cofre)
         else if (payload.categoria === 'Moedas (Crédito)') {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca.moedas);
         }
-        // Regra: Troca Externa de Moedas (Saindo do cofre)
         else if (payload.categoria === 'Moedas (Troca Externa)' && isOrigemCofre) {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, 0, payload.valor, `Troca de Moedas (${payload.destino})`);
         }
-        // Regra Antiga Mantida: Depósitos ou Trocas Externas Comuns
         else if (isOrigemCofre && payload.categoria !== 'Moedas (Troca Externa)') {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, payload.detalhes_troca.moedasValor, payload.valor, payload.categoria === 'Depósito' ? 'Depósito Bancário' : `Troca Externa (${payload.destino})`);
         }
@@ -83,16 +80,16 @@ export const useDeposits = (user, dataFiltro) => {
 
       const isOrigemCofre = registroOriginal?.origem?.includes('Troco') || registroOriginal?.origem?.includes('Cofre');
 
-      // Retorno de Troca Externa Comum
       if (payloadEntrada.detalhes_troca && payloadEntrada.detalhes_troca.notas && registroOriginal.categoria !== 'Moedas (Troca Externa)') {
         await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, payloadEntrada.detalhes_troca.notas, payloadEntrada.detalhes_troca.moedasValor, payloadEntrada.valor_recebido, `Retorno de Troca Externa (${registroOriginal?.origem || 'Rua'})`);
       }
-      // Retorno de Moedas (Troca Externa saindo do Cofre)
       else if (payloadEntrada.detalhes_troca && payloadEntrada.detalhes_troca.moedas && isOrigemCofre) {
         await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, payloadEntrada.detalhes_troca.moedas);
       }
-      // Efetiva a Sangria de Moedas de uma Troca Externa originada no Caixa Atual
-      else if (registroOriginal?.categoria === 'Moedas (Troca Externa)' && registroOriginal?.origem === 'Caixa Atual' && registroOriginal?.detalhes_troca?.moedasSangria) {
+      // ADIÇÃO AQUI: Garante que "Sangria do Caixa Atual" também injeta moedas no cofre
+      else if (registroOriginal?.categoria === 'Moedas (Troca Externa)' && 
+               (registroOriginal?.origem === 'Caixa Atual' || registroOriginal?.origem === 'Sangria do Caixa Atual') && 
+               registroOriginal?.detalhes_troca?.moedasSangria) {
          const valorSangria = Object.entries(registroOriginal.detalhes_troca.moedasSangria).reduce((acc, [v, q]) => acc + (Number(v)*q), 0);
          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, valorSangria, `Sangria de Moedas (Troca Externa)`, registroOriginal.detalhes_troca.moedasSangria);
       }

@@ -38,15 +38,12 @@ export const Exchanges = () => {
   const [editingId, setEditingId] = useState(null)
   const [tipoTroca, setTipoTroca] = useState('INTERNA')
 
-  // Valores R$ da SAÍDA (O que tira do cofre)
   const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
   const [moedasValor, setMoedasValor] = useState('')
 
-  // Valores R$ da ENTRADA (O que coloca no cofre - Exclusivo para Troca Interna)
   const [notasIn, setNotasIn] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
   const [moedasValorIn, setMoedasValorIn] = useState('')
 
-  // Valores R$ do RECEBIMENTO (Retorno de Troca Externa)
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
   const [notasRec, setNotasRec] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
@@ -59,7 +56,6 @@ export const Exchanges = () => {
 
   const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
 
-  // --- CÁLCULOS AUTOMÁTICOS BASEADOS NOS VALORES (R$) ---
   const handleNotaChange = (nota, valor) => { setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleNotaInChange = (nota, valor) => { setNotasIn(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
@@ -78,7 +74,6 @@ export const Exchanges = () => {
   const somaRecebimento = Object.values(notasRec).reduce((acc, val) => acc + val, 0) + Number(moedasValorRec || 0)
   const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
 
-  // Conversor: Pega o Valor em R$ e descobre quantas notas são para o banco de dados
   const converterValoresParaQuantidades = (notasEmReais) => {
     const qtds = {};
     Object.entries(notasEmReais).forEach(([notaFace, valorTotal]) => {
@@ -87,7 +82,6 @@ export const Exchanges = () => {
     return qtds;
   }
 
-  // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
     alert("Trocas que envolvem notas do cofre não podem ser editadas, pois o dinheiro já foi retirado/adicionado fisicamente. Exclua e crie novamente se houver erro.")
   }
@@ -176,7 +170,6 @@ export const Exchanges = () => {
     setIsReceiveModalOpen(false)
   }
 
-  // --- IMPRESSÃO ---
   const imprimirComprovante = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
@@ -304,13 +297,13 @@ export const Exchanges = () => {
 
       <div className="troca-header">
         <div>
-          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Trocas</h1>
+          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Trocas Dinheiro</h1>
           <p style={{ color: 'var(--color-text-muted)' }}>Controle de troca de dinheiro interno (Cofre) ou externo (Bancos).</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Nova Troca</Button>
       </div>
 
-      <Card icon={ArrowLeftRight} title={user.role === 'ADMIN' ? 'Auditoria de Trocas' : 'Trocas do Turno'}>
+      <Card icon={ArrowLeftRight} title={user.role === 'ADMIN' ? 'Auditoria de Trocas Dinheiro' : 'Trocas Dinheiro do Turno'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
           {user.role === 'ADMIN' && (
             <>

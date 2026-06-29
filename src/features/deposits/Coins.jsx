@@ -7,7 +7,7 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Coins as CoinsIcon, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2, ArrowRightCircle } from 'lucide-react'
+import { Coins as CoinsIcon, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2, ArrowRightCircle, Info } from 'lucide-react'
 
 const formatRecebedor = (raw) => {
   if (!raw) return 'Operador';
@@ -15,6 +15,29 @@ const formatRecebedor = (raw) => {
     try { return JSON.parse(raw).recebido_por || 'Operador'; } catch (e) { return raw; }
   }
   return raw;
+};
+
+// HELPER PARA FORMATAR OS DETALHES DE VALORES (JSON)
+const formatarValoresMovimentados = (detalhamento) => {
+  if (!detalhamento) return 'Sem detalhes físicos registrados.';
+  let texto = '';
+  
+  if (detalhamento.notas && Object.keys(detalhamento.notas).length > 0) {
+    texto += 'NOTAS:\n';
+    Object.entries(detalhamento.notas).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
+  }
+
+  if (detalhamento.moedas && Object.keys(detalhamento.moedas).length > 0) {
+    texto += '\nMOEDAS:\n';
+    Object.entries(detalhamento.moedas).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
+  }
+
+  if (detalhamento.moedasSangria && Object.keys(detalhamento.moedasSangria).length > 0) {
+    texto += '\nMOEDAS (SANGRIA DEPOSITADA NO COFRE):\n';
+    Object.entries(detalhamento.moedasSangria).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
+  }
+
+  return texto === '' ? 'Nenhum valor físico detalhado.' : texto;
 };
 
 export const Coins = () => {
@@ -27,16 +50,14 @@ export const Coins = () => {
   const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca } = useDeposits(user, dataFiltro)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [tipoMoeda, setTipoMoeda] = useState('CREDITO') // CREDITO ou EXTERNA
+  const [tipoMoeda, setTipoMoeda] = useState('CREDITO') 
   
-  // Estados para as quantidades em R$
   const [moedasCredito, setMoedasCredito] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
   const [notasSaida, setNotasSaida] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
   const [moedasSangria, setMoedasSangria] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
   
   const [fazerSangria, setFazerSangria] = useState(false)
 
-  // Recebimento
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
   const [moedasRec, setMoedasRec] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
@@ -48,7 +69,6 @@ export const Coins = () => {
 
   const moedasList = depositsList.filter(d => d.categoria?.startsWith('Moedas'))
 
-  // Cálculos Automáticos
   const handleMoedaCreditoChange = (moeda, valor) => { setMoedasCredito(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
   const handleNotaSaidaChange = (nota, valor) => { setNotasSaida(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleMoedaSangriaChange = (moeda, valor) => { setMoedasSangria(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
@@ -104,13 +124,16 @@ export const Coins = () => {
       payload.detalhes_troca.moedas = converterReaisParaQtd(moedasCredito)
     } else if (tipoMoeda === 'EXTERNA') {
       if (data.origem === 'Caixa de Troco') payload.detalhes_troca.notas = converterReaisParaQtd(notasSaida)
-      if (data.origem === 'Caixa Atual' && fazerSangria) payload.detalhes_troca.moedasSangria = converterReaisParaQtd(moedasSangria)
+      // Ajustado para reconhecer a nova origem "Sangria do Caixa Atual"
+      if ((data.origem === 'Caixa Atual' || data.origem === 'Sangria do Caixa Atual') && fazerSangria) {
+        payload.detalhes_troca.moedasSangria = converterReaisParaQtd(moedasSangria)
+      }
     }
 
     try {
       await salvarDeposito(payload)
       fecharModal()
-      if (tipoMoeda === 'EXTERNA' && data.origem === 'Caixa Atual' && fazerSangria) {
+      if (tipoMoeda === 'EXTERNA' && (data.origem === 'Caixa Atual' || data.origem === 'Sangria do Caixa Atual') && fazerSangria) {
         alert("Não esqueça de registrar a sangria do total guardado no DNA.")
       }
     } catch (e) {}
@@ -124,8 +147,6 @@ export const Coins = () => {
 
   const onSubmitReceive = async (e) => {
     e.preventDefault()
-    
-    // Se a origem foi "Caixa Atual" com Sangria de Moedas, ele apenas confirma. Se foi Caixa de Troco, ele digita.
     if (receivingTroca?.origem === 'Caixa de Troco' && !isMatchRecebimento) return alert("Os valores não batem.")
 
     const payloadRecebimento = {
@@ -141,6 +162,12 @@ export const Coins = () => {
     setIsReceiveModalOpen(false)
   }
 
+  const handleDelete = (id) => {
+    if(window.confirm('Tem certeza que deseja excluir esta movimentação?')) {
+      excluirDeposito(id);
+    }
+  }
+
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
     { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Moedas (Crédito)' ? '#16a34a' : '#d97706' }}>{row.categoria === 'Moedas (Crédito)' ? 'Crédito' : 'Troca Externa'}</span> },
@@ -152,16 +179,25 @@ export const Coins = () => {
         return <span style={{ color: '#16a34a', fontWeight: 'bold', display: 'flex', flexDirection: 'column' }}>✓ Recebido <span style={{fontSize: '0.7rem', color: '#64748b'}}>por {formatRecebedor(row.recebido_por)}</span></span>
       }
     },
-    { header: 'Ações', render: (row) => (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {row.status_troca === 'PENDENTE' && (
-            <Button onClick={() => handleOpenReceive(row)} icon={CheckCircle} style={{ padding: '6px 10px', fontSize: '0.75rem', height: 'auto', backgroundColor: '#d97706', border: 'none' }}>
-              Confirmar
-            </Button>
-          )}
-          {user.role === 'ADMIN' && <button onClick={() => excluirDeposito(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>}
-        </div>
-      )
+    { header: 'Ações', render: (row) => {
+        const isPendente = row.status_troca === 'PENDENTE' || row.status === 'PENDENTE';
+        const detalhesFormatados = formatarValoresMovimentados(row.detalhes_troca);
+
+        return (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={() => alert(`=== DETALHES DE VALORES FÍSICOS ===\n\n${detalhesFormatados}`)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', fontSize: '0.8rem' }}>
+              <Info size={16} /> Ver
+            </button>
+
+            {isPendente && (
+              <Button onClick={() => handleOpenReceive(row)} icon={CheckCircle} style={{ padding: '6px 10px', fontSize: '0.75rem', height: 'auto', backgroundColor: '#d97706', border: 'none' }}>
+                Confirmar
+              </Button>
+            )}
+            {user.role === 'ADMIN' && <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>}
+          </div>
+        )
+      }
     },
   ]
 
@@ -181,13 +217,13 @@ export const Coins = () => {
 
       <div className="moeda-header">
         <div>
-          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Moedas</h1>
+          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Trocas Moedas</h1>
           <p style={{ color: 'var(--color-text-muted)' }}>Controle de créditos em caixa ou busca de moedas em rua.</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} icon={Plus}>Novo Registro</Button>
       </div>
 
-      <Card icon={CoinsIcon} title={user.role === 'ADMIN' ? "Auditoria de Moedas" : "Movimentações de Moedas do Turno"}>
+      <Card icon={CoinsIcon} title={user.role === 'ADMIN' ? "Auditoria de Trocas Moedas" : "Movimentações de Trocas Moedas do Turno"}>
         {user.role === 'ADMIN' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
             <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -246,6 +282,8 @@ export const Coins = () => {
                     <option value="Caixa de Troco">Caixa de Troco</option>
                     <option value="Sangria de Depósito">Sangria Depósito</option>
                     <option value="Caixa Atual">Caixa Atual</option>
+                    {/* ADIÇÃO AQUI: Sangria do Caixa Atual */}
+                    <option value="Sangria do Caixa Atual">Sangria do Caixa Atual</option>
                   </select>
                 </div>
                 <div className="input-wrapper">
@@ -274,11 +312,11 @@ export const Coins = () => {
                 </div>
               )}
 
-              {(origemSelecionada === 'Sangria de Depósito' || origemSelecionada === 'Caixa Atual') && (
+              {(origemSelecionada === 'Sangria de Depósito' || origemSelecionada === 'Caixa Atual' || origemSelecionada === 'Sangria do Caixa Atual') && (
                 <FormInput label="Valor a ser Trocado (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: 1 })} error={errors.valor} />
               )}
 
-              {origemSelecionada === 'Caixa Atual' && (
+              {(origemSelecionada === 'Caixa Atual' || origemSelecionada === 'Sangria do Caixa Atual') && (
                 <div style={{ backgroundColor: '#fffbeb', padding: '12px', borderRadius: '8px', border: '1px solid #fde68a', marginTop: '12px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', color: '#92400e', cursor: 'pointer' }}>
                     <input type="checkbox" checked={fazerSangria} onChange={e => setFazerSangria(e.target.checked)} style={{ width: '18px', height: '18px' }} />
