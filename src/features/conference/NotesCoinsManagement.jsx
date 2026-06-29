@@ -1,36 +1,31 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useAuth } from '../../core/hooks/useAuth'
 import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Modal } from '../../shared/components/modals/Modal'
 import { Table } from '../../shared/components/tables/Table'
-import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info, Clock, ArrowDownCircle, Briefcase } from 'lucide-react'
+import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info, Clock, ArrowDownCircle, Briefcase, Calendar, Undo2 } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
   
   const { 
-    denominations, movements, isLoading, isActionLoading, 
-    carregarEstoque, updateMetrics, registrarSobraCaixa, adjustBalance, adicionarValoresManualmente, prepararBolsas
+    denominations, movements, isLoading, isActionLoading, auditDate, setAuditDate,
+    carregarEstoque, updateMetrics, registrarSobraCaixa, adjustBalance, adicionarValoresManualmente, prepararBolsas, reverterMovimentacao
   } = useCashManagement(user)
-
-  useEffect(() => {
-    carregarEstoque()
-  }, [carregarEstoque])
 
   // ================= ESTADOS =================
   const [isEditingMetrics, setIsEditingMetrics] = useState(false)
   const [metricsEdits, setMetricsEdits] = useState({})
   const [missingView, setMissingView] = useState('NONE')
 
-  // Estados: Preparar Bolsas (NOVO/RECUPERADO)
+  // Estados: Preparar Bolsas
   const [isBolsasModalOpen, setIsBolsasModalOpen] = useState(false)
   const [qtdBolsas, setQtdBolsas] = useState(1)
-  // Receita de bolo base exigida: R$ 400 em notas, R$ 30 em moedas
   const [bolsaTemplate, setBolsaTemplate] = useState({
-    20: 5, 10: 10, 5: 20, 2: 50, // 400 em Notas
-    1: 10, 0.5: 20, 0.25: 20, 0.1: 30, 0.05: 40 // 30 em Moedas
+    20: 5, 10: 10, 5: 20, 2: 50,
+    1: 10, 0.5: 20, 0.25: 20, 0.1: 30, 0.05: 40
   })
 
   // Estados: Sobra de Caixa
@@ -79,8 +74,7 @@ export const NotesCoinsManagement = () => {
   // ================= FUNÇÕES DE PREPARAR BOLSAS =================
   const handleTemplateChange = (valorFace, val) => setBolsaTemplate(prev => ({ ...prev, [valorFace]: parseInt(val) || 0 }))
 
-  let hasBolsaError = false;
-  let totalBolsaRetirada = 0;
+  let hasBolsaError = false; let totalBolsaRetirada = 0;
   const impactList = denominations.map(d => {
     const needed = (bolsaTemplate[d.valor] || 0) * qtdBolsas;
     const stock = d.quantidade_atual || 0;
@@ -148,6 +142,13 @@ export const NotesCoinsManagement = () => {
     if (success) setIsAjusteModalOpen(false)
   }
 
+  // ================= FUNÇÃO DE ESTORNO =================
+  const handleRevert = async (mov) => {
+    if (window.confirm(`Tem certeza que deseja reverter esta operação de R$ ${mov.valor_total.toFixed(2)}?\n\nOs valores físicos serão devolvidos/removidos do cofre.`)) {
+      await reverterMovimentacao(mov.id)
+    }
+  }
+
   // ================= CÁLCULOS GERAIS =================
   const totalCofre = denominations.reduce((acc, curr) => acc + ((curr.quantidade_atual || 0) * curr.valor), 0)
   const totalNotas = denominations.filter(d => d.tipo === 'NOTA').reduce((acc, curr) => acc + ((curr.quantidade_atual || 0) * curr.valor), 0)
@@ -183,12 +184,29 @@ export const NotesCoinsManagement = () => {
     { header: 'Tipo', render: (row) => (<span style={{ color: row.tipo_movimento === 'ENTRADA' ? '#166534' : '#991b1b', fontWeight: 'bold', backgroundColor: row.tipo_movimento === 'ENTRADA' ? '#dcfce7' : '#fee2e2', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem' }}>{row.tipo_movimento}</span>) },
     { header: 'Origem / Destino', render: (row) => (<span style={{ fontSize: '0.9rem' }}><strong style={{color: '#64748b'}}>De:</strong> {row.origem} <br/><strong style={{color: '#64748b'}}>Para:</strong> {row.destino}</span>) },
     { header: 'Valor Total', render: (row) => <strong style={{ color: 'var(--color-text-main)', fontSize: '1.05rem' }}>R$ {Number(row.valor_total || 0).toFixed(2).replace('.', ',')}</strong> },
-    { header: 'Valores e Observações', render: (row) => {
+    { header: 'Observações e Ações', render: (row) => {
         const obs = row.detalhamento?.observacao ? `\nOBSERVAÇÃO:\n"${row.detalhamento.observacao}"` : '';
         const operadorRef = row.detalhamento?.operador ? `\n\nOperador de Caixa: ${row.detalhamento.operador}` : '';
         const dataRef = row.detalhamento?.data_referente ? `\nData Ref.: ${new Date(row.detalhamento.data_referente).toLocaleDateString('pt-BR')}` : '';
         const detalhamentoValores = formatarValoresMovimentados(row.detalhamento);
-        return (<button onClick={() => alert(`=== DETALHES DA MOVIMENTAÇÃO ===\n\n${detalhamentoValores}${obs}${operadorRef}${dataRef}`)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}><Info size={16} /> Ver Valores</button>)
+        
+        // Regras visuais para permitir estorno
+        const isRevertible = row.tipo_movimento !== 'CONTAGEM_INICIAL' && !row.origem?.includes('ESTORNO') && !row.destino?.includes('ESTORNO');
+
+        return (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button onClick={() => alert(`=== DETALHES DA MOVIMENTAÇÃO ===\n\n${detalhamentoValores}${obs}${operadorRef}${dataRef}`)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}><Info size={16} /> Ver</button>
+            {isRevertible && (
+              <button 
+                onClick={() => handleRevert(row)} 
+                title="Desfazer e Estornar Valores"
+                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+              >
+                <Undo2 size={16} /> Desfazer
+              </button>
+            )}
+          </div>
+        )
       }
     }
   ]
@@ -239,7 +257,6 @@ export const NotesCoinsManagement = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--color-border)' }}>
           <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text-main)', fontWeight: 'bold' }}>Inventário Atual</h2>
           
-          {/* SEPARAÇÃO DE NOTAS E MOEDAS NO CABEÇALHO */}
           <div style={{ textAlign: 'right' }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 'bold', textTransform: 'uppercase' }}>Total Financeiro (Cofre)</span>
             <div style={{ fontSize: '2.2rem', fontWeight: '900', color: 'var(--color-primary)', lineHeight: '1' }}>
@@ -318,16 +335,28 @@ export const NotesCoinsManagement = () => {
         </div>
       </Card>
 
-      {/* TABELA DE AUDITORIA */}
+      {/* TABELA DE AUDITORIA COM FILTRO DE DATA */}
       <Card>
-        <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Clock size={24} color="var(--color-primary)" />
-          <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text-main)', fontWeight: 'bold', margin: 0 }}>
-            Auditoria de Movimentações (Últimos 30 registros)
-          </h2>
+        <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Clock size={24} color="var(--color-primary)" />
+            <h2 style={{ fontSize: '1.25rem', color: 'var(--color-text-main)', fontWeight: 'bold', margin: 0 }}>
+              Auditoria de Movimentações
+            </h2>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Calendar size={18} color="var(--color-primary)"/> Filtrar do dia:
+            </label>
+            <input 
+              type="date" className="input-field" 
+              style={{ padding: '6px 12px', fontSize: '0.9rem', cursor: 'pointer' }} 
+              value={auditDate} onChange={(e) => setAuditDate(e.target.value)} 
+            />
+          </div>
         </div>
         <div className="table-responsive-wrapper">
-          <Table columns={movementColumns} data={movements} emptyMessage="Nenhuma movimentação de cofre registrada recentemente." />
+          <Table columns={movementColumns} data={movements} emptyMessage="Nenhuma movimentação de cofre registrada para este dia." />
         </div>
       </Card>
 
@@ -344,8 +373,6 @@ export const NotesCoinsManagement = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            
-            {/* Lado Esquerdo: Edição do Template */}
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', backgroundColor: '#f8fafc' }}>
                <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: 'var(--color-text-main)' }}>Composição de 1 Bolsa</h3>
                <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -353,20 +380,13 @@ export const NotesCoinsManagement = () => {
                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.',',')}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <input
-                          type="number" min="0" className="input-field"
-                          style={{ width: '60px', padding: '4px', textAlign: 'center', height: '30px' }}
-                          value={bolsaTemplate[d.valor] ?? ''}
-                          onChange={(e) => handleTemplateChange(d.valor, e.target.value)}
-                        />
+                        <input type="number" min="0" className="input-field" style={{ width: '60px', padding: '4px', textAlign: 'center', height: '30px' }} value={bolsaTemplate[d.valor] ?? ''} onChange={(e) => handleTemplateChange(d.valor, e.target.value)} />
                         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>un.</span>
                       </div>
                    </div>
                  ))}
                </div>
             </div>
-
-            {/* Lado Direito: Impacto no Cofre */}
             <div style={{ border: `1px solid ${hasBolsaError ? '#fca5a5' : '#86efac'}`, borderRadius: '8px', padding: '12px', backgroundColor: hasBolsaError ? '#fef2f2' : '#f0fdf4' }}>
                <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: hasBolsaError ? '#dc2626' : '#166534' }}>Retirada do Cofre</h3>
                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.8rem', maxHeight: '35vh', overflowY: 'auto' }}>
