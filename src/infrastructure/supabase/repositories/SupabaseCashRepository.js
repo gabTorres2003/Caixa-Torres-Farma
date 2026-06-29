@@ -124,16 +124,17 @@ export const SupabaseCashRepository = {
     await Promise.all(promises);
   },
 
-  async registerSobraCaixa(storeId, userId, unidadesExtras, observacao, operador, dataReferente) {
+  // FUNÇÃO GENÉRICA DE ENTRADA (Sobra e Adição Manual)
+  async registerManualInflow(storeId, userId, unidadesExtras, origemStr, observacao, operador, dataReferente) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
-    let totalSobra = 0;
+    let totalInflow = 0;
     
     const detalhamento = { notas: {}, moedas: {}, observacao, operador, data_referente: dataReferente };
 
     for (const stock of currentStocks) {
       const extra = unidadesExtras[stock.valor];
       if (extra && extra > 0) {
-        totalSobra += (extra * stock.valor);
+        totalInflow += (extra * stock.valor);
         
         if (stock.tipo === 'NOTA') detalhamento.notas[stock.valor] = extra;
         else detalhamento.moedas[stock.valor] = extra;
@@ -144,14 +145,13 @@ export const SupabaseCashRepository = {
       }
     }
 
-    if (totalSobra > 0) {
+    if (totalInflow > 0) {
       await supabase.from('cash_movements').insert([{
         store_id: storeId,
         created_by: userId,
         tipo_movimento: 'ENTRADA',
-        valor_total: totalSobra,
-        // Customiza a origem para mostrar rápido no relatório
-        origem: `Sobra de Caixa${operador ? ` (${operador})` : ''}`,
+        valor_total: totalInflow,
+        origem: operador ? `${origemStr} (${operador})` : origemStr,
         destino: 'Cofre Central',
         detalhamento
       }]);

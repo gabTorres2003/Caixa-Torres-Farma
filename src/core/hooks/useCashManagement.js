@@ -80,7 +80,7 @@ export const useCashManagement = (user) => {
   const registrarSobraCaixa = async (unidadesExtras, observacao, operador, dataReferente) => {
     setIsActionLoading(true)
     try {
-      await SupabaseCashRepository.registerSobraCaixa(storeId, user.id, unidadesExtras, observacao, operador, dataReferente)
+      await SupabaseCashRepository.registerManualInflow(storeId, user.id, unidadesExtras, 'Sobra de Caixa', observacao, operador, dataReferente)
       await carregarEstoque()
       alert('Sobra de caixa registrada com sucesso no cofre!')
       return true
@@ -93,8 +93,24 @@ export const useCashManagement = (user) => {
     }
   }
 
+  const adicionarValoresManualmente = async (unidadesExtras, origem, observacao, operador, dataReferente) => {
+    setIsActionLoading(true)
+    try {
+      await SupabaseCashRepository.registerManualInflow(storeId, user.id, unidadesExtras, origem, observacao, operador, dataReferente)
+      await carregarEstoque()
+      alert('Valores adicionados com sucesso no cofre!')
+      return true
+    } catch (error) {
+      console.error(error)
+      alert('Erro ao adicionar valores: ' + error.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   return {
     denominations, lastConference, movements, isLoading, isActionLoading,
-    carregarEstoque, adjustBalance, updateMetrics, registrarSobraCaixa
+    carregarEstoque, adjustBalance, updateMetrics, registrarSobraCaixa, adicionarValoresManualmente
   }
 }
