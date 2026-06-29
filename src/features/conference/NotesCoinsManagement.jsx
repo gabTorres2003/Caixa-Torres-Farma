@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../core/hooks/useAuth'
 import { useCashManagement } from '../../core/hooks/useCashManagement'
 import { Card } from '../../shared/components/cards/Card'
@@ -23,19 +23,20 @@ export const NotesCoinsManagement = () => {
   // Estados: Preparar Bolsas
   const [isBolsasModalOpen, setIsBolsasModalOpen] = useState(false)
   const [qtdBolsas, setQtdBolsas] = useState(1)
+  // Receita de bolo inicial convertida em REAIS (R$)
   const [bolsaTemplate, setBolsaTemplate] = useState({
-    20: 5, 10: 10, 5: 20, 2: 50,
-    1: 10, 0.5: 20, 0.25: 20, 0.1: 30, 0.05: 40
+    20: 100, 10: 100, 5: 100, 2: 100,
+    1: 10, 0.5: 10, 0.25: 5, 0.1: 3, 0.05: 2
   })
 
-  // Estados: Sobra de Caixa
+  // Estados: Sobra de Caixa (Valores em Reais)
   const [isSobraModalOpen, setIsSobraModalOpen] = useState(false)
   const [sobraValues, setSobraValues] = useState({})
   const [sobraObs, setSobraObs] = useState('')
   const [sobraOperador, setSobraOperador] = useState('') 
   const [sobraData, setSobraData] = useState(() => new Date().toISOString().split('T')[0]) 
 
-  // Estados: Adicionar Valores Manualmente
+  // Estados: Adicionar Valores Manualmente (Valores em Reais)
   const [isAdicionarModalOpen, setIsAdicionarModalOpen] = useState(false)
   const [adicionarValues, setAdicionarValues] = useState({})
   const [adicionarOrigem, setAdicionarOrigem] = useState('')
@@ -43,7 +44,7 @@ export const NotesCoinsManagement = () => {
   const [adicionarOperador, setAdicionarOperador] = useState('') 
   const [adicionarData, setAdicionarData] = useState(() => new Date().toISOString().split('T')[0]) 
 
-  // Estados: Ajuste de Saldo
+  // Estados: Ajuste de Saldo (Valores em Reais)
   const [isAjusteModalOpen, setIsAjusteModalOpen] = useState(false)
   const [ajusteValues, setAjusteValues] = useState({})
   const [ajusteOrigem, setAjusteOrigem] = useState('')
@@ -72,17 +73,20 @@ export const NotesCoinsManagement = () => {
   }
 
   // ================= FUNÇÕES DE PREPARAR BOLSAS =================
-  const handleTemplateChange = (valorFace, val) => setBolsaTemplate(prev => ({ ...prev, [valorFace]: parseInt(val) || 0 }))
+  const handleTemplateChange = (valorFace, val) => setBolsaTemplate(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
 
   let hasBolsaError = false; let totalBolsaRetirada = 0;
   const impactList = denominations.map(d => {
-    const needed = (bolsaTemplate[d.valor] || 0) * qtdBolsas;
-    const stock = d.quantidade_atual || 0;
-    const isInsufficient = needed > stock;
+    const neededReais = (bolsaTemplate[d.valor] || 0) * qtdBolsas;
+    const neededUnits = Math.round(neededReais / d.valor);
+    const stockUnits = d.quantidade_atual || 0;
+    
+    const isInsufficient = neededUnits > stockUnits;
     if (isInsufficient) hasBolsaError = true;
-    totalBolsaRetirada += (needed * d.valor);
-    return { valor: d.valor, tipo: d.tipo, needed, stock, isInsufficient };
-  }).filter(item => item.needed > 0);
+    totalBolsaRetirada += (neededUnits * d.valor);
+    
+    return { valor: d.valor, tipo: d.tipo, neededUnits, neededReais, stockUnits, isInsufficient };
+  }).filter(item => item.neededUnits > 0);
 
   const handleSalvarBolsas = async (e) => {
     e.preventDefault();
@@ -90,8 +94,8 @@ export const NotesCoinsManagement = () => {
     
     const notas = {}; const moedas = {}; let moedasValorTotal = 0;
     impactList.forEach(item => {
-      if (item.tipo === 'NOTA') notas[item.valor] = item.needed;
-      else { moedas[item.valor] = item.needed; moedasValorTotal += (item.needed * item.valor); }
+      if (item.tipo === 'NOTA') notas[item.valor] = item.neededUnits;
+      else { moedas[item.valor] = item.neededUnits; moedasValorTotal += (item.neededUnits * item.valor); }
     });
 
     const success = await prepararBolsas(notas, moedas, moedasValorTotal, totalBolsaRetirada, qtdBolsas);
@@ -99,26 +103,36 @@ export const NotesCoinsManagement = () => {
   }
 
   // ================= FUNÇÕES DE SOBRA DE CAIXA =================
-  const handleSobraChange = (valorFace, qtd) => setSobraValues(prev => ({ ...prev, [valorFace]: parseInt(qtd) || 0 }))
+  const handleSobraChange = (valorFace, val) => setSobraValues(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
 
   const handleSalvarSobra = async (e) => {
     e.preventDefault()
     if (!sobraOperador) return alert("Por favor, selecione o operador referente ao caixa.")
     if (!Object.values(sobraValues).some(v => v > 0)) return alert("Preencha ao menos uma nota ou moeda.")
 
-    const success = await registrarSobraCaixa(sobraValues, sobraObs, sobraOperador, sobraData)
+    const unidadesSobra = {}
+    denominations.forEach(d => {
+      if (sobraValues[d.valor] > 0) unidadesSobra[d.valor] = Math.round(sobraValues[d.valor] / d.valor)
+    })
+
+    const success = await registrarSobraCaixa(unidadesSobra, sobraObs, sobraOperador, sobraData)
     if (success) { setIsSobraModalOpen(false); setSobraValues({}); setSobraObs(''); setSobraOperador('') }
   }
 
   // ================= FUNÇÕES DE ADIÇÃO MANUAL =================
-  const handleAdicionarChange = (valorFace, qtd) => setAdicionarValues(prev => ({ ...prev, [valorFace]: parseInt(qtd) || 0 }))
+  const handleAdicionarChange = (valorFace, val) => setAdicionarValues(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
 
   const handleSalvarAdicao = async (e) => {
     e.preventDefault()
     if (!adicionarOrigem) return alert("Por favor, informe a origem dos valores.")
     if (!Object.values(adicionarValues).some(v => v > 0)) return alert("Preencha ao menos uma nota ou moeda.")
 
-    const success = await adicionarValoresManualmente(adicionarValues, adicionarOrigem, adicionarObs, adicionarOperador, adicionarData)
+    const unidadesAdicao = {}
+    denominations.forEach(d => {
+      if (adicionarValues[d.valor] > 0) unidadesAdicao[d.valor] = Math.round(adicionarValues[d.valor] / d.valor)
+    })
+
+    const success = await adicionarValoresManualmente(unidadesAdicao, adicionarOrigem, adicionarObs, adicionarOperador, adicionarData)
     if (success) { setIsAdicionarModalOpen(false); setAdicionarValues({}); setAdicionarObs(''); setAdicionarOrigem(''); setAdicionarOperador('') }
   }
 
@@ -136,7 +150,9 @@ export const NotesCoinsManagement = () => {
     if (!ajusteOrigem) return alert("A origem/destino do ajuste é obrigatória.")
 
     const unidadesAjustadas = {}
-    denominations.forEach(d => { if (ajusteValues[d.valor] !== undefined) unidadesAjustadas[d.valor] = Math.round(ajusteValues[d.valor] / d.valor) })
+    denominations.forEach(d => { 
+      if (ajusteValues[d.valor] !== undefined) unidadesAjustadas[d.valor] = Math.round(ajusteValues[d.valor] / d.valor) 
+    })
 
     const success = await adjustBalance(unidadesAjustadas, ajusteOrigem, ajusteObs)
     if (success) setIsAjusteModalOpen(false)
@@ -154,8 +170,8 @@ export const NotesCoinsManagement = () => {
   const totalNotas = denominations.filter(d => d.tipo === 'NOTA').reduce((acc, curr) => acc + ((curr.quantidade_atual || 0) * curr.valor), 0)
   const totalMoedas = denominations.filter(d => d.tipo === 'MOEDA').reduce((acc, curr) => acc + ((curr.quantidade_atual || 0) * curr.valor), 0)
   
-  const totalSobraReais = denominations.reduce((acc, curr) => acc + ((sobraValues[curr.valor] || 0) * curr.valor), 0)
-  const totalAdicaoReais = denominations.reduce((acc, curr) => acc + ((adicionarValues[curr.valor] || 0) * curr.valor), 0)
+  const totalSobraReais = Object.values(sobraValues).reduce((acc, curr) => acc + curr, 0)
+  const totalAdicaoReais = Object.values(adicionarValues).reduce((acc, curr) => acc + curr, 0)
   
   let diffSoma = 0
   denominations.forEach(d => { diffSoma += (ajusteValues[d.valor] ?? ((d.quantidade_atual || 0) * d.valor)) - ((d.quantidade_atual || 0) * d.valor) })
@@ -189,21 +205,13 @@ export const NotesCoinsManagement = () => {
         const operadorRef = row.detalhamento?.operador ? `\n\nOperador de Caixa: ${row.detalhamento.operador}` : '';
         const dataRef = row.detalhamento?.data_referente ? `\nData Ref.: ${new Date(row.detalhamento.data_referente).toLocaleDateString('pt-BR')}` : '';
         const detalhamentoValores = formatarValoresMovimentados(row.detalhamento);
-        
-        // Regras visuais para permitir estorno
         const isRevertible = row.tipo_movimento !== 'CONTAGEM_INICIAL' && !row.origem?.includes('ESTORNO') && !row.destino?.includes('ESTORNO');
 
         return (
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button onClick={() => alert(`=== DETALHES DA MOVIMENTAÇÃO ===\n\n${detalhamentoValores}${obs}${operadorRef}${dataRef}`)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}><Info size={16} /> Ver</button>
             {isRevertible && (
-              <button 
-                onClick={() => handleRevert(row)} 
-                title="Desfazer e Estornar Valores"
-                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
-              >
-                <Undo2 size={16} /> Desfazer
-              </button>
+              <button onClick={() => handleRevert(row)} title="Desfazer e Estornar Valores" style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}><Undo2 size={16} /> Desfazer</button>
             )}
           </div>
         )
@@ -216,40 +224,41 @@ export const NotesCoinsManagement = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* CABEÇALHO COM BOTÕES DE AÇÃO */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Notas e Moedas</h1>
-          <p style={{ color: 'var(--color-text-muted)' }}>Controle de estoque do cofre principal e definição de metas.</p>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          
-          <Button variant="primary" onClick={() => setIsBolsasModalOpen(true)} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none' }}>
-            Preparar Bolsas
-          </Button>
+      {/* CABEÇALHO */}
+      <div>
+        <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Notas e Moedas</h1>
+        <p style={{ color: 'var(--color-text-muted)' }}>Controle de estoque do cofre principal e definição de metas.</p>
+      </div>
 
-          <Button variant="secondary" onClick={() => setIsAdicionarModalOpen(true)} icon={ArrowDownCircle}>
-            Adicionar Valores Manualmente
-          </Button>
+      {/* BOTÕES DE AÇÃO: Alinhados Lado a Lado Horizontalmente */}
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', paddingBottom: '8px' }}>
+        
+        <Button variant="primary" onClick={() => setIsBolsasModalOpen(true)} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none', width: 'auto' }}>
+          Preparar Bolsas
+        </Button>
 
-          <Button variant="secondary" onClick={() => setIsSobraModalOpen(true)} icon={PlusCircle}>
-            Sobra de Caixa
-          </Button>
+        <Button variant="secondary" onClick={() => setIsAdicionarModalOpen(true)} icon={ArrowDownCircle} style={{ width: 'auto' }}>
+          Adicionar Valores Manualmente
+        </Button>
 
-          <Button variant="secondary" onClick={openAjusteModal} icon={Settings2}>
-            Ajuste de Saldo
-          </Button>
+        <Button variant="secondary" onClick={() => setIsSobraModalOpen(true)} icon={PlusCircle} style={{ width: 'auto' }}>
+          Sobra de Caixa
+        </Button>
 
-          {isEditingMetrics ? (
-            <Button onClick={handleSaveMetrics} isLoading={isActionLoading} icon={Save} style={{ backgroundColor: '#16a34a', color: 'white', border: 'none' }}>
-              Salvar Métricas
-            </Button>
-          ) : (
-            <Button variant="secondary" onClick={handleEditToggle} icon={Edit}>
-              Editar Métricas
-            </Button>
-          )}
-        </div>
+        <Button variant="secondary" onClick={openAjusteModal} icon={Settings2} style={{ width: 'auto' }}>
+          Ajuste de Saldo
+        </Button>
+
+        {isEditingMetrics ? (
+          <Button onClick={handleSaveMetrics} isLoading={isActionLoading} icon={Save} style={{ backgroundColor: '#16a34a', color: 'white', border: 'none', width: 'auto' }}>
+            Salvar Métricas
+          </Button>
+        ) : (
+          <Button variant="secondary" onClick={handleEditToggle} icon={Edit} style={{ width: 'auto' }}>
+            Editar Métricas
+          </Button>
+        )}
+
       </div>
 
       {/* TABELA DE COFRE */}
@@ -272,24 +281,13 @@ export const NotesCoinsManagement = () => {
         {/* CONTROLES DE VISUALIZAÇÃO */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: 'bold' }}>
-              <div style={{ width: 14, height: 14, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '50%' }}></div> Abaixo do Mínimo (Crítico)
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: 'bold' }}>
-              <div style={{ width: 14, height: 14, backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '50%' }}></div> Abaixo do Ideal (Atenção)
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 'bold' }}>
-              <div style={{ width: 14, height: 14, backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '50%' }}></div> Acima ou no Ideal (OK)
-            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: 'bold' }}><div style={{ width: 14, height: 14, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '50%' }}></div> Abaixo do Mínimo (Crítico)</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#b45309', fontWeight: 'bold' }}><div style={{ width: 14, height: 14, backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '50%' }}></div> Abaixo do Ideal (Atenção)</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', fontWeight: 'bold' }}><div style={{ width: 14, height: 14, backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '50%' }}></div> Acima ou no Ideal (OK)</span>
           </div>
-
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => setMissingView(prev => prev === 'MINIMUM' ? 'NONE' : 'MINIMUM')} style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', border: missingView === 'MINIMUM' ? '1px solid #dc2626' : '1px solid var(--color-border)', backgroundColor: missingView === 'MINIMUM' ? '#fef2f2' : 'var(--color-surface)', color: missingView === 'MINIMUM' ? '#dc2626' : 'var(--color-text-muted)' }}>
-              Falta para o Mínimo
-            </button>
-            <button onClick={() => setMissingView(prev => prev === 'IDEAL' ? 'NONE' : 'IDEAL')} style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', border: missingView === 'IDEAL' ? '1px solid #0369a1' : '1px solid var(--color-border)', backgroundColor: missingView === 'IDEAL' ? '#e0f2fe' : 'var(--color-surface)', color: missingView === 'IDEAL' ? '#0369a1' : 'var(--color-text-muted)' }}>
-              Falta para o Ideal
-            </button>
+            <button onClick={() => setMissingView(prev => prev === 'MINIMUM' ? 'NONE' : 'MINIMUM')} style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', border: missingView === 'MINIMUM' ? '1px solid #dc2626' : '1px solid var(--color-border)', backgroundColor: missingView === 'MINIMUM' ? '#fef2f2' : 'var(--color-surface)', color: missingView === 'MINIMUM' ? '#dc2626' : 'var(--color-text-muted)' }}>Falta para o Mínimo</button>
+            <button onClick={() => setMissingView(prev => prev === 'IDEAL' ? 'NONE' : 'IDEAL')} style={{ padding: '6px 12px', fontSize: '0.85rem', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s', border: missingView === 'IDEAL' ? '1px solid #0369a1' : '1px solid var(--color-border)', backgroundColor: missingView === 'IDEAL' ? '#e0f2fe' : 'var(--color-surface)', color: missingView === 'IDEAL' ? '#0369a1' : 'var(--color-text-muted)' }}>Falta para o Ideal</button>
           </div>
         </div>
 
@@ -335,7 +333,7 @@ export const NotesCoinsManagement = () => {
         </div>
       </Card>
 
-      {/* TABELA DE AUDITORIA COM FILTRO DE DATA */}
+      {/* TABELA DE AUDITORIA */}
       <Card>
         <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -374,14 +372,14 @@ export const NotesCoinsManagement = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', backgroundColor: '#f8fafc' }}>
-               <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: 'var(--color-text-main)' }}>Composição de 1 Bolsa</h3>
+               <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: 'var(--color-text-main)' }}>Composição de 1 Bolsa (Em R$)</h3>
                <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                  {denominations.map(d => (
                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.',',')}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <input type="number" min="0" className="input-field" style={{ width: '60px', padding: '4px', textAlign: 'center', height: '30px' }} value={bolsaTemplate[d.valor] ?? ''} onChange={(e) => handleTemplateChange(d.valor, e.target.value)} />
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>un.</span>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: 8, top: 10, color: '#94a3b8', fontSize: '0.8rem' }}>R$</span>
+                        <input type="number" step={d.valor} min="0" className="input-field" style={{ width: '85px', padding: '4px 4px 4px 26px', textAlign: 'center', height: '30px' }} value={bolsaTemplate[d.valor] ?? ''} onChange={(e) => handleTemplateChange(d.valor, e.target.value)} />
                       </div>
                    </div>
                  ))}
@@ -392,9 +390,9 @@ export const NotesCoinsManagement = () => {
                <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.8rem', maxHeight: '35vh', overflowY: 'auto' }}>
                   {impactList.map(item => (
                     <li key={item.valor} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px dashed ${hasBolsaError ? '#fca5a5' : '#bbf7d0'}` }}>
-                      <span>{item.needed} un. (R$ {(item.needed * item.valor).toFixed(2)})</span>
+                      <span>{item.neededUnits} un. (R$ {item.neededReais.toFixed(2)})</span>
                       <span style={{ fontWeight: 'bold', color: item.isInsufficient ? '#dc2626' : '#059669' }}>
-                         {item.isInsufficient ? `Falta ${item.needed - item.stock}` : 'OK'}
+                         {item.isInsufficient ? `Falta ${item.neededUnits - item.stockUnits}` : 'OK'}
                       </span>
                     </li>
                   ))}
@@ -420,7 +418,7 @@ export const NotesCoinsManagement = () => {
         <form onSubmit={handleSalvarAdicao} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', padding: '16px', borderRadius: '8px', color: '#166534', fontSize: '0.85rem' }}>
             <ArrowDownCircle size={18} style={{ display: 'inline', marginBottom: '-4px', marginRight: '6px' }}/>
-            Preencha a quantidade em <b>unidades</b> de cada nota/moeda que está dando <b>ENTRADA</b> no cofre central.
+            Informe o montante em <b>Reais (R$)</b> de cada nota/moeda que está dando <b>ENTRADA</b> no cofre central.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
@@ -442,7 +440,10 @@ export const NotesCoinsManagement = () => {
             {denominations.map(d => (
               <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{d.tipo} R$ {d.valor.toFixed(2).replace('.', ',')}</label>
-                <input type="number" min="0" className="input-field" style={{ width: '80px', textAlign: 'center' }} placeholder="0 un." value={adicionarValues[d.valor] || ''} onChange={(e) => handleAdicionarChange(d.valor, e.target.value)} />
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
+                  <input type="number" step={d.valor} min="0" className="input-field" style={{ width: '110px', textAlign: 'center', paddingLeft: '28px' }} value={adicionarValues[d.valor] ?? ''} onChange={(e) => handleAdicionarChange(d.valor, e.target.value)} />
+                </div>
               </div>
             ))}
           </div>
@@ -466,7 +467,7 @@ export const NotesCoinsManagement = () => {
         <form onSubmit={handleSalvarSobra} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', padding: '16px', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem' }}>
             <AlertTriangle size={18} style={{ display: 'inline', marginBottom: '-4px', marginRight: '6px' }}/>
-            <strong>Atenção:</strong> Os valores preenchidos abaixo serão <b>SOMADOS</b> ao cofre central. Preencha a quantidade em <b>unidades</b> de cada nota/moeda encontrada.
+            <strong>Atenção:</strong> Informe o montante em <b>Reais (R$)</b> de cada nota/moeda encontrada como sobra.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
@@ -488,7 +489,10 @@ export const NotesCoinsManagement = () => {
             {denominations.map(d => (
               <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{d.tipo} R$ {d.valor.toFixed(2).replace('.', ',')}</label>
-                <input type="number" min="0" className="input-field" style={{ width: '80px', textAlign: 'center' }} placeholder="0 un." value={sobraValues[d.valor] || ''} onChange={(e) => handleSobraChange(d.valor, e.target.value)} />
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 8, top: 12, color: '#94a3b8', fontSize: '0.85rem' }}>R$</span>
+                  <input type="number" step={d.valor} min="0" className="input-field" style={{ width: '110px', textAlign: 'center', paddingLeft: '28px' }} value={sobraValues[d.valor] ?? ''} onChange={(e) => handleSobraChange(d.valor, e.target.value)} />
+                </div>
               </div>
             ))}
           </div>
