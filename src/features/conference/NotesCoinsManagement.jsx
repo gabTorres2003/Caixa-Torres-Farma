@@ -5,14 +5,14 @@ import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Modal } from '../../shared/components/modals/Modal'
 import { Table } from '../../shared/components/tables/Table'
-import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info, Clock, ArrowDownCircle } from 'lucide-react'
+import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info, Clock, ArrowDownCircle, Briefcase } from 'lucide-react'
 
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
   
   const { 
     denominations, movements, isLoading, isActionLoading, 
-    carregarEstoque, updateMetrics, registrarSobraCaixa, adjustBalance, adicionarValoresManualmente
+    carregarEstoque, updateMetrics, registrarSobraCaixa, adjustBalance, adicionarValoresManualmente, prepararBolsas
   } = useCashManagement(user)
 
   useEffect(() => {
@@ -23,6 +23,15 @@ export const NotesCoinsManagement = () => {
   const [isEditingMetrics, setIsEditingMetrics] = useState(false)
   const [metricsEdits, setMetricsEdits] = useState({})
   const [missingView, setMissingView] = useState('NONE')
+
+  // Estados: Preparar Bolsas (NOVO/RECUPERADO)
+  const [isBolsasModalOpen, setIsBolsasModalOpen] = useState(false)
+  const [qtdBolsas, setQtdBolsas] = useState(1)
+  // Receita de bolo base exigida: R$ 400 em notas, R$ 30 em moedas
+  const [bolsaTemplate, setBolsaTemplate] = useState({
+    20: 5, 10: 10, 5: 20, 2: 50, // 400 em Notas
+    1: 10, 0.5: 20, 0.25: 20, 0.1: 30, 0.05: 40 // 30 em Moedas
+  })
 
   // Estados: Sobra de Caixa
   const [isSobraModalOpen, setIsSobraModalOpen] = useState(false)
@@ -57,9 +66,7 @@ export const NotesCoinsManagement = () => {
     setIsEditingMetrics(!isEditingMetrics)
   }
 
-  const handleMetricChange = (id, field, value) => {
-    setMetricsEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: parseFloat(value) || 0 } }))
-  }
+  const handleMetricChange = (id, field, value) => setMetricsEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: parseFloat(value) || 0 } }))
 
   const handleSaveMetrics = async () => {
     const payload = Object.entries(metricsEdits).map(([id, values]) => ({
@@ -67,6 +74,34 @@ export const NotesCoinsManagement = () => {
     }))
     const success = await updateMetrics(payload)
     if (success) setIsEditingMetrics(false)
+  }
+
+  // ================= FUNÇÕES DE PREPARAR BOLSAS =================
+  const handleTemplateChange = (valorFace, val) => setBolsaTemplate(prev => ({ ...prev, [valorFace]: parseInt(val) || 0 }))
+
+  let hasBolsaError = false;
+  let totalBolsaRetirada = 0;
+  const impactList = denominations.map(d => {
+    const needed = (bolsaTemplate[d.valor] || 0) * qtdBolsas;
+    const stock = d.quantidade_atual || 0;
+    const isInsufficient = needed > stock;
+    if (isInsufficient) hasBolsaError = true;
+    totalBolsaRetirada += (needed * d.valor);
+    return { valor: d.valor, tipo: d.tipo, needed, stock, isInsufficient };
+  }).filter(item => item.needed > 0);
+
+  const handleSalvarBolsas = async (e) => {
+    e.preventDefault();
+    if (hasBolsaError) return alert('Estoque insuficiente para preparar essa quantidade de bolsas.');
+    
+    const notas = {}; const moedas = {}; let moedasValorTotal = 0;
+    impactList.forEach(item => {
+      if (item.tipo === 'NOTA') notas[item.valor] = item.needed;
+      else { moedas[item.valor] = item.needed; moedasValorTotal += (item.needed * item.valor); }
+    });
+
+    const success = await prepararBolsas(notas, moedas, moedasValorTotal, totalBolsaRetirada, qtdBolsas);
+    if (success) setIsBolsasModalOpen(false);
   }
 
   // ================= FUNÇÕES DE SOBRA DE CAIXA =================
@@ -107,9 +142,7 @@ export const NotesCoinsManagement = () => {
     if (!ajusteOrigem) return alert("A origem/destino do ajuste é obrigatória.")
 
     const unidadesAjustadas = {}
-    denominations.forEach(d => {
-      if (ajusteValues[d.valor] !== undefined) unidadesAjustadas[d.valor] = Math.round(ajusteValues[d.valor] / d.valor)
-    })
+    denominations.forEach(d => { if (ajusteValues[d.valor] !== undefined) unidadesAjustadas[d.valor] = Math.round(ajusteValues[d.valor] / d.valor) })
 
     const success = await adjustBalance(unidadesAjustadas, ajusteOrigem, ajusteObs)
     if (success) setIsAjusteModalOpen(false)
@@ -173,6 +206,10 @@ export const NotesCoinsManagement = () => {
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           
+          <Button variant="primary" onClick={() => setIsBolsasModalOpen(true)} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none' }}>
+            Preparar Bolsas
+          </Button>
+
           <Button variant="secondary" onClick={() => setIsAdicionarModalOpen(true)} icon={ArrowDownCircle}>
             Adicionar Valores Manualmente
           </Button>
@@ -215,9 +252,8 @@ export const NotesCoinsManagement = () => {
           </div>
         </div>
 
-        {/* CONTROLES DE VISUALIZAÇÃO: LEGENDA E BOTÕES FALTANTES */}
+        {/* CONTROLES DE VISUALIZAÇÃO */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '16px' }}>
-          
           <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#dc2626', fontWeight: 'bold' }}>
               <div style={{ width: 14, height: 14, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '50%' }}></div> Abaixo do Mínimo (Crítico)
@@ -254,10 +290,7 @@ export const NotesCoinsManagement = () => {
             </thead>
             <tbody>
               {denominations.map(d => {
-                const current = d.quantidade_atual || 0;
-                const minima = d.quantidade_minima || 0;
-                const ideal = d.quantidade_ideal || 0;
-                
+                const current = d.quantidade_atual || 0; const minima = d.quantidade_minima || 0; const ideal = d.quantidade_ideal || 0;
                 let statusColor = '#166534'; let statusBg = '#f0fdf4'; let statusBorder = '#86efac';
                 let isCritical = false; let isWarning = false;
 
@@ -298,6 +331,70 @@ export const NotesCoinsManagement = () => {
         </div>
       </Card>
 
+      {/* MODAL: PREPARAR BOLSAS DE ABERTURA */}
+      <Modal isOpen={isBolsasModalOpen} onClose={() => setIsBolsasModalOpen(false)} title="Preparar Bolsas de Abertura">
+        <form onSubmit={handleSalvarBolsas} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', backgroundColor: '#eff6ff', padding: '16px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+            <Briefcase size={32} color="#1e40af" />
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', fontWeight: 'bold', color: '#1e3a8a', marginBottom: '4px' }}>Quantidade de Bolsas</label>
+              <input type="number" min="1" className="input-field" style={{ width: '100%', fontSize: '1.2rem', fontWeight: 'bold', color: '#1e40af' }} value={qtdBolsas} onChange={(e) => setQtdBolsas(parseInt(e.target.value) || 1)} />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            
+            {/* Lado Esquerdo: Edição do Template */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', backgroundColor: '#f8fafc' }}>
+               <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: 'var(--color-text-main)' }}>Composição de 1 Bolsa</h3>
+               <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                 {denominations.map(d => (
+                   <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.',',')}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <input
+                          type="number" min="0" className="input-field"
+                          style={{ width: '60px', padding: '4px', textAlign: 'center', height: '30px' }}
+                          value={bolsaTemplate[d.valor] ?? ''}
+                          onChange={(e) => handleTemplateChange(d.valor, e.target.value)}
+                        />
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>un.</span>
+                      </div>
+                   </div>
+                 ))}
+               </div>
+            </div>
+
+            {/* Lado Direito: Impacto no Cofre */}
+            <div style={{ border: `1px solid ${hasBolsaError ? '#fca5a5' : '#86efac'}`, borderRadius: '8px', padding: '12px', backgroundColor: hasBolsaError ? '#fef2f2' : '#f0fdf4' }}>
+               <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: hasBolsaError ? '#dc2626' : '#166534' }}>Retirada do Cofre</h3>
+               <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.8rem', maxHeight: '35vh', overflowY: 'auto' }}>
+                  {impactList.map(item => (
+                    <li key={item.valor} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px dashed ${hasBolsaError ? '#fca5a5' : '#bbf7d0'}` }}>
+                      <span>{item.needed} un. (R$ {(item.needed * item.valor).toFixed(2)})</span>
+                      <span style={{ fontWeight: 'bold', color: item.isInsufficient ? '#dc2626' : '#059669' }}>
+                         {item.isInsufficient ? `Falta ${item.needed - item.stock}` : 'OK'}
+                      </span>
+                    </li>
+                  ))}
+               </ul>
+               <div style={{ borderTop: `2px solid ${hasBolsaError ? '#fca5a5' : '#86efac'}`, marginTop: '12px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1rem', color: hasBolsaError ? '#dc2626' : '#166534' }}>
+                 <span>Total:</span>
+                 <span>R$ {totalBolsaRetirada.toFixed(2).replace('.', ',')}</span>
+               </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+            <Button type="button" variant="secondary" onClick={() => setIsBolsasModalOpen(false)}>Cancelar</Button>
+            <Button type="submit" isLoading={isActionLoading} disabled={hasBolsaError} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none' }}>
+              Confirmar Retirada
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* MODAL: ADICIONAR VALORES MANUALMENTE */}
       <Modal isOpen={isAdicionarModalOpen} onClose={() => setIsAdicionarModalOpen(false)} title="Adicionar Valores Manualmente">
         <form onSubmit={handleSalvarAdicao} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -308,7 +405,7 @@ export const NotesCoinsManagement = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div>
               <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Origem dos Valores *</label>
-              <input type="text" className="input-field" style={{ width: '100%' }} placeholder="Ex: Reforço, Sangria..." value={adicionarOrigem} onChange={(e) => setAdicionarOrigem(e.target.value)} required />
+              <input type="text" className="input-field" style={{ width: '100%' }} placeholder="Ex: Reforço, Sangria de Caixa..." value={adicionarOrigem} onChange={(e) => setAdicionarOrigem(e.target.value)} required />
             </div>
             <div>
               <label className="input-label" style={{ marginBottom: '8px', display: 'block' }}>Operador Responsável</label>

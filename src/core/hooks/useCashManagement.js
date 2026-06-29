@@ -109,8 +109,28 @@ export const useCashManagement = (user) => {
     }
   }
 
+  const prepararBolsas = async (notas, moedas, moedasValorTotal, totalValor, qtdBolsas) => {
+    setIsActionLoading(true)
+    try {
+      // Registra a saída diretamente do Cofre
+      await SupabaseCashRepository.registerOutflowFromVault(
+        storeId, user.id, notas, moedasValorTotal, totalValor,
+        `Preparação de Bolsas de Abertura (${qtdBolsas}x)`, moedas
+      )
+      await carregarEstoque()
+      alert('Bolsas preparadas e retiradas do cofre com sucesso!')
+      return true
+    } catch (error) {
+      console.error(error)
+      alert('Erro ao preparar bolsas: ' + error.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   return {
     denominations, lastConference, movements, isLoading, isActionLoading,
-    carregarEstoque, adjustBalance, updateMetrics, registrarSobraCaixa, adicionarValoresManualmente
+    carregarEstoque, adjustBalance, updateMetrics, registrarSobraCaixa, adicionarValoresManualmente, prepararBolsas
   }
 }
