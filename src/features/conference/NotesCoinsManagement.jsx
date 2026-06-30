@@ -25,7 +25,7 @@ export const NotesCoinsManagement = () => {
   const [qtdBolsas, setQtdBolsas] = useState(1)
   // Receita de bolo inicial convertida em REAIS (R$)
   const [bolsaTemplate, setBolsaTemplate] = useState({
-    20: 100, 10: 100, 5: 100, 2: 100,
+    20: 140, 10: 110, 5: 100, 2: 50,
     1: 5, 0.5: 10, 0.25: 10, 0.1: 3, 0.05: 2
   })
 
