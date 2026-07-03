@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-// CORREÇÃO: Adicionado o useNavigate aqui na importação
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../core/hooks/useAuth'
+import logoTorres from '../../assets/logo/logo-torres.png'
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -70,7 +70,7 @@ export const MainLayout = () => {
 
   const textoPerfil = user?.role === 'ADMIN' ? 'Administrador' : `Turno: ${turnoAtual}`
 
-  // 2. Menus Básicos (Agora com sublista para Movimentações)
+  // 2. Menus Básicos
   const baseMenuItems = [
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
     {
@@ -167,20 +167,28 @@ export const MainLayout = () => {
       >
         <div
           style={{
-            padding: '24px',
+            padding: '20px',
             borderBottom: '1px solid var(--color-border)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
           }}
         >
-          <div>
-            <h2 style={{ color: 'var(--color-primary)', fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>
-              Torres Farma
-            </h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
-              Operação de Caixa
-            </p>
+          {/* LOGO INSERIDA AQUI NO SIDEBAR */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img 
+              src={logoTorres} 
+              alt="Logo Torres Farma" 
+              style={{ width: '40px', height: '40px', objectFit: 'contain' }} 
+            />
+            <div>
+              <h2 style={{ color: 'var(--color-primary)', fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>
+                Torres Farma
+              </h2>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                Operação de Caixa
+              </p>
+            </div>
           </div>
           
           <button 
@@ -313,19 +321,30 @@ export const MainLayout = () => {
           <header 
             className="no-print" 
             style={{ 
-              display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 24px', 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', 
               backgroundColor: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' 
             }}
           >
-            <button 
-              onClick={() => setIsSidebarOpen(true)} 
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }}
-            >
-              <Menu size={28} />
-            </button>
-            <div>
-              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'block', lineHeight: '1' }}>Torres Farma</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Operação de Caixa</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <button 
+                onClick={() => setIsSidebarOpen(true)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }}
+              >
+                <Menu size={28} />
+              </button>
+              
+              {/* LOGO INSERIDA AQUI NO TOPO DO MOBILE TAMBÉM */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <img 
+                  src={logoTorres} 
+                  alt="Logo Torres Farma" 
+                  style={{ width: '32px', height: '32px', objectFit: 'contain' }} 
+                />
+                <div>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary)', display: 'block', lineHeight: '1' }}>Torres Farma</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Operação de Caixa</span>
+                </div>
+              </div>
             </div>
           </header>
         )}
