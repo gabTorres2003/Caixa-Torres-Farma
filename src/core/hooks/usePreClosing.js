@@ -23,23 +23,22 @@ export const usePreClosing = (dataFiltro) => {
       setPreClosings(data)
 
       const deliveries = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id, dataConsulta)
-      let d = 0, c = 0, p = 0;
-      
-      deliveries.forEach(del => {
-        const textoForma = `${del.forma_pagamento_real || ''} ${del.tipo_saida || ''} ${del.observacoes || ''} ${del.notes || ''}`.toUpperCase()
-        const formaNormalizada = textoForma.normalize('NFD').replace(/[\u0300-\u036f]/g, "")
-        
-        const valor = Number(del.valor || 0)
-        
-        if (formaNormalizada.includes('CARTAO') || formaNormalizada.includes('DEBITO') || formaNormalizada.includes('CREDITO')) {
-          c += valor
-        } else if (formaNormalizada.includes('PIX') || formaNormalizada.includes('TRANSFER')) {
-          p += valor
-        } else {
-          d += valor
-        }
-      })
-      setDeliveriesTotals({ dinheiro: d, cartao: c, pix: p })
+let d = 0, c = 0, p = 0;
+
+deliveries.forEach(del => {
+  // Pega a sigla exata que vem do banco (D, C, ou PX)
+  const formaPagamento = (del.forma_pagamento_real || del.tipo_saida || '').toUpperCase().trim();
+  const valor = Number(del.valor || 0);
+  
+  if (formaPagamento === 'C') {
+    c += valor;
+  } else if (formaPagamento === 'PX') {
+    p += valor;
+  } else {
+    d += valor;
+  }
+})
+setDeliveriesTotals({ dinheiro: d, cartao: c, pix: p })
 
     } catch (err) {
       console.error(err)
