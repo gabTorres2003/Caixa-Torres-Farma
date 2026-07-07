@@ -4,8 +4,9 @@ import { usePreClosing } from '../../core/hooks/usePreClosing'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
-import { Printer, Save, Loader2, Banknote, CreditCard, QrCode, ScrollText, Ticket, Calendar, Pencil, Trash2 } from 'lucide-react'
+import { Calculator, Printer, Save, Loader2, Banknote, CreditCard, QrCode, ScrollText, Ticket, Calendar, Pencil, Trash2 } from 'lucide-react'
 
+// Função Mágica que calcula somas: "50.50 + 20,00" = 70.50
 const evaluateMath = (val) => {
   if (!val) return 0;
   try {
@@ -17,6 +18,7 @@ const evaluateMath = (val) => {
   }
 }
 
+// Input customizado que faz a conta quando perde o foco (onBlur)
 const MathInput = ({ icon: Icon, color, label, value, onChange, onBlur }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
     <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -27,7 +29,7 @@ const MathInput = ({ icon: Icon, color, label, value, onChange, onBlur }) => (
       <input
         type="text"
         className="input-field"
-        style={{ width: '100%', paddingLeft: '34px', fontSize: '1rem', fontWeight: 'bold', color: '#334155' }}
+        style={{ width: '100%', paddingLeft: '34px', fontSize: '1rem', fontWeight: 'bold', color: '#334155', boxSizing: 'border-box' }}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
@@ -168,7 +170,7 @@ export const PreClosing = () => {
               <MathInput icon={Banknote} color="#16a34a" label="Dinheiro" value={formValues.cash_value} onChange={(v) => handleInputChange('cash_value', v)} onBlur={() => handleBlur('cash_value')} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Dinheiro</label>
-                <input type="text" className="input-field" placeholder="Anotações específicas..." value={formValues.obs_dinheiro} onChange={(e) => handleInputChange('obs_dinheiro', e.target.value)} />
+                <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_dinheiro} onChange={(e) => handleInputChange('obs_dinheiro', e.target.value)} />
               </div>
             </div>
 
@@ -177,7 +179,7 @@ export const PreClosing = () => {
               <MathInput icon={CreditCard} color="#2563eb" label="Cartão" value={formValues.card_value} onChange={(v) => handleInputChange('card_value', v)} onBlur={() => handleBlur('card_value')} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Cartão</label>
-                <input type="text" className="input-field" placeholder="Anotações específicas..." value={formValues.obs_cartao} onChange={(e) => handleInputChange('obs_cartao', e.target.value)} />
+                <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_cartao} onChange={(e) => handleInputChange('obs_cartao', e.target.value)} />
               </div>
             </div>
 
@@ -186,7 +188,7 @@ export const PreClosing = () => {
               <MathInput icon={QrCode} color="#0d9488" label="Pix (QR Code / Transferência)" value={formValues.pix_value} onChange={(v) => handleInputChange('pix_value', v)} onBlur={() => handleBlur('pix_value')} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Pix</label>
-                <input type="text" className="input-field" placeholder="Anotações específicas..." value={formValues.obs_pix} onChange={(e) => handleInputChange('obs_pix', e.target.value)} />
+                <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_pix} onChange={(e) => handleInputChange('obs_pix', e.target.value)} />
               </div>
             </div>
 
@@ -195,7 +197,7 @@ export const PreClosing = () => {
               <MathInput icon={ScrollText} color="#d97706" label="Cheques" value={formValues.check_value} onChange={(v) => handleInputChange('check_value', v)} onBlur={() => handleBlur('check_value')} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Cheques</label>
-                <input type="text" className="input-field" placeholder="Anotações específicas..." value={formValues.obs_cheque} onChange={(e) => handleInputChange('obs_cheque', e.target.value)} />
+                <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_cheque} onChange={(e) => handleInputChange('obs_cheque', e.target.value)} />
               </div>
             </div>
 
@@ -204,7 +206,7 @@ export const PreClosing = () => {
               <MathInput icon={Ticket} color="#7c3aed" label="Vale-Compras" value={formValues.vale_compras_value} onChange={(v) => handleInputChange('vale_compras_value', v)} onBlur={() => handleBlur('vale_compras_value')} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Vale-Compras</label>
-                <input type="text" className="input-field" placeholder="Anotações específicas..." value={formValues.obs_vale} onChange={(e) => handleInputChange('obs_vale', e.target.value)} />
+                <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_vale} onChange={(e) => handleInputChange('obs_vale', e.target.value)} />
               </div>
             </div>
 
@@ -213,7 +215,7 @@ export const PreClosing = () => {
               <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'block', marginBottom: '8px' }}>Observações Gerais do Fechamento</label>
               <textarea 
                 className="input-field" 
-                style={{ width: '100%', minHeight: '80px', resize: 'vertical' }} 
+                style={{ width: '100%', minHeight: '80px', resize: 'vertical', boxSizing: 'border-box' }} 
                 placeholder="Faltou troco? Sangria não bateu? Digite o resumo geral aqui..."
                 value={formValues.obs_geral}
                 onChange={(e) => handleInputChange('obs_geral', e.target.value)}
