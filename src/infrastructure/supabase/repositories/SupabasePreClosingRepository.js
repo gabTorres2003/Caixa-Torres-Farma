@@ -30,12 +30,17 @@ export const PreClosingRepository = {
     if (error) throw error
   },
 
-  async getPendingDeliveriesTotals(storeId) {
-    const { data, error } = await supabase.from('pending_deliveries')
+  async getPendingDeliveriesTotals(storeId, dataFiltro) {
+    let query = supabase.from('pending_deliveries')
       .select('*')
       .eq('store_id', storeId)
       .eq('conciliado', false) 
       
+    if (dataFiltro) {
+      query = query.gte('created_at', `${dataFiltro}T00:00:00-03:00`).lte('created_at', `${dataFiltro}T23:59:59-03:00`)
+    }
+
+    const { data, error } = await query
     if (error) throw error
     return data || []
   }

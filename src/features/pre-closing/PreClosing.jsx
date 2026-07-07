@@ -1,12 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../core/hooks/useAuth'
 import { usePreClosing } from '../../core/hooks/usePreClosing'
 import { Card } from '../../shared/components/cards/Card'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
-import { Calculator, Printer, Save, Loader2, Banknote, CreditCard, QrCode, ScrollText, Ticket, Calendar, Pencil, Trash2 } from 'lucide-react'
+import { Calculator, Printer, Save, Loader2, Banknote, CreditCard, QrCode, ScrollText, Ticket, Calendar, Pencil, Trash2, XCircle } from 'lucide-react'
 
-// Função Mágica que calcula somas: "50.50 + 20,00" = 70.50
+const DRAFT_KEY = 'preClosingDraft_TorresFarma'
+
 const evaluateMath = (val) => {
   if (!val) return 0;
   try {
@@ -18,8 +19,8 @@ const evaluateMath = (val) => {
   }
 }
 
-// Input customizado que faz a conta quando perde o foco (onBlur)
-const MathInput = ({ icon: Icon, color, label, value, onChange, onBlur }) => (
+// Input customizado puro: aceita strings complexas (Ex: 50+30,50)
+const MathInput = ({ icon: Icon, color, label, value, onChange }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
     <label style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
       <Icon size={16} color={color} /> {label}
@@ -32,8 +33,7 @@ const MathInput = ({ icon: Icon, color, label, value, onChange, onBlur }) => (
         style={{ width: '100%', paddingLeft: '34px', fontSize: '1rem', fontWeight: 'bold', color: '#334155', boxSizing: 'border-box' }}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder="0,00"
+        placeholder="Ex: 50 + 20,50"
       />
     </div>
   </div>
@@ -50,47 +50,47 @@ export const PreClosing = () => {
 
   const [editingId, setEditingId] = useState(null)
   
-  const [formValues, setFormValues] = useState({
-    cash_value: '', card_value: '', pix_value: '', check_value: '', vale_compras_value: '',
-    obs_dinheiro: '', obs_cartao: '', obs_pix: '', obs_cheque: '', obs_vale: '', obs_geral: ''
+  // Inicializa o formulário buscando do Cache (localStorage)
+  const [formValues, setFormValues] = useState(() => {
+    const saved = localStorage.getItem(DRAFT_KEY)
+    if (saved) return JSON.parse(saved)
+    return {
+      cash_value: '', card_value: '', pix_value: '', check_value: '', vale_compras_value: '',
+      obs_dinheiro: '', obs_cartao: '', obs_pix: '', obs_cheque: '', obs_vale: '', obs_geral: ''
+    }
   })
 
-  const handleBlur = (field) => {
-    const rawVal = formValues[field]
-    if (String(rawVal).includes('+') || String(rawVal).includes(',')) {
-      const result = evaluateMath(rawVal)
-      setFormValues(prev => ({ ...prev, [field]: result > 0 ? result.toFixed(2).replace('.', ',') : '' }))
+  // Salva no Cache automaticamente enquanto digita
+  useEffect(() => {
+    if (!editingId) {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(formValues))
     }
-  }
+  }, [formValues, editingId])
 
   const handleInputChange = (field, val) => setFormValues(prev => ({ ...prev, [field]: val }))
 
-  // Cálculos da Calculadora
-  const subtotalFisico = evaluateMath(formValues.cash_value) + evaluateMath(formValues.card_value) + 
-                         evaluateMath(formValues.pix_value) + evaluateMath(formValues.check_value) + 
-                         evaluateMath(formValues.vale_compras_value)
+  // ================= CÁLCULOS DINÂMICOS =================
+  const calcCash = evaluateMath(formValues.cash_value)
+  const calcCard = evaluateMath(formValues.card_value)
+  const calcPix = evaluateMath(formValues.pix_value)
+  const calcCheck = evaluateMath(formValues.check_value)
+  const calcVale = evaluateMath(formValues.vale_compras_value)
+  
+  const subtotalFisico = calcCash + calcCard + calcPix + calcCheck + calcVale
+  const dynDinheiro = calcCash + deliveriesTotals.dinheiro
+  const dynCartao = calcCard + deliveriesTotals.cartao
+  const dynPix = calcPix + deliveriesTotals.pix
+  const totalGeralProjetado = dynDinheiro + dynCartao + dynPix + calcCheck + calcVale
 
-  const totalGeralProjetado = subtotalFisico + deliveriesTotals.dinheiro + deliveriesTotals.cartao + deliveriesTotals.pix
-
+  // ================= FUNÇÕES DE SALVAR E EDITAR =================
   const handleSave = async () => {
     if (totalGeralProjetado <= 0) return alert("Não há valores preenchidos para salvar.")
 
     const payload = {
-      cash_value: evaluateMath(formValues.cash_value),
-      card_value: evaluateMath(formValues.card_value),
-      pix_value: evaluateMath(formValues.pix_value),
-      check_value: evaluateMath(formValues.check_value),
-      vale_compras_value: evaluateMath(formValues.vale_compras_value),
-      pending_cash: deliveriesTotals.dinheiro,
-      pending_card: deliveriesTotals.cartao,
-      pending_pix: deliveriesTotals.pix,
+      cash_value: calcCash, card_value: calcCard, pix_value: calcPix, check_value: calcCheck, vale_compras_value: calcVale,
+      pending_cash: deliveriesTotals.dinheiro, pending_card: deliveriesTotals.cartao, pending_pix: deliveriesTotals.pix,
       total: totalGeralProjetado,
-      obs_dinheiro: formValues.obs_dinheiro,
-      obs_cartao: formValues.obs_cartao,
-      obs_pix: formValues.obs_pix,
-      obs_cheque: formValues.obs_cheque,
-      obs_vale: formValues.obs_vale,
-      obs_geral: formValues.obs_geral
+      obs_dinheiro: formValues.obs_dinheiro, obs_cartao: formValues.obs_cartao, obs_pix: formValues.obs_pix, obs_cheque: formValues.obs_cheque, obs_vale: formValues.obs_vale, obs_geral: formValues.obs_geral
     }
 
     const success = await savePreClosing(payload, editingId)
@@ -98,25 +98,27 @@ export const PreClosing = () => {
       alert("Pré-Fechamento salvo com sucesso!")
       setEditingId(null)
       setFormValues({ cash_value: '', card_value: '', pix_value: '', check_value: '', vale_compras_value: '', obs_dinheiro: '', obs_cartao: '', obs_pix: '', obs_cheque: '', obs_vale: '', obs_geral: '' })
+      localStorage.removeItem(DRAFT_KEY) // Limpa o cache após salvar
     }
   }
 
   const handleEditRow = (row) => {
     setEditingId(row.id)
     setFormValues({
-      cash_value: row.cash_value > 0 ? row.cash_value.toFixed(2).replace('.', ',') : '',
-      card_value: row.card_value > 0 ? row.card_value.toFixed(2).replace('.', ',') : '',
-      pix_value: row.pix_value > 0 ? row.pix_value.toFixed(2).replace('.', ',') : '',
-      check_value: row.check_value > 0 ? row.check_value.toFixed(2).replace('.', ',') : '',
-      vale_compras_value: row.vale_compras_value > 0 ? row.vale_compras_value.toFixed(2).replace('.', ',') : '',
-      obs_dinheiro: row.obs_dinheiro || '',
-      obs_cartao: row.obs_cartao || '',
-      obs_pix: row.obs_pix || '',
-      obs_cheque: row.obs_cheque || '',
-      obs_vale: row.obs_vale || '',
-      obs_geral: row.obs_geral || ''
+      cash_value: row.cash_value > 0 ? String(row.cash_value).replace('.', ',') : '',
+      card_value: row.card_value > 0 ? String(row.card_value).replace('.', ',') : '',
+      pix_value: row.pix_value > 0 ? String(row.pix_value).replace('.', ',') : '',
+      check_value: row.check_value > 0 ? String(row.check_value).replace('.', ',') : '',
+      vale_compras_value: row.vale_compras_value > 0 ? String(row.vale_compras_value).replace('.', ',') : '',
+      obs_dinheiro: row.obs_dinheiro || '', obs_cartao: row.obs_cartao || '', obs_pix: row.obs_pix || '', obs_cheque: row.obs_cheque || '', obs_vale: row.obs_vale || '', obs_geral: row.obs_geral || ''
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    const saved = localStorage.getItem(DRAFT_KEY)
+    setFormValues(saved ? JSON.parse(saved) : { cash_value: '', card_value: '', pix_value: '', check_value: '', vale_compras_value: '', obs_dinheiro: '', obs_cartao: '', obs_pix: '', obs_cheque: '', obs_vale: '', obs_geral: '' })
   }
 
   const formatReais = (val) => `R$ ${Number(val || 0).toFixed(2).replace('.', ',')}`
@@ -134,7 +136,7 @@ export const PreClosing = () => {
           {user.role === 'ADMIN' && (
             <>
               <button onClick={() => handleEditRow(row)} style={{ background: 'none', border: 'none', color: '#d97706', cursor: 'pointer' }}><Pencil size={18} /></button>
-              <button onClick={async () => { if(window.confirm('Excluir?')) await deletePreClosing(row.id) }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}><Trash2 size={18} /></button>
+              <button onClick={async () => { if(window.confirm('Excluir este fechamento?')) await deletePreClosing(row.id) }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}><Trash2 size={18} /></button>
             </>
           )}
         </div>
@@ -154,6 +156,7 @@ export const PreClosing = () => {
           <p style={{ color: 'var(--color-text-muted)' }}>Calculadora de consolidação de valores físicos e comandas pendentes.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          {editingId && <Button variant="secondary" onClick={handleCancelEdit} icon={XCircle}>Cancelar Edição</Button>}
           <Button variant="secondary" icon={Printer}>Exportar PDF</Button>
           <Button onClick={handleSave} isLoading={isActionLoading} icon={Save}>{editingId ? "Salvar Edição" : "Salvar Fechamento"}</Button>
         </div>
@@ -167,7 +170,7 @@ export const PreClosing = () => {
             
             {/* Dinheiro */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
-              <MathInput icon={Banknote} color="#16a34a" label="Dinheiro" value={formValues.cash_value} onChange={(v) => handleInputChange('cash_value', v)} onBlur={() => handleBlur('cash_value')} />
+              <MathInput icon={Banknote} color="#16a34a" label="Dinheiro" value={formValues.cash_value} onChange={(v) => handleInputChange('cash_value', v)} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Dinheiro</label>
                 <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_dinheiro} onChange={(e) => handleInputChange('obs_dinheiro', e.target.value)} />
@@ -176,7 +179,7 @@ export const PreClosing = () => {
 
             {/* Cartão */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
-              <MathInput icon={CreditCard} color="#2563eb" label="Cartão" value={formValues.card_value} onChange={(v) => handleInputChange('card_value', v)} onBlur={() => handleBlur('card_value')} />
+              <MathInput icon={CreditCard} color="#2563eb" label="Cartão" value={formValues.card_value} onChange={(v) => handleInputChange('card_value', v)} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Cartão</label>
                 <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_cartao} onChange={(e) => handleInputChange('obs_cartao', e.target.value)} />
@@ -185,7 +188,7 @@ export const PreClosing = () => {
 
             {/* Pix */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
-              <MathInput icon={QrCode} color="#0d9488" label="Pix (QR Code / Transferência)" value={formValues.pix_value} onChange={(v) => handleInputChange('pix_value', v)} onBlur={() => handleBlur('pix_value')} />
+              <MathInput icon={QrCode} color="#0d9488" label="Pix (QR Code / Transferência)" value={formValues.pix_value} onChange={(v) => handleInputChange('pix_value', v)} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Pix</label>
                 <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_pix} onChange={(e) => handleInputChange('obs_pix', e.target.value)} />
@@ -194,7 +197,7 @@ export const PreClosing = () => {
 
             {/* Cheques */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
-              <MathInput icon={ScrollText} color="#d97706" label="Cheques" value={formValues.check_value} onChange={(v) => handleInputChange('check_value', v)} onBlur={() => handleBlur('check_value')} />
+              <MathInput icon={ScrollText} color="#d97706" label="Cheques" value={formValues.check_value} onChange={(v) => handleInputChange('check_value', v)} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Cheques</label>
                 <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_cheque} onChange={(e) => handleInputChange('obs_cheque', e.target.value)} />
@@ -203,7 +206,7 @@ export const PreClosing = () => {
 
             {/* Vale-Compras */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end' }}>
-              <MathInput icon={Ticket} color="#7c3aed" label="Vale-Compras" value={formValues.vale_compras_value} onChange={(v) => handleInputChange('vale_compras_value', v)} onBlur={() => handleBlur('vale_compras_value')} />
+              <MathInput icon={Ticket} color="#7c3aed" label="Vale-Compras" value={formValues.vale_compras_value} onChange={(v) => handleInputChange('vale_compras_value', v)} />
               <div>
                 <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Observações sobre Vale-Compras</label>
                 <input type="text" className="input-field" style={{ boxSizing: 'border-box', width: '100%' }} placeholder="Anotações específicas..." value={formValues.obs_vale} onChange={(e) => handleInputChange('obs_vale', e.target.value)} />
@@ -225,41 +228,74 @@ export const PreClosing = () => {
           </div>
         </Card>
 
-        {/* COLUNA DIREITA: RESUMO (NOTA FISCAL) */}
+        {/* COLUNA DIREITA: RESUMO FÍSICO E DINÂMICO DETALHADO */}
         <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', padding: '24px', position: 'sticky', top: '24px' }}>
            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e293b', borderBottom: '2px solid #f1f5f9', paddingBottom: '12px', marginBottom: '16px' }}>
              Resumo da Apuração
            </h3>
 
-           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-             <span style={{ color: '#475569', fontSize: '0.9rem' }}>Subtotal Físico:</span>
-             <strong style={{ fontSize: '1.1rem', color: '#334155' }}>R$ {subtotalFisico.toFixed(2).replace('.', ',')}</strong>
+           {/* Detalhamento do que tem na Gaveta */}
+           <div style={{ marginBottom: '16px' }}>
+             <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569', letterSpacing: '0.5px' }}>APURAÇÃO FÍSICA (GAVETA)</span>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748b' }}>
+                 <span>Dinheiro:</span> <strong>R$ {calcCash.toFixed(2).replace('.', ',')}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748b' }}>
+                 <span>Cartão:</span> <strong>R$ {calcCard.toFixed(2).replace('.', ',')}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748b' }}>
+                 <span>Pix:</span> <strong>R$ {calcPix.toFixed(2).replace('.', ',')}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748b' }}>
+                 <span>Cheques/Vales:</span> <strong>R$ {(calcCheck + calcVale).toFixed(2).replace('.', ',')}</strong>
+               </div>
+             </div>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #e2e8f0', color: '#334155' }}>
+               <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Subtotal Físico:</span>
+               <strong style={{ fontSize: '1rem' }}>R$ {subtotalFisico.toFixed(2).replace('.', ',')}</strong>
+             </div>
            </div>
 
+           {/* Entregas Pendentes do Motoqueiro */}
            <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '16px', paddingBottom: '16px' }}>
              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#dc2626', letterSpacing: '0.5px' }}>ENTREGAS NA RUA (PENDENTES)</span>
              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c', fontSize: '0.9rem' }}>
-                 <span>Dinheiro a receber:</span>
-                 <strong style={{ color: '#dc2626' }}>+ R$ {deliveriesTotals.dinheiro.toFixed(2).replace('.', ',')}</strong>
+                 <span>Dinheiro a receber:</span><strong style={{ color: '#dc2626' }}>+ R$ {deliveriesTotals.dinheiro.toFixed(2).replace('.', ',')}</strong>
                </div>
                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c', fontSize: '0.9rem' }}>
-                 <span>Cartão a receber:</span>
-                 <strong style={{ color: '#ea580c' }}>+ R$ {deliveriesTotals.cartao.toFixed(2).replace('.', ',')}</strong>
+                 <span>Cartão a receber:</span><strong style={{ color: '#ea580c' }}>+ R$ {deliveriesTotals.cartao.toFixed(2).replace('.', ',')}</strong>
                </div>
                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b91c1c', fontSize: '0.9rem' }}>
-                 <span>Pix a receber:</span>
-                 <strong style={{ color: '#0ea5e9' }}>+ R$ {deliveriesTotals.pix.toFixed(2).replace('.', ',')}</strong>
+                 <span>Pix a receber:</span><strong style={{ color: '#0ea5e9' }}>+ R$ {deliveriesTotals.pix.toFixed(2).replace('.', ',')}</strong>
                </div>
              </div>
            </div>
 
-           <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '20px', marginTop: '8px' }}>
-             <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e40af', letterSpacing: '0.5px' }}>TOTAL GERAL PROJETADO</span>
-             <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#1e40af', lineHeight: '1.2', marginTop: '4px' }}>
-               R$ {totalGeralProjetado.toFixed(2).replace('.', ',')}
+           {/* SOMA DINÂMICA (GAVETA + RUA) DETALHADA */}
+           <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '16px', paddingBottom: '16px', backgroundColor: '#f0f9ff', padding: '16px', borderRadius: '8px', marginTop: '8px' }}>
+             <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#0369a1', letterSpacing: '0.5px' }}>SOMA DINÂMICA (GAVETA + RUA)</span>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#0284c7' }}>
+                 <span>Total Dinheiro:</span><strong>R$ {dynDinheiro.toFixed(2).replace('.', ',')}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#0284c7' }}>
+                 <span>Total Cartão:</span><strong>R$ {dynCartao.toFixed(2).replace('.', ',')}</strong>
+               </div>
+               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#0284c7' }}>
+                 <span>Total Pix:</span><strong>R$ {dynPix.toFixed(2).replace('.', ',')}</strong>
+               </div>
+             </div>
+             
+             <div style={{ borderTop: '1px solid #bae6fd', paddingTop: '12px', marginTop: '12px' }}>
+               <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e40af' }}>TOTAL GERAL PROJETADO</span>
+               <div style={{ fontSize: '2.2rem', fontWeight: '900', color: '#1e40af', lineHeight: '1.2', marginTop: '4px' }}>
+                 R$ {totalGeralProjetado.toFixed(2).replace('.', ',')}
+               </div>
              </div>
            </div>
+
         </div>
 
       </div>

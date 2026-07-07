@@ -19,16 +19,15 @@ export const usePreClosing = (dataFiltro) => {
         dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
       }
 
-      // 1. Carrega o Histórico de Pré-fechamentos do dia
+      // 1. Carrega o Histórico
       const data = await PreClosingRepository.getPreClosings(user.store_id, dataConsulta)
       setPreClosings(data)
 
-      // 2. Carrega as entregas pendentes (Dívidas ativas da rua)
-      const deliveries = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id)
+      // 2. Carrega as entregas pendentes passando a data selecionada
+      const deliveries = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id, dataConsulta)
       let d = 0, c = 0, p = 0;
       
       deliveries.forEach(del => {
-        // Se não tiver forma preenchida, assume que a cobrança padrão do motoqueiro é em dinheiro
         const forma = String(del.forma_pagamento_real || del.tipo_saida || 'DINHEIRO').toUpperCase()
         const valor = Number(del.valor || 0)
         
