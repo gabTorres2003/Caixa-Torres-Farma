@@ -2,12 +2,12 @@ import React from 'react';
 import { Save, Banknote, CreditCard, QrCode, ScrollText, Ticket, Pencil, Trash2, XCircle, Send } from 'lucide-react';
 import { usePreClosing } from '../../core/hooks/usePreClosing';
 import { useAuth } from '../../core/hooks/useAuth';
-import Button from '../../shared/components/buttons/Button';
-import Card from '../../shared/components/cards/Card';
-import Input from '../../shared/components/inputs/Input';
-import Table from '../../shared/components/tables/Table';
+import { Button } from '../../shared/components/buttons/Button';
+import { Card } from '../../shared/components/cards/Card';
+import { Input } from '../../shared/components/inputs/Input';
+import { Table } from '../../shared/components/tables/Table';
 
-const PreClosing = () => {
+export const PreClosing = () => { 
   const { user } = useAuth();
   const {
     formValues,
@@ -31,14 +31,12 @@ const PreClosing = () => {
     isActionLoading
   } = usePreClosing();
 
-  // Garante que o formValues não quebre caso ainda não tenha inicializado
   const safeFormValues = formValues || {};
 
   const handleInputChange = (field, value) => {
     setFormValues(prev => ({ ...prev, [field]: value }));
   };
 
-  // Função que gera o texto e envia para o WhatsApp
   const handleSendWhatsApp = () => {
     const texto = `*Pré-Fechamento de Caixa* 📊
 📅 *Data:* ${new Date().toLocaleDateString('pt-BR')}
@@ -63,7 +61,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
     window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   };
 
-  // Definição das colunas da tabela de histórico
   const columns = [
     { header: 'Data/Hora', accessor: 'created_at', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) },
     { header: 'Dinheiro', accessor: 'cash_value', render: (row) => `R$ ${Number(row.cash_value || 0).toFixed(2).replace('.', ',')}` },
@@ -76,7 +73,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
       header: 'Ações', 
       render: (row) => (
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {/* CORREÇÃO: Administradores OU o próprio criador do registro podem editar/excluir */}
           {(user?.role === 'ADMIN' || user?.id === row.created_by) && (
             <>
               <button 
@@ -107,7 +103,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       
-      {/* Cabeçalho e Botões de Ação */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e3a8a', margin: 0 }}>Pré-Fechamento do Caixa</h1>
@@ -119,7 +114,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               Cancelar Edição
             </Button>
           )}
-          {/* NOVO BOTÃO DE WHATSAPP */}
           <Button variant="secondary" onClick={handleSendWhatsApp} icon={Send}>
             Enviar WhatsApp
           </Button>
@@ -131,11 +125,9 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '24px', marginBottom: '24px' }}>
         
-        {/* Lado Esquerdo: Inputs de Apuração */}
         <Card title="Apuração Física (Gaveta)" icon={Banknote}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
-            {/* Linha Dinheiro */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Input 
                 label="Dinheiro" 
@@ -152,7 +144,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               />
             </div>
 
-            {/* Linha Cartão */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Input 
                 label="Cartão" 
@@ -169,7 +160,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               />
             </div>
 
-            {/* Linha Pix */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Input 
                 label="Pix (QR Code / Transferência)" 
@@ -186,7 +176,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               />
             </div>
 
-            {/* Linha Cheques */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Input 
                 label="Cheques" 
@@ -203,7 +192,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               />
             </div>
 
-            {/* Linha Vale-Compras */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <Input 
                 label="Vale-Compras" 
@@ -222,7 +210,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
 
             <hr style={{ borderColor: '#e5e7eb', margin: '8px 0' }} />
 
-            {/* Observações Gerais */}
             <div>
               <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '8px' }}>
                 Observações Gerais do Fechamento
@@ -239,11 +226,9 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
           </div>
         </Card>
 
-        {/* Lado Direito: Resumo Calculado */}
         <Card title="Resumo da Apuração">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
-            {/* Bloco Gaveta */}
             <div>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', marginBottom: '12px' }}>Apuração Física (Gaveta)</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#4b5563', fontSize: '14px' }}>
@@ -263,7 +248,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               </div>
             </div>
 
-            {/* Bloco Rua (Pendentes) */}
             <div>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#dc2626', textTransform: 'uppercase', marginBottom: '12px' }}>Entregas na Rua (Pendentes)</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#dc2626', fontSize: '14px' }}>
@@ -277,7 +261,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               </div>
             </div>
 
-            {/* Bloco Dinâmico */}
             <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '8px' }}>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#166534', textTransform: 'uppercase', marginBottom: '12px' }}>Soma Dinâmica (Gaveta + Rua)</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#166534', fontSize: '14px' }}>
@@ -291,7 +274,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
               </div>
             </div>
 
-            {/* Total Geral */}
             <div style={{ marginTop: 'auto' }}>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e3a8a', textTransform: 'uppercase', marginBottom: '8px' }}>Total Geral Projetado</h4>
               <div style={{ fontSize: '36px', fontWeight: '900', color: '#1e3a8a', lineHeight: '1' }}>
@@ -303,7 +285,6 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
         </Card>
       </div>
 
-      {/* Histórico na Base */}
       <Card title="Histórico de Pré-Fechamentos Salvos">
         <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <label style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>Filtrar do dia:</label>
@@ -324,5 +305,3 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
     </div>
   );
 };
-
-export default PreClosing;
