@@ -2,12 +2,13 @@ import React from 'react';
 import { Save, Banknote, CreditCard, QrCode, ScrollText, Ticket, Pencil, Trash2, XCircle, Send } from 'lucide-react';
 import { usePreClosing } from '../../core/hooks/usePreClosing';
 import { useAuth } from '../../core/hooks/useAuth';
+
 import { Button } from '../../shared/components/buttons/Button';
 import { Card } from '../../shared/components/cards/Card';
 import { Input } from '../../shared/components/inputs/Input';
 import { Table } from '../../shared/components/tables/Table';
 
-export const PreClosing = () => { 
+export const PreClosing = () => {
   const { user } = useAuth();
   const {
     formValues,
@@ -32,6 +33,18 @@ export const PreClosing = () => {
   } = usePreClosing();
 
   const safeFormValues = formValues || {};
+  const safeCalcCash = Number(calcCash || 0);
+  const safeCalcCard = Number(calcCard || 0);
+  const safeCalcPix = Number(calcPix || 0);
+  const safeCalcCheck = Number(calcCheck || 0);
+  const safeCalcVale = Number(calcVale || 0);
+  const safeSubtotalFisico = Number(subtotalFisico || 0);
+  
+  const safeDelDinheiro = Number(deliveriesTotals?.dinheiro || 0);
+  const safeDelCartao = Number(deliveriesTotals?.cartao || 0);
+  const safeDelPix = Number(deliveriesTotals?.pix || 0);
+  
+  const safeTotalGeral = Number(totalGeralProjetado || 0);
 
   const handleInputChange = (field, value) => {
     setFormValues(prev => ({ ...prev, [field]: value }));
@@ -42,18 +55,18 @@ export const PreClosing = () => {
 📅 *Data:* ${new Date().toLocaleDateString('pt-BR')}
 
 💰 *Físico (Gaveta):*
-Dinheiro: R$ ${calcCash.toFixed(2).replace('.', ',')}
-Cartão: R$ ${calcCard.toFixed(2).replace('.', ',')}
-Pix: R$ ${calcPix.toFixed(2).replace('.', ',')}
-Cheques/Vales: R$ ${(calcCheck + calcVale).toFixed(2).replace('.', ',')}
-*Subtotal Físico:* R$ ${subtotalFisico.toFixed(2).replace('.', ',')}
+Dinheiro: R$ ${safeCalcCash.toFixed(2).replace('.', ',')}
+Cartão: R$ ${safeCalcCard.toFixed(2).replace('.', ',')}
+Pix: R$ ${safeCalcPix.toFixed(2).replace('.', ',')}
+Cheques/Vales: R$ ${(safeCalcCheck + safeCalcVale).toFixed(2).replace('.', ',')}
+*Subtotal Físico:* R$ ${safeSubtotalFisico.toFixed(2).replace('.', ',')}
 
 🛵 *Rua (Pendentes):*
-Dinheiro: R$ ${Number(deliveriesTotals?.dinheiro || 0).toFixed(2).replace('.', ',')}
-Cartão: R$ ${Number(deliveriesTotals?.cartao || 0).toFixed(2).replace('.', ',')}
-Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
+Dinheiro: R$ ${safeDelDinheiro.toFixed(2).replace('.', ',')}
+Cartão: R$ ${safeDelCartao.toFixed(2).replace('.', ',')}
+Pix: R$ ${safeDelPix.toFixed(2).replace('.', ',')}
 
-📈 *TOTAL GERAL PROJETADO:* R$ ${totalGeralProjetado.toFixed(2).replace('.', ',')}
+📈 *TOTAL GERAL PROJETADO:* R$ ${safeTotalGeral.toFixed(2).replace('.', ',')}
 
 📝 *Observações:* ${safeFormValues.obs_geral || 'Nenhuma'}`;
 
@@ -232,52 +245,52 @@ Pix: R$ ${Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}
             <div>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', textTransform: 'uppercase', marginBottom: '12px' }}>Apuração Física (Gaveta)</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#4b5563', fontSize: '14px' }}>
-                <span>Dinheiro:</span> <span>R$ {calcCash.toFixed(2).replace('.', ',')}</span>
+                <span>Dinheiro:</span> <span>R$ {safeCalcCash.toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#4b5563', fontSize: '14px' }}>
-                <span>Cartão:</span> <span>R$ {calcCard.toFixed(2).replace('.', ',')}</span>
+                <span>Cartão:</span> <span>R$ {safeCalcCard.toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#4b5563', fontSize: '14px' }}>
-                <span>Pix:</span> <span>R$ {calcPix.toFixed(2).replace('.', ',')}</span>
+                <span>Pix:</span> <span>R$ {safeCalcPix.toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#4b5563', fontSize: '14px' }}>
-                <span>Cheques/Vales:</span> <span>R$ {(calcCheck + calcVale).toFixed(2).replace('.', ',')}</span>
+                <span>Cheques/Vales:</span> <span>R$ {(safeCalcCheck + safeCalcVale).toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', color: '#111827', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>
-                <span>Subtotal Físico:</span> <span>R$ {subtotalFisico.toFixed(2).replace('.', ',')}</span>
+                <span>Subtotal Físico:</span> <span>R$ {safeSubtotalFisico.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
 
             <div>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#dc2626', textTransform: 'uppercase', marginBottom: '12px' }}>Entregas na Rua (Pendentes)</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#dc2626', fontSize: '14px' }}>
-                <span>Dinheiro a receber:</span> <span>+ R$ {Number(deliveriesTotals?.dinheiro || 0).toFixed(2).replace('.', ',')}</span>
+                <span>Dinheiro a receber:</span> <span>+ R$ {safeDelDinheiro.toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#dc2626', fontSize: '14px' }}>
-                <span>Cartão a receber:</span> <span>+ R$ {Number(deliveriesTotals?.cartao || 0).toFixed(2).replace('.', ',')}</span>
+                <span>Cartão a receber:</span> <span>+ R$ {safeDelCartao.toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#dc2626', fontSize: '14px' }}>
-                <span>Pix a receber:</span> <span>+ R$ {Number(deliveriesTotals?.pix || 0).toFixed(2).replace('.', ',')}</span>
+                <span>Pix a receber:</span> <span>+ R$ {safeDelPix.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
 
             <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '8px' }}>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#166534', textTransform: 'uppercase', marginBottom: '12px' }}>Soma Dinâmica (Gaveta + Rua)</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#166534', fontSize: '14px' }}>
-                <span>Total Dinheiro:</span> <span>R$ {(calcCash + Number(deliveriesTotals?.dinheiro || 0)).toFixed(2).replace('.', ',')}</span>
+                <span>Total Dinheiro:</span> <span>R$ {(safeCalcCash + safeDelDinheiro).toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#166534', fontSize: '14px' }}>
-                <span>Total Cartão:</span> <span>R$ {(calcCard + Number(deliveriesTotals?.cartao || 0)).toFixed(2).replace('.', ',')}</span>
+                <span>Total Cartão:</span> <span>R$ {(safeCalcCard + safeDelCartao).toFixed(2).replace('.', ',')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#166534', fontSize: '14px' }}>
-                <span>Total Pix:</span> <span>R$ {(calcPix + Number(deliveriesTotals?.pix || 0)).toFixed(2).replace('.', ',')}</span>
+                <span>Total Pix:</span> <span>R$ {(safeCalcPix + safeDelPix).toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
 
             <div style={{ marginTop: 'auto' }}>
               <h4 style={{ fontSize: '13px', fontWeight: 'bold', color: '#1e3a8a', textTransform: 'uppercase', marginBottom: '8px' }}>Total Geral Projetado</h4>
               <div style={{ fontSize: '36px', fontWeight: '900', color: '#1e3a8a', lineHeight: '1' }}>
-                R$ {totalGeralProjetado.toFixed(2).replace('.', ',')}
+                R$ {safeTotalGeral.toFixed(2).replace('.', ',')}
               </div>
             </div>
 
