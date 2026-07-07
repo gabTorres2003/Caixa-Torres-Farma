@@ -1,108 +1,91 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
-import { supabase } from '../../infrastructure/supabase/supabaseClient'
-import { PreClosingRepository } from '../../infrastructure/supabase/repositories/SupabasePreClosingRepository' // Ajuste o caminho se o nome do seu arquivo for diferente
+import { useState, useCallback, useEffect } from 'react'
+import { PreClosingRepository } from '../../infrastructure/supabase/repositories/SupabasePreClosingRepository'
+import { useAuth } from './useAuth'
 
-export const usePreClosing = (user) => {
-  const [isPageLoading, setIsPageLoading] = useState(true)
+export const usePreClosing = (dataFiltro) => {
+  const { user } = useAuth()
+  const [preClosings, setPreClosings] = useState([])
+  const [deliveriesTotals, setDeliveriesTotals] = useState({ dinheiro: 0, cartao: 0, pix: 0 })
+  const [isLoading, setIsLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
-  const [pendingDeliveries, setPendingDeliveries] = useState([])
-  const [lastPreClosing, setLastPreClosing] = useState(null)
-  
-  // Estados do Histórico
-  const [history, setHistory] = useState([])
-  const [dataFiltro, setDataFiltro] = useState(() => {
-    const tzOffset = new Date().getTimezoneOffset() * 60000
-    return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
-  })
 
-  const loadInitialData = useCallback(async () => {
-    if (!user || !user.store_id) return;
-
-    setIsPageLoading(true)
+  const loadData = useCallback(async () => {
+    if (!user?.store_id) return
+    setIsLoading(true)
     try {
-      // 1. Busca Entregas Pendentes (Usando o repositório)
-      const deliveries = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id, new Date().toISOString().split('T')[0])
-      setPendingDeliveries(deliveries || [])
-
-      // 2. Busca último pré-fechamento
-      const { data: preClosing, error: errorPreClosing } = await supabase
-        .from('pre_closings')
-        .select('*')
-        .eq('store_id', user.store_id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (errorPreClosing && errorPreClosing.code !== 'PGRST116') {
-         throw errorPreClosing
+      let dataConsulta = dataFiltro
+      if (user.role !== 'ADMIN' && !dataFiltro) {
+        const tzOffset = new Date().getTimezoneOffset() * 60000
+        dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
       }
-      setLastPreClosing(preClosing || null)
 
-      // 3. Busca Histórico (Usando o repositório)
-      const historyData = await PreClosingRepository.getPreClosingsHistory(user.store_id, dataFiltro)
-      setHistory(historyData)
+      // 1. Carrega o Histórico de Pré-fechamentos do dia
+      const data = await PreClosingRepository.getPreClosings(user.store_id, dataConsulta)
+      setPreClosings(data)
+
+      // 2. Carrega as entregas pendentes (Dívidas ativas da rua)
+      const deliveries = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id)
+      let d = 0, c = 0, p = 0;
+      
+      deliveries.forEach(del => {
+        // Se não tiver forma preenchida, assume que a cobrança padrão do motoqueiro é em dinheiro
+        const forma = String(del.forma_pagamento_real || del.tipo_saida || 'DINHEIRO').toUpperCase()
+        const valor = Number(del.valor || 0)
+        
+        if (forma.includes('CARTÃO') || forma.includes('CARTAO') || forma.includes('DEBITO') || forma.includes('CREDITO')) {
+          c += valor
+        } else if (forma.includes('PIX') || forma.includes('TRANSFER')) {
+          p += valor
+        } else {
+          d += valor
+        }
+      })
+      setDeliveriesTotals({ dinheiro: d, cartao: c, pix: p })
 
     } catch (err) {
-      console.error("Erro ao carregar dados do pré-fechamento:", err)
+      console.error(err)
     } finally {
-      setIsPageLoading(false)
+      setIsLoading(false)
     }
   }, [user, dataFiltro])
 
-  // Recarrega automático ao trocar o filtro de data
   useEffect(() => {
-    loadInitialData()
-  }, [loadInitialData])
+    loadData()
+  }, [loadData])
 
-  const pendingTotals = useMemo(() => {
-    const defaultTotals = { dinheiro: 0, cartao: 0, pix: 0 };
-    if (!pendingDeliveries || pendingDeliveries.length === 0) return defaultTotals;
-
-    return pendingDeliveries.reduce((acc, curr) => {
-      const valor = Number(curr.valor) || 0;
-      const forma = (curr.forma_pagamento_real || '').toUpperCase();
-
-      if (forma.includes('DINHEIRO')) acc.dinheiro += valor;
-      else if (forma.includes('CARTAO') || forma.includes('CARTÃO')) acc.cartao += valor;
-      else if (forma.includes('PIX')) acc.pix += valor;
-      
-      return acc;
-    }, defaultTotals);
-  }, [pendingDeliveries]);
-
-  const savePreClosing = async (payload) => {
-    if (!user || !user.store_id || !user.id) {
-      alert("Erro de autenticação: Usuário não identificado.")
-      return false // Retorna falso se der erro
-    }
-
+  const savePreClosing = async (payload, editingId = null) => {
     setIsActionLoading(true)
     try {
-      const preClosingData = {
-        store_id: user.store_id,
-        created_by: user.id,
-        ...payload
+      if (editingId) {
+        await PreClosingRepository.updatePreClosing(editingId, payload)
+      } else {
+        await PreClosingRepository.addPreClosing({ ...payload, store_id: user.store_id, created_by: user.id })
       }
-
-      await PreClosingRepository.savePreClosing(preClosingData)
-      alert('Pré-fechamento salvo com sucesso!')
-      
-      await loadInitialData() // Atualiza o histórico imediatamente
-      return true // Retorna true para a tela saber que deu certo e limpar os inputs
-
+      await loadData()
+      return true
     } catch (err) {
-      console.error("Erro ao salvar pré-fechamento:", err)
-      alert('Erro ao salvar o registro no banco de dados. ' + err.message)
+      console.error(err)
+      alert('Erro ao salvar pré-fechamento.')
       return false
     } finally {
       setIsActionLoading(false)
     }
   }
 
-  return { 
-    pendingDeliveries, pendingTotals, lastPreClosing, 
-    history, dataFiltro, setDataFiltro, 
-    loadInitialData, savePreClosing, 
-    isPageLoading, isActionLoading 
+  const deletePreClosing = async (id) => {
+    setIsActionLoading(true)
+    try {
+      await PreClosingRepository.deletePreClosing(id)
+      await loadData()
+      return true
+    } catch (error) {
+      console.error(error)
+      alert('Erro ao excluir registro.')
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
   }
+
+  return { preClosings, deliveriesTotals, isLoading, isActionLoading, loadData, savePreClosing, deletePreClosing }
 }
