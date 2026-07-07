@@ -19,21 +19,21 @@ export const usePreClosing = (dataFiltro) => {
         dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
       }
 
-      // 1. Carrega o Histórico
       const data = await PreClosingRepository.getPreClosings(user.store_id, dataConsulta)
       setPreClosings(data)
 
-      // 2. Carrega as entregas pendentes passando a data selecionada
       const deliveries = await PreClosingRepository.getPendingDeliveriesTotals(user.store_id, dataConsulta)
       let d = 0, c = 0, p = 0;
       
       deliveries.forEach(del => {
-        const forma = String(del.forma_pagamento_real || del.tipo_saida || 'DINHEIRO').toUpperCase()
+        const textoForma = `${del.forma_pagamento_real || ''} ${del.tipo_saida || ''} ${del.observacoes || ''} ${del.notes || ''}`.toUpperCase()
+        const formaNormalizada = textoForma.normalize('NFD').replace(/[\u0300-\u036f]/g, "")
+        
         const valor = Number(del.valor || 0)
         
-        if (forma.includes('CARTÃO') || forma.includes('CARTAO') || forma.includes('DEBITO') || forma.includes('CREDITO')) {
+        if (formaNormalizada.includes('CARTAO') || formaNormalizada.includes('DEBITO') || formaNormalizada.includes('CREDITO')) {
           c += valor
-        } else if (forma.includes('PIX') || forma.includes('TRANSFER')) {
+        } else if (formaNormalizada.includes('PIX') || formaNormalizada.includes('TRANSFER')) {
           p += valor
         } else {
           d += valor
