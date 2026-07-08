@@ -127,7 +127,7 @@ export const PreClosing = () => {
   }
 
   const handleSendWhatsApp = () => {
-    const texto = `*Pré-Fechamento de Caixa* 📊
+    const texto = `*Pré-Fechamento de Caixa* 
 *Data:* ${new Date().toLocaleDateString('pt-BR')}
 
 *Físico (Gaveta):*
@@ -164,7 +164,7 @@ Pix: R$ ${safeDelPix.toFixed(2).replace('.', ',')}
     const subFisico = cash + card + pix + check + vale;
     const dataFormatada = new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-    const texto = `*Pré-Fechamento Salvo* 📊
+    const texto = `*Pré-Fechamento Salvo* 
 *Data/Hora:* ${dataFormatada}
 
 *Físico (Gaveta):*
