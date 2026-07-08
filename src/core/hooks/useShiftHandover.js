@@ -5,7 +5,7 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   const [entregas, setEntregas] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
-  const [isShiftClosed, setIsShiftClosed] = useState(false) 
+  const [isShiftClosed, setIsShiftClosed] = useState(false)
 
   const carregarEntregas = useCallback(async () => {
     if (!user?.store_id) return
@@ -14,14 +14,22 @@ export const useShiftHandover = (user, role, dataFiltro) => {
       let dataConsulta = dataFiltro
       if (role === 'CAIXA_TARDE') {
         const tzOffset = new Date().getTimezoneOffset() * 60000
-        dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
+        dataConsulta = new Date(Date.now() - tzOffset)
+          .toISOString()
+          .split('T')[0]
       }
-      const data = await ShiftHandoverRepository.getDeliveries(user.store_id, dataConsulta)
+      const data = await ShiftHandoverRepository.getDeliveries(
+        user.store_id,
+        dataConsulta,
+      )
       setEntregas(data)
 
-      const fechado = await ShiftHandoverRepository.checkShiftClosed(user.store_id, dataConsulta, role)
+      const fechado = await ShiftHandoverRepository.checkShiftClosed(
+        user.store_id,
+        dataConsulta,
+        role,
+      )
       setIsShiftClosed(fechado)
-
     } catch (err) {
       console.error('Erro ao buscar entregas:', err.message)
     } finally {
@@ -60,19 +68,23 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   const salvarEntregaEsquecida = async (novaEsquecida) => {
     setIsActionLoading(true)
     try {
-      const siglaPagamento = novaEsquecida.forma_pagamento_real === 'DINHEIRO' ? 'D' : 
-                             novaEsquecida.forma_pagamento_real === 'CARTAO' ? 'C' : 'PX';
+      const siglaPagamento =
+        novaEsquecida.forma_pagamento_real === 'DINHEIRO'
+          ? 'D'
+          : novaEsquecida.forma_pagamento_real === 'CARTAO'
+            ? 'C'
+            : 'PX'
 
       const payload = {
         comanda: novaEsquecida.comanda,
         valor: parseFloat(novaEsquecida.valor),
         tipo_saida: siglaPagamento,
         forma_pagamento_real: siglaPagamento,
-        observacoes: `[ESQUECIDA - ${novaEsquecida.tipo_saida}]`, 
+        observacoes: `[ESQUECIDA - ${novaEsquecida.tipo_saida}]`,
         store_id: user.store_id,
         created_by: user.id,
       }
-      
+
       await ShiftHandoverRepository.addDelivery(payload)
       await carregarEntregas()
       return true
@@ -96,7 +108,9 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   const toggleConciliado = async (id, statusAtual) => {
     try {
       await ShiftHandoverRepository.updateReconciliationStatus(id, !statusAtual)
-      setEntregas(prev => prev.map(e => e.id === id ? { ...e, conciliado: !statusAtual } : e))
+      setEntregas((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, conciliado: !statusAtual } : e)),
+      )
     } catch (err) {
       alert('Erro ao conciliar: ' + err.message)
     }
@@ -105,7 +119,9 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   const toggleCheckTarde = async (id, statusAtual) => {
     try {
       await ShiftHandoverRepository.updateCheckStatus(id, !statusAtual)
-      setEntregas(prev => prev.map(e => e.id === id ? { ...e, conferido: !statusAtual } : e))
+      setEntregas((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, conferido: !statusAtual } : e)),
+      )
     } catch (err) {
       alert('Erro ao conferir: ' + err.message)
     }
@@ -114,7 +130,11 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   const alterarFormaReal = async (id, novaForma) => {
     try {
       await ShiftHandoverRepository.updateRealPaymentForm(id, novaForma)
-      setEntregas(prev => prev.map(e => e.id === id ? { ...e, forma_pagamento_real: novaForma } : e))
+      setEntregas((prev) =>
+        prev.map((e) =>
+          e.id === id ? { ...e, forma_pagamento_real: novaForma } : e,
+        ),
+      )
     } catch (err) {
       alert('Erro ao alterar forma de pagamento: ' + err.message)
     }
@@ -125,25 +145,52 @@ export const useShiftHandover = (user, role, dataFiltro) => {
     if (nota !== null) {
       try {
         await ShiftHandoverRepository.updateObservation(id, nota)
-        setEntregas(prev => prev.map(e => e.id === id ? { ...e, observacoes: nota } : e))
+        setEntregas((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, observacoes: nota } : e)),
+        )
       } catch (err) {
         alert('Erro ao salvar anotação: ' + err.message)
       }
     }
   }
 
-  // === UNIFICAMOS O FECHAMENTO DO BANCO DE DADOS ===
+  const reabrirTurno = async (shiftType) => {
+    setIsActionLoading(true)
+    try {
+      await ShiftHandoverRepository.reopenShift(
+        user.store_id,
+        dataFiltro,
+        shiftType,
+      )
+      alert(
+        `Turno ${shiftType === 'CAIXA_MANHA' ? 'da Manhã' : 'da Tarde'} reaberto com sucesso para a data ${dataFiltro.split('-').reverse().join('/')}!`,
+      )
+      await carregarEntregas()
+    } catch (err) {
+      alert('Erro ao reabrir turno: ' + err.message)
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   const fecharTurno = async () => {
     setIsActionLoading(true)
     try {
       let dataConsulta = dataFiltro
       if (role === 'CAIXA_TARDE') {
         const tzOffset = new Date().getTimezoneOffset() * 60000
-        dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
+        dataConsulta = new Date(Date.now() - tzOffset)
+          .toISOString()
+          .split('T')[0]
         await ShiftHandoverRepository.finalizeAfternoonShift(user.store_id)
       }
-      
-      await ShiftHandoverRepository.closeShift(user.store_id, dataConsulta, role, user.id)
+
+      await ShiftHandoverRepository.closeShift(
+        user.store_id,
+        dataConsulta,
+        role,
+        user.id,
+      )
       setIsShiftClosed(true)
       return true
     } catch (err) {
@@ -155,8 +202,19 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   }
 
   return {
-    entregas, isPageLoading, isActionLoading, isShiftClosed,
-    carregarEntregas, salvarEntrega, salvarEntregaEsquecida, excluirEntrega, toggleConciliado,
-    toggleCheckTarde, alterarFormaReal, anotarObservacao, fecharTurno
+    entregas,
+    isPageLoading,
+    isActionLoading,
+    isShiftClosed,
+    carregarEntregas,
+    salvarEntrega,
+    salvarEntregaEsquecida,
+    excluirEntrega,
+    toggleConciliado,
+    toggleCheckTarde,
+    alterarFormaReal,
+    anotarObservacao,
+    fecharTurno,
+    reabrirTurno,
   }
 }

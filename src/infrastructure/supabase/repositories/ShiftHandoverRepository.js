@@ -72,6 +72,17 @@ export const ShiftHandoverRepository = {
     return !!data
   },
 
+  async reopenShift(storeId, date, shiftType) {
+    const { error } = await supabase
+      .from('shift_closures')
+      .delete()
+      .eq('store_id', storeId)
+      .eq('shift_date', date)
+      .eq('shift_type', shiftType)
+    
+    if (error) throw error
+  },
+
   async closeShift(storeId, date, shiftType, userId) {
     const { error } = await supabase
       .from('shift_closures')

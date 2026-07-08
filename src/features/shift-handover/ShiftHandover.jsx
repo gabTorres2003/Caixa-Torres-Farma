@@ -53,6 +53,7 @@ export const ShiftHandover = () => {
     alterarFormaReal,
     anotarObservacao,
     fecharTurno,
+    reabrirTurno,
   } = useShiftHandover(user, role, dataFiltro)
 
   const [editingId, setEditingId] = useState(null)
@@ -1235,6 +1236,35 @@ ${obsPos || 'Nenhuma'}`
               />
               <Button variant="secondary" onClick={() => window.print()}>
                 Imprimir Auditoria
+              </Button>
+
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Tem certeza que deseja reabrir o Turno da MANHÃ nesta data?',
+                    )
+                  )
+                    reabrirTurno('CAIXA_MANHA')
+                }}
+                style={{ color: '#d97706', borderColor: '#d97706' }}
+              >
+                Reabrir Manhã
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      'Tem certeza que deseja reabrir o Turno da TARDE nesta data?',
+                    )
+                  )
+                    reabrirTurno('CAIXA_TARDE')
+                }}
+                style={{ color: '#d97706', borderColor: '#d97706' }}
+              >
+                Reabrir Tarde
               </Button>
             </div>
           </div>
