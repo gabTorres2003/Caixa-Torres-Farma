@@ -170,20 +170,20 @@ export const ShiftHandover = () => {
             .join('\n')
         : 'Nenhuma registrada.'
 
-    const texto = `*PRESTAÇÃO DE CONTAS - TROCA DE TURNO* 🔄
-👤 *Caixa:* ${user?.nome || 'Operador'} (${role})
-📅 *Data:* ${dataAtual}
+    const texto = `*PRESTAÇÃO DE CONTAS - TROCA DE TURNO*
+*Caixa:* ${user?.nome || 'Operador'} (${role})
+*Data:* ${dataAtual}
 
-💰 *Total Dinheiro:* R$ ${totalDinheiro.toFixed(2).replace('.', ',')}
-💳 *Total Cartão/Outros:* R$ ${totalCartao.toFixed(2).replace('.', ',')}
+*Total Dinheiro:* R$ ${totalDinheiro.toFixed(2).replace('.', ',')}
+*Total Cartão/Outros:* R$ ${totalCartao.toFixed(2).replace('.', ',')}
 
-📝 *Anotações Gerais do Turno:*
+*Anotações Gerais do Turno:*
 ${obsGerais || 'Nenhuma'}
 
-⚠️ *Entregas Não-Anotadas (Esquecidas):*
+*Entregas Não-Anotadas (Esquecidas):*
 ${esquecidasTexto}
 
-📌 *Observações Pós-Fechamento:*
+*Observações Pós-Fechamento:*
 ${obsPos || 'Nenhuma'}`
 
     const encodedText = encodeURIComponent(texto)
