@@ -53,6 +53,36 @@ export const useShiftHandover = (user, role, dataFiltro) => {
     }
   }
 
+  // === SALVAR ESQUECIDAS ===
+  const salvarEntregaEsquecida = async (novaEsquecida) => {
+    setIsActionLoading(true)
+    try {
+      // Mapeia o pagamento para a sigla do banco (D, C, PX) para as tabelas somarem corretamente
+      const siglaPagamento = novaEsquecida.forma_pagamento_real === 'DINHEIRO' ? 'D' : 
+                             novaEsquecida.forma_pagamento_real === 'CARTAO' ? 'C' : 'PX';
+
+      const payload = {
+        comanda: novaEsquecida.comanda,
+        valor: parseFloat(novaEsquecida.valor),
+        tipo_saida: siglaPagamento,
+        forma_pagamento_real: siglaPagamento,
+        // Salva a tag de esquecida e o tipo (Fiscal/Manual) na observação para manter o rastro
+        observacoes: `[ESQUECIDA - ${novaEsquecida.tipo_saida}]`, 
+        store_id: user.store_id,
+        created_by: user.id,
+      }
+      
+      await ShiftHandoverRepository.addDelivery(payload)
+      await carregarEntregas() // Recarrega para que ela apareça na tabela geral acima
+      return true
+    } catch (err) {
+      alert('Erro ao processar entrega esquecida: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   const excluirEntrega = async (id) => {
     try {
       await ShiftHandoverRepository.deleteDelivery(id)
@@ -117,7 +147,7 @@ export const useShiftHandover = (user, role, dataFiltro) => {
 
   return {
     entregas, isPageLoading, isActionLoading, turnoEncerrado,
-    carregarEntregas, salvarEntrega, excluirEntrega, toggleConciliado,
+    carregarEntregas, salvarEntrega, salvarEntregaEsquecida, excluirEntrega, toggleConciliado, // <- Exportada aqui
     toggleCheckTarde, alterarFormaReal, anotarObservacao, finalizarTurnoTarde
   }
 }
