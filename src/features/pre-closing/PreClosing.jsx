@@ -128,23 +128,23 @@ export const PreClosing = () => {
 
   const handleSendWhatsApp = () => {
     const texto = `*Pré-Fechamento de Caixa* 📊
-📅 *Data:* ${new Date().toLocaleDateString('pt-BR')}
+*Data:* ${new Date().toLocaleDateString('pt-BR')}
 
-💰 *Físico (Gaveta):*
+*Físico (Gaveta):*
 Dinheiro: R$ ${calcCash.toFixed(2).replace('.', ',')}
 Cartão: R$ ${calcCard.toFixed(2).replace('.', ',')}
 Pix: R$ ${calcPix.toFixed(2).replace('.', ',')}
 Cheques/Vales: R$ ${(calcCheck + calcVale).toFixed(2).replace('.', ',')}
 *Subtotal Físico:* R$ ${subtotalFisico.toFixed(2).replace('.', ',')}
 
-🛵 *Rua (Pendentes):*
+*Rua (Pendentes):*
 Dinheiro: R$ ${safeDelDinheiro.toFixed(2).replace('.', ',')}
 Cartão: R$ ${safeDelCartao.toFixed(2).replace('.', ',')}
 Pix: R$ ${safeDelPix.toFixed(2).replace('.', ',')}
 
-📈 *TOTAL GERAL PROJETADO:* R$ ${totalGeralProjetado.toFixed(2).replace('.', ',')}
+*TOTAL GERAL PROJETADO:* R$ ${totalGeralProjetado.toFixed(2).replace('.', ',')}
 
-📝 *Observações:* ${formValues.obs_geral || 'Nenhuma'}`;
+*Observações:* ${formValues.obs_geral || 'Nenhuma'}`;
 
     const encodedText = encodeURIComponent(texto);
     window.open(`https://wa.me/?text=${encodedText}`, '_blank');
@@ -165,23 +165,23 @@ Pix: R$ ${safeDelPix.toFixed(2).replace('.', ',')}
     const dataFormatada = new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     const texto = `*Pré-Fechamento Salvo* 📊
-📅 *Data/Hora:* ${dataFormatada}
+*Data/Hora:* ${dataFormatada}
 
-💰 *Físico (Gaveta):*
+*Físico (Gaveta):*
 Dinheiro: R$ ${cash.toFixed(2).replace('.', ',')}
 Cartão: R$ ${card.toFixed(2).replace('.', ',')}
 Pix: R$ ${pix.toFixed(2).replace('.', ',')}
 Cheques/Vales: R$ ${(check + vale).toFixed(2).replace('.', ',')}
 *Subtotal Físico:* R$ ${subFisico.toFixed(2).replace('.', ',')}
 
-🛵 *Rua (Pendentes):*
+*Rua (Pendentes):*
 Dinheiro: R$ ${pCash.toFixed(2).replace('.', ',')}
 Cartão: R$ ${pCard.toFixed(2).replace('.', ',')}
 Pix: R$ ${pPix.toFixed(2).replace('.', ',')}
 
-📈 *TOTAL GERAL PROJETADO:* R$ ${total.toFixed(2).replace('.', ',')}
+*TOTAL GERAL PROJETADO:* R$ ${total.toFixed(2).replace('.', ',')}
 
-📝 *Observações:* ${row.obs_geral || 'Nenhuma'}`;
+*Observações:* ${row.obs_geral || 'Nenhuma'}`;
 
     const encodedText = encodeURIComponent(texto);
     window.open(`https://wa.me/?text=${encodedText}`, '_blank');
