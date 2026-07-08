@@ -43,7 +43,7 @@ export const ShiftHandover = () => {
     entregas,
     isPageLoading,
     isActionLoading,
-    turnoEncerrado,
+    isShiftClosed,
     carregarEntregas,
     salvarEntrega,
     salvarEntregaEsquecida,
@@ -52,14 +52,18 @@ export const ShiftHandover = () => {
     toggleCheckTarde,
     alterarFormaReal,
     anotarObservacao,
-    finalizarTurnoTarde,
+    fecharTurno,
   } = useShiftHandover(user, role, dataFiltro)
 
   const [editingId, setEditingId] = useState(null)
   const [obsGerais, setObsGerais] = useState('')
 
-  // === ESTADOS PARA CONTROLE DE PASSOS E ESQUECIDAS ===
-  const [step, setStep] = useState(1) 
+  const [step, setStep] = useState(1)
+
+  useEffect(() => {
+    setStep(isShiftClosed ? 2 : 1)
+  }, [isShiftClosed])
+
   const [obsPos, setObsPos] = useState('')
   const [esquecidas, setEsquecidas] = useState([])
   const [novaEsquecida, setNovaEsquecida] = useState({
@@ -68,13 +72,6 @@ export const ShiftHandover = () => {
     tipo_saida: 'FISCAL',
     forma_pagamento_real: 'DINHEIRO',
   })
-
-  const storageKey = `@TorresFarma:ShiftClosed_${dataFiltro}_${role}`
-
-  useEffect(() => {
-    const isClosed = localStorage.getItem(storageKey) === 'true'
-    setStep(isClosed ? 2 : 1)
-  }, [dataFiltro, role, storageKey])
 
   const {
     register,
@@ -131,22 +128,16 @@ export const ShiftHandover = () => {
     }
   }
 
-  // === FUNÇÕES DE AÇÃO DO PÓS FECHAMENTO ===
   const handleSaveTurno = async () => {
     if (
       window.confirm(
         'Deseja salvar as entregas do turno? Após salvar, você só poderá adicionar entregas esquecidas e observações extras.',
       )
     ) {
-      if (role === 'CAIXA_TARDE') {
-        await finalizarTurnoTarde()
+      const sucesso = await fecharTurno()
+      if (sucesso) {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       }
-
-      // GRAVA NO NAVEGADOR QUE O TURNO FECHOU PARA ESTA DATA
-      localStorage.setItem(storageKey, 'true')
-
-      setStep(2)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -837,7 +828,6 @@ ${obsPos || 'Nenhuma'}`
             alignItems: 'start',
           }}
         >
-          {/* LÓGICA ATUALIZADA: O formulário some se fechado, MAS APARECE MAGICA MENTE SE CLICAR EM EDITAR! */}
           {(step === 1 || editingId !== null) && (
             <form
               onSubmit={handleSubmit(onAdicionarEntrega)}
@@ -952,7 +942,6 @@ ${obsPos || 'Nenhuma'}`
               <div
                 style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
               >
-                {/* AVISO VISUAL DE QUE O TURNO ESTÁ FECHADO */}
                 {step === 2 && (
                   <span
                     style={{
@@ -992,7 +981,6 @@ ${obsPos || 'Nenhuma'}`
               </div>
             </div>
 
-            {/* LÓGICA ATUALIZADA: As tabelas não perdem mais o PointerEvents, continuam interativas para editar e conciliar */}
             <div
               style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
             >
@@ -1075,11 +1063,10 @@ ${obsPos || 'Nenhuma'}`
               }}
               className="no-print"
             >
-              <div></div> {/* Espaçador */}
+              <div></div>
               <div
                 style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
               >
-                {/* AVISO VISUAL DE QUE O TURNO ESTÁ FECHADO */}
                 {step === 2 && (
                   <span
                     style={{
@@ -1121,7 +1108,6 @@ ${obsPos || 'Nenhuma'}`
               </div>
             </div>
 
-            {/* LÓGICA ATUALIZADA: Sem travamentos na tabela, check e selects continuam funcionando */}
             <div
               style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
             >
@@ -1179,22 +1165,11 @@ ${obsPos || 'Nenhuma'}`
               className="no-print"
             >
               {step === 1 && (
-                <>
-                  {turnoEncerrado && (
-                    <Button variant="secondary" onClick={() => window.print()}>
-                      <Printer size={16} style={{ marginRight: '6px' }} />{' '}
-                      Exportar PDF da Folha
-                    </Button>
-                  )}
-                  <div style={{ width: '250px' }}>
-                    <Button
-                      onClick={handleSaveTurno}
-                      isLoading={isActionLoading}
-                    >
-                      Encerrar Turno e Salvar
-                    </Button>
-                  </div>
-                </>
+                <div style={{ width: '250px' }}>
+                  <Button onClick={handleSaveTurno} isLoading={isActionLoading}>
+                    Encerrar Turno e Salvar
+                  </Button>
+                </div>
               )}
             </div>
           </Card>

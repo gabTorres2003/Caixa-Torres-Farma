@@ -5,7 +5,7 @@ export const useShiftHandover = (user, role, dataFiltro) => {
   const [entregas, setEntregas] = useState([])
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
-  const [turnoEncerrado, setTurnoEncerrado] = useState(false)
+  const [isShiftClosed, setIsShiftClosed] = useState(false) 
 
   const carregarEntregas = useCallback(async () => {
     if (!user?.store_id) return
@@ -18,6 +18,10 @@ export const useShiftHandover = (user, role, dataFiltro) => {
       }
       const data = await ShiftHandoverRepository.getDeliveries(user.store_id, dataConsulta)
       setEntregas(data)
+
+      const fechado = await ShiftHandoverRepository.checkShiftClosed(user.store_id, dataConsulta, role)
+      setIsShiftClosed(fechado)
+
     } catch (err) {
       console.error('Erro ao buscar entregas:', err.message)
     } finally {
@@ -53,11 +57,9 @@ export const useShiftHandover = (user, role, dataFiltro) => {
     }
   }
 
-  // === SALVAR ESQUECIDAS ===
   const salvarEntregaEsquecida = async (novaEsquecida) => {
     setIsActionLoading(true)
     try {
-      // Mapeia o pagamento para a sigla do banco (D, C, PX) para as tabelas somarem corretamente
       const siglaPagamento = novaEsquecida.forma_pagamento_real === 'DINHEIRO' ? 'D' : 
                              novaEsquecida.forma_pagamento_real === 'CARTAO' ? 'C' : 'PX';
 
@@ -66,14 +68,13 @@ export const useShiftHandover = (user, role, dataFiltro) => {
         valor: parseFloat(novaEsquecida.valor),
         tipo_saida: siglaPagamento,
         forma_pagamento_real: siglaPagamento,
-        // Salva a tag de esquecida e o tipo (Fiscal/Manual) na observação para manter o rastro
         observacoes: `[ESQUECIDA - ${novaEsquecida.tipo_saida}]`, 
         store_id: user.store_id,
         created_by: user.id,
       }
       
       await ShiftHandoverRepository.addDelivery(payload)
-      await carregarEntregas() // Recarrega para que ela apareça na tabela geral acima
+      await carregarEntregas()
       return true
     } catch (err) {
       alert('Erro ao processar entrega esquecida: ' + err.message)
@@ -131,23 +132,31 @@ export const useShiftHandover = (user, role, dataFiltro) => {
     }
   }
 
-  const finalizarTurnoTarde = async () => {
+  // === UNIFICAMOS O FECHAMENTO DO BANCO DE DADOS ===
+  const fecharTurno = async () => {
     setIsActionLoading(true)
     try {
-      await ShiftHandoverRepository.finalizeAfternoonShift(user.store_id)
-      alert('Turno vespertino consolidado com sucesso!')
-      setTurnoEncerrado(true)
-      await carregarEntregas()
+      let dataConsulta = dataFiltro
+      if (role === 'CAIXA_TARDE') {
+        const tzOffset = new Date().getTimezoneOffset() * 60000
+        dataConsulta = new Date(Date.now() - tzOffset).toISOString().split('T')[0]
+        await ShiftHandoverRepository.finalizeAfternoonShift(user.store_id)
+      }
+      
+      await ShiftHandoverRepository.closeShift(user.store_id, dataConsulta, role, user.id)
+      setIsShiftClosed(true)
+      return true
     } catch (err) {
       alert('Erro ao encerrar turno: ' + err.message)
+      return false
     } finally {
       setIsActionLoading(false)
     }
   }
 
   return {
-    entregas, isPageLoading, isActionLoading, turnoEncerrado,
-    carregarEntregas, salvarEntrega, salvarEntregaEsquecida, excluirEntrega, toggleConciliado, // <- Exportada aqui
-    toggleCheckTarde, alterarFormaReal, anotarObservacao, finalizarTurnoTarde
+    entregas, isPageLoading, isActionLoading, isShiftClosed,
+    carregarEntregas, salvarEntrega, salvarEntregaEsquecida, excluirEntrega, toggleConciliado,
+    toggleCheckTarde, alterarFormaReal, anotarObservacao, fecharTurno
   }
 }

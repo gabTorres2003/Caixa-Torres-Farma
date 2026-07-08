@@ -56,5 +56,32 @@ export const ShiftHandoverRepository = {
       .eq('store_id', storeId)
       .eq('conferido', false)
     if (error) throw error
+  },
+
+  // === NOVAS FUNÇÕES PARA TRAVAMENTO DE TURNO ===
+  async checkShiftClosed(storeId, date, shiftType) {
+    const { data, error } = await supabase
+      .from('shift_closures')
+      .select('id')
+      .eq('store_id', storeId)
+      .eq('shift_date', date)
+      .eq('shift_type', shiftType)
+      .maybeSingle()
+    
+    if (error) throw error
+    return !!data
+  },
+
+  async closeShift(storeId, date, shiftType, userId) {
+    const { error } = await supabase
+      .from('shift_closures')
+      .insert([{
+        store_id: storeId,
+        shift_date: date,
+        shift_type: shiftType,
+        closed_by: userId
+      }])
+    
+    if (error && error.code !== '23505') throw error
   }
 }
