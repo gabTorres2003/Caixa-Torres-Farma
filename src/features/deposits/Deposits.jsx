@@ -8,7 +8,7 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Banknote, Plus, Calendar, FileText, Loader2, Printer, Pencil, Trash2, AlertCircle } from 'lucide-react'
+import { Banknote, Plus, Calendar, FileText, Loader2, Printer, Pencil, Trash2, AlertCircle, Send } from 'lucide-react'
 
 export const Deposits = () => {
   const { user } = useAuth()
@@ -23,7 +23,6 @@ export const Deposits = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  // Estado apenas para as notas (Moedas removidas do depósito)
   const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
@@ -34,7 +33,6 @@ export const Deposits = () => {
     carregarDepositos()
   }, [carregarDepositos])
 
-  // Lógica de cálculo automático das notas
   const valorCalculado = Object.values(notas).reduce((acc, val) => acc + val, 0)
   
   useEffect(() => {
@@ -43,7 +41,6 @@ export const Deposits = () => {
     }
   }, [notas, origemSelecionada, setValue, valorCalculado])
 
-  // Preenche a data automaticamente para o dia de hoje ao selecionar "Caixa de Troco"
   useEffect(() => {
     if (origemSelecionada === 'Caixa de Troco') {
       const tzOffset = new Date().getTimezoneOffset() * 60000
@@ -64,7 +61,6 @@ export const Deposits = () => {
     return qtds;
   }
 
-  // --- CÁLCULO DE DEPÓSITOS E TROCAS ---
   const depositosFiltrados = depositsList.filter(d => d.categoria === 'Depósito' || !d.categoria)
   const totalBrutoDepositos = depositosFiltrados.reduce((acc, curr) => acc + Number(curr.valor), 0)
 
@@ -73,7 +69,6 @@ export const Deposits = () => {
 
   const totalLiquidoDepositos = totalBrutoDepositos - totalTrocas
 
-  // --- AÇÕES ADMIN ---
   const handleEdit = (registro) => {
     if(registro.origem === 'Caixa de Troco') {
       alert("Depósitos oriundos do Caixa de Troco abatem saldo do cofre e não podem ser editados diretamente. Exclua e crie um novo se houver erro grave.")
@@ -123,6 +118,49 @@ export const Deposits = () => {
       await salvarDeposito(payload, editingId)
       fecharModal()
     } catch (e) {}
+  }
+
+  // --- FUNÇÕES DE WHATSAPP ---
+  const handleSendRowWhatsApp = (registro) => {
+    const dataObj = new Date(registro.created_at)
+    const dataApenas = dataObj.toLocaleDateString('pt-BR')
+    const horaApenas = dataObj.toLocaleTimeString('pt-BR')
+    const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
+    const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
+      
+    const origemComData = registro.data_caixa 
+      ? `${registro.origem} - ${new Date(registro.data_caixa + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : registro.origem
+
+    const texto = `*Comprovante de Depósito* 
+    
+*Operador:* ${nomeOperador}
+*Data/Hora:* ${dataApenas} às ${horaApenas}
+*Origem:* ${origemComData}
+
+*VALOR RETIRADO:* ${valorFormatado}`;
+
+    const encodedText = encodeURIComponent(texto);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+  }
+
+  const handleSendTotalWhatsApp = () => {
+    const dataAtual = new Date()
+    const dataApenas = dataAtual.toLocaleDateString('pt-BR')
+    const horaApenas = dataAtual.toLocaleTimeString('pt-BR')
+    const valorFormatado = `R$ ${totalLiquidoDepositos.toFixed(2).replace('.', ',')}`
+    const valorTroca = `R$ ${totalTrocas.toFixed(2).replace('.', ',')}`
+    const nomeOperador = user?.nome || 'Operador'
+
+    const texto = `*Fechamento de Depósitos* 
+*Data Ref.:* ${dataFiltro.split('-').reverse().join('/')}
+*Operador:* ${nomeOperador}
+*Emitido em:* ${dataApenas} às ${horaApenas}
+
+${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO:* ${valorFormatado}`;
+
+    const encodedText = encodeURIComponent(texto);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   }
 
   // --- FUNÇÕES DE IMPRESSÃO ---
@@ -229,7 +267,12 @@ export const Deposits = () => {
     { header: 'Valor Retirado', render: (row) => <strong style={{ color: '#dc2626' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
     { header: 'Ações', render: (row) => (
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          
           <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir"><Printer size={20} /></button>
+          
+          {/* BOTÃO DE WHATSAPP INDIVIDUAL */}
+          <button onClick={() => handleSendRowWhatsApp(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a' }} title="Enviar p/ WhatsApp"><Send size={18} /></button>
+          
           {user.role === 'ADMIN' && (
             <>
               <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar"><Pencil size={18} /></button>
@@ -254,6 +297,7 @@ export const Deposits = () => {
         .deposito-divider { width: 1px; height: 48px; background-color: #cbd5e1; }
         .table-responsive-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; }
         .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
+        .botoes-totais { display: flex; gap: 12px; align-items: center; }
         
         /* CSS CORRIGIDO PARA EVITAR OVERFLOW */
         .notes-container {
@@ -277,7 +321,7 @@ export const Deposits = () => {
           display: flex; 
           flex-direction: column; 
           gap: 4px; 
-          min-width: 0; /* Previne que o item force o grid a estourar */
+          min-width: 0;
         }
         .note-input {
           width: 100%;
@@ -301,7 +345,8 @@ export const Deposits = () => {
           .deposito-actions button { width: 100%; justify-content: center; }
           .deposito-summary-area { flex-direction: column-reverse; align-items: stretch; }
           .deposito-total-box { flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
-          .deposito-total-box button { width: 100%; justify-content: center; }
+          .botoes-totais { flex-direction: column; width: 100%; }
+          .botoes-totais button { width: 100%; justify-content: center; }
           .deposito-divider { width: 100%; height: 1px; }
           .modal-buttons { flex-direction: column; }
           .modal-buttons button { width: 100%; justify-content: center; }
@@ -335,7 +380,6 @@ export const Deposits = () => {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total {user.role === 'ADMIN' ? 'Filtrado' : 'no Turno'}</span>
                 
-                {/* Mostra se teve troca batendo o total */}
                 {totalTrocas > 0 && (
                   <span style={{ fontSize: '0.85rem', color: '#d97706', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <AlertCircle size={14}/> Abatido R$ {totalTrocas.toFixed(2).replace('.', ',')} de Troca
@@ -344,8 +388,15 @@ export const Deposits = () => {
                 
                 <span style={{ fontSize: '1.875rem', fontWeight: '800', color: 'var(--color-primary)', lineHeight: '1', whiteSpace: 'nowrap', marginTop: '4px' }}>R$ {totalLiquidoDepositos.toFixed(2).replace('.', ',')}</span>
               </div>
+              
               <div className="deposito-divider"></div>
-              <Button onClick={imprimirFechamentoDiario} icon={Printer} type="button">Imprimir Total</Button>
+              
+              {/* BOTÕES DE TOTAL (IMPRIMIR E WHATSAPP) */}
+              <div className="botoes-totais">
+                <Button onClick={imprimirFechamentoDiario} icon={Printer} type="button" variant="secondary">Imprimir</Button>
+                <Button onClick={handleSendTotalWhatsApp} icon={Send} type="button" style={{ backgroundColor: '#16a34a', color: 'white', border: 'none' }}>WhatsApp</Button>
+              </div>
+
             </div>
           </div>
           <div className="table-responsive-wrapper">
