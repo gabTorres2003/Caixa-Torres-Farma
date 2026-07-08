@@ -150,6 +150,43 @@ Pix: R$ ${safeDelPix.toFixed(2).replace('.', ',')}
     window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   }
 
+  const handleSendRowWhatsApp = (row) => {
+    const cash = Number(row.cash_value || 0);
+    const card = Number(row.card_value || 0);
+    const pix = Number(row.pix_value || 0);
+    const check = Number(row.check_value || 0);
+    const vale = Number(row.vale_compras_value || 0);
+    const pCash = Number(row.pending_cash || 0);
+    const pCard = Number(row.pending_card || 0);
+    const pPix = Number(row.pending_pix || 0);
+    const total = Number(row.total || 0);
+    
+    const subFisico = cash + card + pix + check + vale;
+    const dataFormatada = new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const texto = `*Pré-Fechamento Salvo* 📊
+📅 *Data/Hora:* ${dataFormatada}
+
+💰 *Físico (Gaveta):*
+Dinheiro: R$ ${cash.toFixed(2).replace('.', ',')}
+Cartão: R$ ${card.toFixed(2).replace('.', ',')}
+Pix: R$ ${pix.toFixed(2).replace('.', ',')}
+Cheques/Vales: R$ ${(check + vale).toFixed(2).replace('.', ',')}
+*Subtotal Físico:* R$ ${subFisico.toFixed(2).replace('.', ',')}
+
+🛵 *Rua (Pendentes):*
+Dinheiro: R$ ${pCash.toFixed(2).replace('.', ',')}
+Cartão: R$ ${pCard.toFixed(2).replace('.', ',')}
+Pix: R$ ${pPix.toFixed(2).replace('.', ',')}
+
+📈 *TOTAL GERAL PROJETADO:* R$ ${total.toFixed(2).replace('.', ',')}
+
+📝 *Observações:* ${row.obs_geral || 'Nenhuma'}`;
+
+    const encodedText = encodeURIComponent(texto);
+    window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+  };
+
   const formatReais = (val) => `R$ ${Number(val || 0).toFixed(2).replace('.', ',')}`
 
   const columns = [
@@ -160,13 +197,28 @@ Pix: R$ ${safeDelPix.toFixed(2).replace('.', ',')}
     { header: 'Cheque/Vale', render: (row) => formatReais(Number(row.check_value) + Number(row.vale_compras_value)) },
     { header: 'Rua Pendente', render: (row) => formatReais(Number(row.pending_cash) + Number(row.pending_card) + Number(row.pending_pix)) },
     { header: 'TOTAL PROJETADO', render: (row) => <strong style={{ color: 'var(--color-primary)' }}>{formatReais(row.total)}</strong> },
-    { header: 'Ações', render: (row) => (
+    { 
+      header: 'Ações', 
+      render: (row) => (
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {/* CORREÇÃO APLICADA: Admin OU o criador da linha podem editar/excluir */}
+          
+          {/* NOVO BOTÃO DE WHATSAPP */}
+          <button 
+            title="Enviar Relatório" 
+            onClick={() => handleSendRowWhatsApp(row)} 
+            style={{ background: 'none', border: 'none', color: '#16a34a', cursor: 'pointer' }}
+          >
+            <Send size={18} />
+          </button>
+
           {(user?.role === 'ADMIN' || user?.id === row.created_by) && (
             <>
-              <button onClick={() => handleEditRow(row)} style={{ background: 'none', border: 'none', color: '#d97706', cursor: 'pointer' }}><Pencil size={18} /></button>
-              <button onClick={async () => { if(window.confirm('Excluir este fechamento?')) await deletePreClosing(row.id) }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}><Trash2 size={18} /></button>
+              <button title="Editar" onClick={() => handleEditRow(row)} style={{ background: 'none', border: 'none', color: '#d97706', cursor: 'pointer' }}>
+                <Pencil size={18} />
+              </button>
+              <button title="Excluir" onClick={async () => { if(window.confirm('Excluir este fechamento?')) await deletePreClosing(row.id) }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }}>
+                <Trash2 size={18} />
+              </button>
             </>
           )}
         </div>
