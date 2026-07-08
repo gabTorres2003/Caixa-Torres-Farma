@@ -39,7 +39,6 @@ export const ShiftHandover = () => {
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  // Importando a nova função salvarEntregaEsquecida do Hook
   const {
     entregas,
     isPageLoading,
@@ -60,7 +59,7 @@ export const ShiftHandover = () => {
   const [obsGerais, setObsGerais] = useState('')
 
   // === ESTADOS PARA CONTROLE DE PASSOS E ESQUECIDAS ===
-  const [step, setStep] = useState(1) // 1 = Aberto (Normal), 2 = Salvo (Pós-Fechamento)
+  const [step, setStep] = useState(1) 
   const [obsPos, setObsPos] = useState('')
   const [esquecidas, setEsquecidas] = useState([])
   const [novaEsquecida, setNovaEsquecida] = useState({
@@ -69,6 +68,13 @@ export const ShiftHandover = () => {
     tipo_saida: 'FISCAL',
     forma_pagamento_real: 'DINHEIRO',
   })
+
+  const storageKey = `@TorresFarma:ShiftClosed_${dataFiltro}_${role}`
+
+  useEffect(() => {
+    const isClosed = localStorage.getItem(storageKey) === 'true'
+    setStep(isClosed ? 2 : 1)
+  }, [dataFiltro, role, storageKey])
 
   const {
     register,
@@ -135,6 +141,10 @@ export const ShiftHandover = () => {
       if (role === 'CAIXA_TARDE') {
         await finalizarTurnoTarde()
       }
+
+      // GRAVA NO NAVEGADOR QUE O TURNO FECHOU PARA ESTA DATA
+      localStorage.setItem(storageKey, 'true')
+
       setStep(2)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
@@ -144,12 +154,8 @@ export const ShiftHandover = () => {
     if (!novaEsquecida.comanda || !novaEsquecida.valor) {
       return alert('Preencha o código da venda e o valor da entrega esquecida.')
     }
-
-    // Chama o Hook para gravar no banco de dados Oficialmente
     const sucesso = await salvarEntregaEsquecida(novaEsquecida)
-
     if (sucesso) {
-      // Adiciona na lista visual do passo 2 para o Relatório do WhatsApp e Tabela
       setEsquecidas([...esquecidas, { ...novaEsquecida, id: Date.now() }])
       setNovaEsquecida({
         comanda: '',
@@ -305,6 +311,7 @@ ${obsPos || 'Nenhuma'}`
           {user.id === r.created_by && !r.conciliado && (
             <>
               <button
+                title="Editar Comanda"
                 type="button"
                 onClick={() => handleIniciarEdicao(r)}
                 style={{
@@ -317,6 +324,7 @@ ${obsPos || 'Nenhuma'}`
                 <Pencil size={16} />
               </button>
               <button
+                title="Excluir Comanda"
                 type="button"
                 onClick={() => onExcluirEntrega(r.id)}
                 style={{
@@ -790,32 +798,11 @@ ${obsPos || 'Nenhuma'}`
         }
         @media print {
           @page { margin: 10mm; size: A4 portrait; }
-          html, body, #root { 
-            height: auto !important; 
-            min-height: 0 !important; 
-            background-color: #ffffff !important; 
-            display: block !important; 
-            overflow: visible !important;
-          }
-          body > div {
-            min-height: 0 !important;
-            display: block !important;
-          }
+          html, body, #root { height: auto !important; min-height: 0 !important; background-color: #ffffff !important; display: block !important; overflow: visible !important; }
+          body > div { min-height: 0 !important; display: block !important; }
           aside, nav, header, .no-print { display: none !important; }
-          main { 
-            width: 100% !important; 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            overflow: visible !important; 
-            display: block !important; 
-          }
-          .print-card { 
-            border: none !important; 
-            box-shadow: none !important; 
-            padding: 0 !important; 
-            margin: 0 !important; 
-            width: 100% !important; 
-          }
+          main { width: 100% !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; display: block !important; }
+          .print-card { border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; width: 100% !important; }
           .print-only { display: block !important; }
           table { width: 100% !important; table-layout: auto; page-break-inside: auto; }
           tr { page-break-inside: avoid; page-break-after: auto; }
@@ -850,7 +837,8 @@ ${obsPos || 'Nenhuma'}`
             alignItems: 'start',
           }}
         >
-          {step === 1 && (
+          {/* LÓGICA ATUALIZADA: O formulário some se fechado, MAS APARECE MAGICA MENTE SE CLICAR EM EDITAR! */}
+          {(step === 1 || editingId !== null) && (
             <form
               onSubmit={handleSubmit(onAdicionarEntrega)}
               className="no-print"
@@ -909,7 +897,7 @@ ${obsPos || 'Nenhuma'}`
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <Button type="submit" isLoading={isActionLoading}>
-                      {editingId ? 'Salvar' : 'Gravar'}
+                      {editingId ? 'Salvar Edição' : 'Gravar'}
                     </Button>
                     {editingId && (
                       <Button
@@ -961,7 +949,28 @@ ${obsPos || 'Nenhuma'}`
                   onChange={(e) => setDataFiltro(e.target.value)}
                 />
               </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div
+                style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
+              >
+                {/* AVISO VISUAL DE QUE O TURNO ESTÁ FECHADO */}
+                {step === 2 && (
+                  <span
+                    style={{
+                      backgroundColor: '#fef3c7',
+                      color: '#d97706',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <CheckCircle size={16} /> Turno Fechado
+                  </span>
+                )}
+
                 <Button variant="secondary" onClick={() => window.print()}>
                   <Printer size={16} style={{ marginRight: '6px' }} /> Exportar
                   PDF
@@ -983,64 +992,54 @@ ${obsPos || 'Nenhuma'}`
               </div>
             </div>
 
+            {/* LÓGICA ATUALIZADA: As tabelas não perdem mais o PointerEvents, continuam interativas para editar e conciliar */}
             <div
-              style={{
-                opacity: step === 2 ? 0.6 : 1,
-                pointerEvents: step === 2 ? 'none' : 'auto',
-              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '24px',
-                }}
-              >
-                <div>
-                  <h4
-                    style={{
-                      backgroundColor: '#fee2e2',
-                      padding: '10px',
-                      borderRadius: '6px',
-                      color: '#991b1b',
-                      marginBottom: '12px',
-                      textAlign: 'center',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Dinheiro — Total: R${' '}
-                    {totalDinheiro.toFixed(2).replace('.', ',')}
-                  </h4>
-                  <Table
-                    columns={getColunasManha()}
-                    data={entregas.filter((e) => e.tipo_saida === 'D')}
-                  />
-                </div>
-
-                <div>
-                  <h4
-                    style={{
-                      backgroundColor: '#e0e7ff',
-                      padding: '10px',
-                      borderRadius: '6px',
-                      color: '#1e40af',
-                      marginBottom: '12px',
-                      textAlign: 'center',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Cartão / Outros — Total: R${' '}
-                    {totalCartao.toFixed(2).replace('.', ',')}
-                  </h4>
-                  <Table
-                    columns={getColunasManha()}
-                    data={entregas.filter((e) => e.tipo_saida === 'C')}
-                  />
-                </div>
+              <div>
+                <h4
+                  style={{
+                    backgroundColor: '#fee2e2',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    color: '#991b1b',
+                    marginBottom: '12px',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Dinheiro — Total: R${' '}
+                  {totalDinheiro.toFixed(2).replace('.', ',')}
+                </h4>
+                <Table
+                  columns={getColunasManha()}
+                  data={entregas.filter((e) => e.tipo_saida === 'D')}
+                />
               </div>
 
-              {renderObservacoesGerais}
+              <div>
+                <h4
+                  style={{
+                    backgroundColor: '#e0e7ff',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    color: '#1e40af',
+                    marginBottom: '12px',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Cartão / Outros — Total: R${' '}
+                  {totalCartao.toFixed(2).replace('.', ',')}
+                </h4>
+                <Table
+                  columns={getColunasManha()}
+                  data={entregas.filter((e) => e.tipo_saida === 'C')}
+                />
+              </div>
             </div>
+
+            {renderObservacoesGerais}
 
             {step === 1 && (
               <div
@@ -1067,92 +1066,108 @@ ${obsPos || 'Nenhuma'}`
           <Card className="print-card">
             <CabecalhoPDF />
 
-            {step === 2 && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '12px',
-                  marginBottom: '20px',
-                }}
-                className="no-print"
-              >
-                <Button variant="secondary" onClick={() => window.print()}>
-                  <Printer size={16} style={{ marginRight: '6px' }} /> Exportar
-                  PDF
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleSendWhatsApp}
-                  style={{
-                    backgroundColor: '#16a34a',
-                    color: 'white',
-                    border: 'none',
-                  }}
-                >
-                  <MessageSquare size={16} style={{ marginRight: '6px' }} />{' '}
-                  Enviar p/ Grupo
-                </Button>
-              </div>
-            )}
-
             <div
               style={{
-                opacity: step === 2 ? 0.6 : 1,
-                pointerEvents: step === 2 ? 'none' : 'auto',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '24px',
               }}
+              className="no-print"
             >
+              <div></div> {/* Espaçador */}
               <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '24px',
-                }}
+                style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
               >
-                <div>
-                  <h4
+                {/* AVISO VISUAL DE QUE O TURNO ESTÁ FECHADO */}
+                {step === 2 && (
+                  <span
                     style={{
-                      backgroundColor: '#fee2e2',
-                      padding: '10px',
+                      backgroundColor: '#fef3c7',
+                      color: '#d97706',
+                      padding: '6px 12px',
                       borderRadius: '6px',
-                      color: '#991b1b',
-                      marginBottom: '12px',
-                      textAlign: 'center',
+                      fontSize: '0.85rem',
                       fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}
                   >
-                    Conferência Dinheiro — Total: R${' '}
-                    {totalDinheiro.toFixed(2).replace('.', ',')}
-                  </h4>
-                  <Table
-                    columns={colunasTarde}
-                    data={entregas.filter((e) => e.tipo_saida === 'D')}
-                  />
-                </div>
-                <div>
-                  <h4
-                    style={{
-                      backgroundColor: '#e0e7ff',
-                      padding: '10px',
-                      borderRadius: '6px',
-                      color: '#1e40af',
-                      marginBottom: '12px',
-                      textAlign: 'center',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    Conferência Cartão / Outros — Total: R${' '}
-                    {totalCartao.toFixed(2).replace('.', ',')}
-                  </h4>
-                  <Table
-                    columns={colunasTarde}
-                    data={entregas.filter((e) => e.tipo_saida === 'C')}
-                  />
-                </div>
-              </div>
+                    <CheckCircle size={16} /> Turno Fechado
+                  </span>
+                )}
 
-              {renderObservacoesGerais}
+                {step === 2 && (
+                  <>
+                    <Button variant="secondary" onClick={() => window.print()}>
+                      <Printer size={16} style={{ marginRight: '6px' }} />{' '}
+                      Exportar PDF
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={handleSendWhatsApp}
+                      style={{
+                        backgroundColor: '#16a34a',
+                        color: 'white',
+                        border: 'none',
+                      }}
+                    >
+                      <MessageSquare size={16} style={{ marginRight: '6px' }} />{' '}
+                      Enviar p/ Grupo
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* LÓGICA ATUALIZADA: Sem travamentos na tabela, check e selects continuam funcionando */}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}
+            >
+              <div>
+                <h4
+                  style={{
+                    backgroundColor: '#fee2e2',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    color: '#991b1b',
+                    marginBottom: '12px',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Conferência Dinheiro — Total: R${' '}
+                  {totalDinheiro.toFixed(2).replace('.', ',')}
+                </h4>
+                <Table
+                  columns={colunasTarde}
+                  data={entregas.filter((e) => e.tipo_saida === 'D')}
+                />
+              </div>
+              <div>
+                <h4
+                  style={{
+                    backgroundColor: '#e0e7ff',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    color: '#1e40af',
+                    marginBottom: '12px',
+                    textAlign: 'center',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  Conferência Cartão / Outros — Total: R${' '}
+                  {totalCartao.toFixed(2).replace('.', ',')}
+                </h4>
+                <Table
+                  columns={colunasTarde}
+                  data={entregas.filter((e) => e.tipo_saida === 'C')}
+                />
+              </div>
+            </div>
+
+            {renderObservacoesGerais}
 
             <div
               style={{
@@ -1195,7 +1210,6 @@ ${obsPos || 'Nenhuma'}`
           className="print-card"
         >
           <CabecalhoPDF />
-
           <div
             style={{
               display: 'flex',
