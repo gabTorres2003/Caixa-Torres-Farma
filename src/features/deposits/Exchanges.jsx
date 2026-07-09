@@ -1,29 +1,12 @@
-import React, { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import React, { useState } from 'react'
 import { useAuth } from '../../core/hooks/useAuth'
-import { useDeposits } from '../../core/hooks/useDeposits'
+import { useExchanges } from '../../core/hooks/useExchanges' // Import ajustado!
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
 import { ArrowLeftRight, Plus, Printer, Loader2, CheckCircle, Calendar, Pencil, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
-
-const formatRecebedor = (raw) => {
-  if (!raw) return 'Operador';
-  if (typeof raw === 'string' && raw.includes('"recebido_por"')) {
-    try { return JSON.parse(raw).recebido_por || 'Operador'; } catch (e) { return raw; }
-  }
-  return raw;
-};
-
-const formatDetalhes = (registro) => {
-  if (registro.detalhes_troca && Object.keys(registro.detalhes_troca).length > 0) return registro.detalhes_troca;
-  if (registro.recebido_por && typeof registro.recebido_por === 'string' && registro.recebido_por.includes('"detalhes_troca"')) {
-    try { return JSON.parse(registro.recebido_por).detalhes_troca || null; } catch(e) {}
-  }
-  return null;
-};
 
 export const Exchanges = () => {
   const { user } = useAuth()
@@ -32,218 +15,18 @@ export const Exchanges = () => {
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  const { depositsList, isPageLoading, isActionLoading, carregarDepositos, salvarDeposito, excluirDeposito, receberTroca } = useDeposits(user, dataFiltro)
+  // Conectando com a nossa lógica isolada no Hook
+  const {
+    formProps, isPageLoading, isActionLoading, trocasList,
+    isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
+    notas, moedas, notasIn, moedasIn,
+    isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
+    origemSelecionada, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
+    formatRecebedor, handleNotaChange, handleMoedaChange, handleNotaInChange, handleMoedaInChange, handleNotaRecChange, handleMoedaRecChange,
+    handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
+  } = useExchanges(user, dataFiltro)
 
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [tipoTroca, setTipoTroca] = useState('INTERNA')
-
-  const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedasValor, setMoedasValor] = useState('')
-
-  const [notasIn, setNotasIn] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedasValorIn, setMoedasValorIn] = useState('')
-
-  const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
-  const [receivingTroca, setReceivingTroca] = useState(null)
-  const [notasRec, setNotasRec] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedasValorRec, setMoedasValorRec] = useState('')
-
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm()
-  const origemSelecionada = watch('origem')
-
-  useEffect(() => { carregarDepositos() }, [carregarDepositos])
-
-  const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
-
-  const handleNotaChange = (nota, valor) => { setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
-  const handleNotaInChange = (nota, valor) => { setNotasIn(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
-  const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
-
-  const valorCalculadoOut = Object.values(notas).reduce((acc, val) => acc + val, 0) + Number(moedasValor || 0)
-  const valorCalculadoIn = Object.values(notasIn).reduce((acc, val) => acc + val, 0) + Number(moedasValorIn || 0)
-  
-  useEffect(() => {
-    if (tipoTroca === 'INTERNA' || origemSelecionada === 'Caixa de Troco') {
-      setValue('valor', valorCalculadoOut)
-    }
-  }, [notas, moedasValor, tipoTroca, origemSelecionada, setValue, valorCalculadoOut])
-
-  const isMatchInterna = tipoTroca === 'INTERNA' ? (valorCalculadoOut === valorCalculadoIn && valorCalculadoOut > 0) : true;
-
-  const somaRecebimento = Object.values(notasRec).reduce((acc, val) => acc + val, 0) + Number(moedasValorRec || 0)
-  const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
-
-  const converterValoresParaQuantidades = (notasEmReais) => {
-    const qtds = {};
-    Object.entries(notasEmReais).forEach(([notaFace, valorTotal]) => {
-      qtds[notaFace] = Math.round((Number(valorTotal) || 0) / Number(notaFace));
-    });
-    return qtds;
-  }
-
-  const handleEdit = (registro) => {
-    alert("Trocas que envolvem notas do cofre não podem ser editadas, pois o dinheiro já foi retirado/adicionado fisicamente. Exclua e crie novamente se houver erro.")
-  }
-
-  const handleDelete = async (id) => {
-    if (window.confirm('ATENÇÃO: Deseja apagar esta troca permanentemente? (Os valores NÃO serão estornados no cofre automaticamente)')) {
-      await excluirDeposito(id)
-    }
-  }
-
-  const fecharModal = () => {
-    setIsModalOpen(false)
-    setEditingId(null)
-    setNotas({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedasValor('')
-    setNotasIn({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedasValorIn('')
-    reset({ valor: '', origem: '', destino: '' })
-    setTipoTroca('INTERNA')
-  }
-
-  const onSubmitCreate = async (data) => {
-    const isCaixaTroco = tipoTroca === 'INTERNA' || data.origem === 'Caixa de Troco'
-    const valorFinal = isCaixaTroco ? valorCalculadoOut : parseFloat(data.valor)
-
-    if (isCaixaTroco && valorFinal <= 0) {
-      alert("Informe os valores trocados.")
-      return
-    }
-
-    if (tipoTroca === 'INTERNA' && !isMatchInterna) {
-      alert("Os valores de Retirada e Entrada precisam ser exatamente iguais!")
-      return
-    }
-
-    const notasOutEmQuantidade = converterValoresParaQuantidades(notas);
-    const notasInEmQuantidade = tipoTroca === 'INTERNA' ? converterValoresParaQuantidades(notasIn) : null;
-
-    const payload = {
-      valor: valorFinal,
-      value: valorFinal,
-      categoria: tipoTroca === 'INTERNA' ? 'Troca (Caixa de Troco)' : 'Troca Externa',
-      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : data.origem,
-      origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : data.origem,
-      destino: tipoTroca === 'EXTERNA' ? data.destino : null,
-      detalhes_troca: isCaixaTroco ? { 
-        notas: notasOutEmQuantidade, 
-        moedasValor: Number(moedasValor || 0),
-        ...(tipoTroca === 'INTERNA' && {
-          notasEntrada: notasInEmQuantidade,
-          moedasValorEntrada: Number(moedasValorIn || 0)
-        })
-      } : null
-    }
-
-    if (!editingId) {
-      payload.status_troca = tipoTroca === 'EXTERNA' ? 'PENDENTE' : 'CONCLUIDA'
-      payload.responsavel_nome = user?.nome || 'Operador'
-    }
-
-    try {
-      await salvarDeposito(payload, editingId)
-      if (tipoTroca === 'EXTERNA' && data.origem === 'Caixa de Troco') {
-        alert("Atenção: O dinheiro físico foi subtraído do Cofre. Quando o portador retornar da rua com o troco, você OBRIGATORIAMENTE deverá registrar o Recebimento para devolver o valor ao Caixa de Troco!")
-      }
-      fecharModal()
-    } catch (e) {}
-  }
-
-  const handleOpenReceive = (troca) => {
-    setReceivingTroca(troca)
-    setNotasRec({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedasValorRec('')
-    setIsReceiveModalOpen(true)
-  }
-
-  const onSubmitReceive = async (e) => {
-    e.preventDefault()
-    if (!isMatchRecebimento) return
-    const notasRecEmQuantidade = converterValoresParaQuantidades(notasRec);
-    await receberTroca(receivingTroca.id, {
-      recebido_por: user?.nome || 'Operador',
-      detalhes_troca: { notas: notasRecEmQuantidade, moedasValor: Number(moedasValorRec || 0) },
-      valor_recebido: somaRecebimento
-    }, receivingTroca)
-    setIsReceiveModalOpen(false)
-  }
-
-  const imprimirComprovante = (registro) => {
-    const dataObj = new Date(registro.created_at)
-    const dataApenas = dataObj.toLocaleDateString('pt-BR')
-    const horaApenas = dataObj.toLocaleTimeString('pt-BR')
-    const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
-    const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
-
-    const detalhesLimpos = formatDetalhes(registro)
-    const recebedorLimpo = formatRecebedor(registro.recebido_por)
-
-    let detalhesOutHtml = '';
-    let detalhesInHtml = '';
-
-    if (detalhesLimpos && detalhesLimpos.notas) {
-      detalhesOutHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #b91c1c;">[-] Retirado do Cofre:</div>';
-      [200, 100, 50, 20, 10, 5, 2].forEach(n => {
-        if (detalhesLimpos.notas[n] > 0) detalhesOutHtml += `<div>Notas R$ ${n}: R$ ${(detalhesLimpos.notas[n] * n).toFixed(2).replace('.',',')}</div>`
-      });
-      if (detalhesLimpos.moedasValor > 0) detalhesOutHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValor).toFixed(2).replace('.',',')}</div>`
-      
-      if (detalhesLimpos.notasEntrada) {
-        detalhesInHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #15803d;">[+] Colocado no Cofre:</div>';
-        [200, 100, 50, 20, 10, 5, 2].forEach(n => {
-          if (detalhesLimpos.notasEntrada[n] > 0) detalhesInHtml += `<div>Notas R$ ${n}: R$ ${(detalhesLimpos.notasEntrada[n] * n).toFixed(2).replace('.',',')}</div>`
-        });
-        if (detalhesLimpos.moedasValorEntrada > 0) detalhesInHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValorEntrada).toFixed(2).replace('.',',')}</div>`
-      }
-    }
-
-    let conteudoCupom = '';
-
-    if (registro.categoria === 'Troca (Caixa de Troco)') {
-      conteudoCupom = `
-        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA INTERNA</div>
-          <div class="divisor"></div>
-          <div><span class="bold">Data/Hora:</span> ${dataApenas} ${horaApenas}</div>
-          <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
-          ${detalhesOutHtml}
-          ${detalhesInHtml}
-          <div class="divisor"></div>
-          <div class="bold" style="font-size: 18px; text-align: center;">TOTAL TROCADO<br>${valorFormatado}</div>
-          <div class="divisor"></div>
-        </body></html>`;
-    } else {
-      conteudoCupom = `
-        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA EXTERNA</div>
-          <div class="divisor"></div>
-          <div><span class="bold">Data Saída:</span> ${dataApenas} ${horaApenas}</div>
-          <div><span class="bold">Origem:</span> ${registro.origem}</div>
-          <div><span class="bold">Destino:</span> ${registro.destino}</div>
-          ${!registro.recebido_por ? detalhesOutHtml : ''}
-          <div class="divisor"></div>
-          <div class="bold" style="font-size: 18px;">VALOR RETIRADO: ${valorFormatado}</div>
-          <div class="divisor"></div><br>
-          <div><span class="bold">Registrado (Saída):</span><br>${nomeOperador}</div><br>
-          ${registro.recebido_por ? `
-          <div class="divisor"></div>
-          <div class="center bold">-- RETORNO DA TROCA --</div>
-          ${detalhesOutHtml.replace('Retirado do Cofre', 'Recebido em Troco')}
-          <div class="divisor"></div>
-          <div><span class="bold">Recebido (Retorno):</span><br>${recebedorLimpo}</div><br><div class="center" style="font-size: 12px;">Entrada no Cofre: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
-        </body></html>`;
-    }
-
-    const janelaImpressao = window.open('', '', 'width=300,height=400')
-    janelaImpressao.document.write(conteudoCupom)
-    janelaImpressao.document.close()
-    janelaImpressao.focus()
-    setTimeout(() => { janelaImpressao.print(); janelaImpressao.close() }, 250)
-  }
+  const { register, handleSubmit, errors } = formProps
 
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
@@ -268,7 +51,7 @@ export const Exchanges = () => {
 
           {user.role === 'ADMIN' && (
             <>
-              <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }}><Pencil size={18} /></button>
+              <button onClick={() => handleEdit()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }}><Pencil size={18} /></button>
               <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>
             </>
           )}
@@ -358,14 +141,20 @@ export const Exchanges = () => {
               <div className="notes-grid out">
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Notas de R$ {nota}</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Notas R$ {nota}</label>
                     <input type="number" step="0.01" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0,00" />
                   </div>
                 ))}
-                <div className="note-item" style={{ gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
-                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasValor} onChange={(e) => setMoedasValor(e.target.value)} placeholder="0,00" />
-                </div>
+                
+                <div style={{ gridColumn: '1 / -1', height: '1px', backgroundColor: '#fecdd3', margin: '4px 0' }}></div>
+                <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', fontWeight: 'bold', color: '#9f1239' }}>Moedas Retiradas</div>
+
+                {[1, 0.5, 0.25, 0.1, 0.05].map(moeda => (
+                  <div key={moeda} className="note-item">
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas R$ {moeda.toFixed(2).replace('.', ',')}</label>
+                    <input type="number" step="0.01" min="0" className="input-field note-input" value={moedas[moeda] || ''} onChange={(e) => handleMoedaChange(moeda, e.target.value)} placeholder="0,00" />
+                  </div>
+                ))}
               </div>
               <div className="total-wrapper out">
                 <span style={{ fontWeight: 'bold', color: '#9f1239' }}>Soma Retirada:</span>
@@ -374,7 +163,7 @@ export const Exchanges = () => {
             </div>
           ) : (
             <div style={{ width: '100%', boxSizing: 'border-box' }}>
-              <FormInput label="Valor Retirado (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Mín. R$ 1,00' } })} error={errors.valor} />
+              <FormInput label="Valor Retirado (R$)" id="valor" type="number" step="0.01" placeholder="0,00" register={register('valor', { required: 'Obrigatório', min: { value: 1, message: 'Mín. R$ 1,00' } })} error={errors?.valor} />
             </div>
           )}
 
@@ -387,21 +176,26 @@ export const Exchanges = () => {
               <div className="notes-grid in">
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Notas de R$ {nota}</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Notas R$ {nota}</label>
                     <input type="number" step="0.01" min="0" className="input-field note-input" value={notasIn[nota] || ''} onChange={(e) => handleNotaInChange(nota, e.target.value)} placeholder="0,00" />
                   </div>
                 ))}
-                <div className="note-item" style={{ gridColumn: 'span 2' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
-                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasValorIn} onChange={(e) => setMoedasValorIn(e.target.value)} placeholder="0,00" />
-                </div>
+
+                <div style={{ gridColumn: '1 / -1', height: '1px', backgroundColor: '#bbf7d0', margin: '4px 0' }}></div>
+                <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', fontWeight: 'bold', color: '#166534' }}>Moedas Devolvidas</div>
+
+                {[1, 0.5, 0.25, 0.1, 0.05].map(moeda => (
+                  <div key={moeda} className="note-item">
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas R$ {moeda.toFixed(2).replace('.', ',')}</label>
+                    <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasIn[moeda] || ''} onChange={(e) => handleMoedaInChange(moeda, e.target.value)} placeholder="0,00" />
+                  </div>
+                ))}
               </div>
               <div className="total-wrapper in">
                 <span style={{ fontWeight: 'bold', color: '#166534' }}>Soma Devolvida:</span>
                 <span style={{ fontSize: '1.25rem', fontWeight: '900', color: '#166534' }}>R$ {valorCalculadoIn.toFixed(2).replace('.', ',')}</span>
               </div>
               
-              {/* ALERTA DE DIVERGÊNCIA */}
               {!isMatchInterna && valorCalculadoOut > 0 && (
                  <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '0.85rem', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold' }}>
                     A soma retirada (R$ {valorCalculadoOut.toFixed(2)}) e devolvida (R$ {valorCalculadoIn.toFixed(2)}) não batem!
@@ -440,14 +234,20 @@ export const Exchanges = () => {
             <div className="notes-grid in">
               {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                 <div key={nota} className="note-item">
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Em Notas de R$ {nota}</label>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Notas R$ {nota}</label>
                   <input type="number" step="0.01" min="0" className="input-field note-input" value={notasRec[nota] || ''} onChange={(e) => handleNotaRecChange(nota, e.target.value)} placeholder="0,00" />
                 </div>
               ))}
-              <div className="note-item" style={{ gridColumn: 'span 2' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas (Valor Total R$)</label>
-                <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasValorRec} onChange={(e) => setMoedasValorRec(e.target.value)} placeholder="0,00" />
-              </div>
+
+              <div style={{ gridColumn: '1 / -1', height: '1px', backgroundColor: '#bbf7d0', margin: '4px 0' }}></div>
+              <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', fontWeight: 'bold', color: '#065f46' }}>Moedas Recebidas</div>
+
+              {[1, 0.5, 0.25, 0.1, 0.05].map(moeda => (
+                <div key={moeda} className="note-item">
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas R$ {moeda.toFixed(2).replace('.', ',')}</label>
+                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasRec[moeda] || ''} onChange={(e) => handleMoedaRecChange(moeda, e.target.value)} placeholder="0,00" />
+                </div>
+              ))}
             </div>
           </div>
 
