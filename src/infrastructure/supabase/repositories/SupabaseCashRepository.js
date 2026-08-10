@@ -30,7 +30,6 @@ export const SupabaseCashRepository = {
     return data
   },
 
-  // Busca movimentações filtradas por data
   async getMovementsByDate(storeId, dateStr) {
     const start = `${dateStr}T00:00:00-03:00`
     const end = `${dateStr}T23:59:59-03:00`
@@ -45,6 +44,7 @@ export const SupabaseCashRepository = {
     return data || []
   },
 
+  // === INCLUIDO AS MOEDAS ===
   async registerOutflowFromVault(storeId, userId, notas, moedasValor, totalValue, destino, moedasIndividuais = null) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     const updates = [];
@@ -72,10 +72,15 @@ export const SupabaseCashRepository = {
       await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
     }
 
-    const payloadMovimento = { store_id: storeId, created_by: userId, tipo_movimento: 'SAIDA', valor_total: totalValue, origem: 'Caixa de Troco', destino: destino, detalhamento: { notas, moedas: moedasIndividuais, moedasValor } };
+    const payloadMovimento = { 
+        store_id: storeId, created_by: userId, tipo_movimento: 'SAIDA', 
+        valor_total: totalValue, origem: 'Caixa de Troco', destino: destino, 
+        detalhamento: { notas, moedas: moedasIndividuais, moedasValor } 
+    };
     await supabase.from('cash_movements').insert([payloadMovimento]);
   },
 
+  // === INCLUIDO AS MOEDAS ===
   async registerInflowToVault(storeId, userId, notas, moedasValor, totalValue, origem, moedasIndividuais = null) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     const updates = [];
@@ -101,7 +106,11 @@ export const SupabaseCashRepository = {
       await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
     }
 
-    const payloadMovimento = { store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', valor_total: totalValue, origem: origem, destino: 'Caixa de Troco', detalhamento: { notas, moedas: moedasIndividuais, moedasValor } };
+    const payloadMovimento = { 
+        store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', 
+        valor_total: totalValue, origem: origem, destino: 'Caixa de Troco', 
+        detalhamento: { notas, moedas: moedasIndividuais, moedasValor } 
+    };
     await supabase.from('cash_movements').insert([payloadMovimento]);
   },
 
@@ -161,30 +170,20 @@ export const SupabaseCashRepository = {
 
     if (totalInflow > 0) {
       await supabase.from('cash_movements').insert([{
-        store_id: storeId,
-        created_by: userId,
-        tipo_movimento: 'ENTRADA',
-        valor_total: totalInflow,
-        origem: operador ? `${origemStr} (${operador})` : origemStr,
-        destino: 'Cofre Central',
-        detalhamento
+        store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', valor_total: totalInflow,
+        origem: operador ? `${origemStr} (${operador})` : origemStr, destino: 'Cofre Central', detalhamento
       }]);
     }
   },
 
-  // NOVA FUNÇÃO: Reverter/Estornar Movimentação
   async revertMovement(storeId, userId, movementId) {
-    // 1. Busca a movimentação original
     const { data: mov, error: movError } = await supabase.from('cash_movements').select('*').eq('id', movementId).single();
     if (movError || !mov) throw new Error("Movimentação não encontrada.");
     
     if (mov.tipo_movimento === 'CONTAGEM_INICIAL') throw new Error("Não é possível estornar o saldo inicial.");
     if (mov.origem?.includes('ESTORNO') || mov.destino?.includes('ESTORNO')) throw new Error("Esta movimentação já é um estorno.");
 
-    // 2. Busca o estoque atual do cofre
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
-
-    // 3. Define a lógica de inversão (Se entrou, agora sai. Se saiu, agora entra)
     const isEntrada = mov.tipo_movimento === 'ENTRADA';
     const multiplier = isEntrada ? -1 : 1; 
 
@@ -192,7 +191,6 @@ export const SupabaseCashRepository = {
     const moedas = mov.detalhamento?.moedas || {};
     const updates = [];
 
-    // 4. Calcula e valida os novos estoques
     for (const stock of currentStocks) {
       let diff = 0;
       if (stock.tipo === 'NOTA' && notas[stock.valor]) diff = notas[stock.valor] * multiplier;
@@ -200,31 +198,21 @@ export const SupabaseCashRepository = {
 
       if (diff !== 0) {
         const newQtd = stock.quantidade_atual + diff;
-        // Trava de segurança: não pode negativar o cofre ao reverter uma entrada
-        if (newQtd < 0) {
-          throw new Error(`Estorno bloqueado: Você não tem R$ ${stock.valor.toFixed(2)} suficientes no cofre para devolver.`);
-        }
+        if (newQtd < 0) throw new Error(`Estorno bloqueado: Você não tem R$ ${stock.valor.toFixed(2)} suficientes no cofre para devolver.`);
         updates.push({ id: stock.id, newQtd });
       }
     }
 
-    // 5. Aplica as alterações físicas no cofre
     for (const u of updates) {
       await supabase.from('cash_denominations').update({ quantidade_atual: u.newQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
     }
 
-    // 6. Grava a movimentação de Estorno no extrato
     const inverseTipo = isEntrada ? 'SAIDA' : 'ENTRADA';
     const newDetalhamento = { ...mov.detalhamento, observacao: `ESTORNO DA MOVIMENTAÇÃO ORIGINADA EM: ${new Date(mov.created_at).toLocaleString('pt-BR')}. Obs Original: ${mov.detalhamento?.observacao || 'N/A'}` };
 
     await supabase.from('cash_movements').insert([{
-      store_id: storeId,
-      created_by: userId,
-      tipo_movimento: inverseTipo,
-      valor_total: mov.valor_total,
-      origem: `ESTORNO: ${mov.destino || mov.origem}`,
-      destino: `ESTORNO: ${mov.origem || mov.destino}`,
-      detalhamento: newDetalhamento
+      store_id: storeId, created_by: userId, tipo_movimento: inverseTipo, valor_total: mov.valor_total,
+      origem: `ESTORNO: ${mov.destino || mov.origem}`, destino: `ESTORNO: ${mov.origem || mov.destino}`, detalhamento: newDetalhamento
     }]);
   }
 }

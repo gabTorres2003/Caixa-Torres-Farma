@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { useDeposits } from './useDeposits' 
 
-// Funções Auxiliares
 const formatRecebedor = (raw) => {
   if (!raw) return 'Operador';
   if (typeof raw === 'string' && raw.includes('"recebido_por"')) {
@@ -24,17 +23,14 @@ export const useExchanges = (user, dataFiltro) => {
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const [tipoTroca, setTipoTroca] = useState('INTERNA')
+  const [tipoTroca, setTipoTroca] = useState('INTERNA') // INTERNA | EXTERNA | TEMPORARIA
 
-  // === ESTADOS FÍSICOS DA RETIRADA ===
   const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
   const [moedas, setMoedas] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
 
-  // === ESTADOS FÍSICOS DA ENTRADA (TROCA INTERNA) ===
   const [notasIn, setNotasIn] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
   const [moedasIn, setMoedasIn] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
 
-  // === ESTADOS FÍSICOS DO RETORNO EXTERNO ===
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
   const [notasRec, setNotasRec] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
@@ -43,28 +39,25 @@ export const useExchanges = (user, dataFiltro) => {
   const formProps = useForm()
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = formProps
   const origemSelecionada = watch('origem')
+  const destinoSelecionado = watch('destino')
 
   useEffect(() => { carregarDepositos() }, [carregarDepositos])
 
-  const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa')
+  const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa' || d.categoria === 'Troca Temporária')
 
-  // === HANDLERS ===
   const handleNotaChange = (nota, valor) => { setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleMoedaChange = (moeda, valor) => { setMoedas(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
-  
   const handleNotaInChange = (nota, valor) => { setNotasIn(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleMoedaInChange = (moeda, valor) => { setMoedasIn(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
-  
   const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleMoedaRecChange = (moeda, valor) => { setMoedasRec(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
 
-  // === CÁLCULOS ===
   const valorCalculadoOut = Object.values(notas).reduce((a, b) => a + b, 0) + Object.values(moedas).reduce((a, b) => a + b, 0)
   const valorCalculadoIn = Object.values(notasIn).reduce((a, b) => a + b, 0) + Object.values(moedasIn).reduce((a, b) => a + b, 0)
   const somaRecebimento = Object.values(notasRec).reduce((a, b) => a + b, 0) + Object.values(moedasRec).reduce((a, b) => a + b, 0)
   
   useEffect(() => {
-    if (tipoTroca === 'INTERNA' || origemSelecionada === 'Caixa de Troco') {
+    if (tipoTroca === 'INTERNA' || tipoTroca === 'TEMPORARIA' || origemSelecionada === 'Caixa de Troco') {
       setValue('valor', valorCalculadoOut)
     }
   }, [notas, moedas, tipoTroca, origemSelecionada, setValue, valorCalculadoOut])
@@ -75,17 +68,16 @@ export const useExchanges = (user, dataFiltro) => {
   const converterValoresParaQuantidades = (valoresReais) => {
     const qtds = {};
     Object.entries(valoresReais).forEach(([face, valorTotal]) => {
-      qtds[face] = Math.round((Number(valorTotal) || 0) / Number(face));
+      const qtd = Math.round((Number(valorTotal) || 0) / Number(face));
+      if (qtd > 0) qtds[face] = qtd;
     });
-    return qtds;
+    return Object.keys(qtds).length > 0 ? qtds : null;
   }
 
-  const handleEdit = () => {
-    alert("Trocas que envolvem notas do cofre não podem ser editadas, pois o dinheiro já foi retirado/adicionado fisicamente. Exclua e crie novamente se houver erro.")
-  }
+  const handleEdit = () => alert("Movimentações físicas do cofre não devem ser editadas diretamente para não gerar furos de caixa. Exclua a troca (o estorno será automático) e lance novamente.")
 
   const handleDelete = async (id) => {
-    if (window.confirm('ATENÇÃO: Deseja apagar esta troca permanentemente? (Os valores NÃO serão estornados no cofre automaticamente)')) {
+    if (window.confirm('ATENÇÃO: Deseja apagar esta troca permanentemente? Se a troca foi originada no cofre, os valores serão revertidos automaticamente!')) {
       await excluirDeposito(id)
     }
   }
@@ -97,58 +89,52 @@ export const useExchanges = (user, dataFiltro) => {
     setMoedas({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
     setNotasIn({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
     setMoedasIn({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
-    reset({ valor: '', origem: '', destino: '' })
+    reset({ valor: '', origem: '', destino: '', destino_outros: '', motivo_temporaria: '' })
     setTipoTroca('INTERNA')
   }
 
   const onSubmitCreate = async (data) => {
-    const isCaixaTroco = tipoTroca === 'INTERNA' || data.origem === 'Caixa de Troco'
+    const isCaixaTroco = tipoTroca === 'INTERNA' || tipoTroca === 'TEMPORARIA' || data.origem === 'Caixa de Troco'
     const valorFinal = isCaixaTroco ? valorCalculadoOut : parseFloat(data.valor)
 
-    if (isCaixaTroco && valorFinal <= 0) {
-      alert("Informe os valores trocados.")
-      return
-    }
-
-    if (tipoTroca === 'INTERNA' && !isMatchInterna) {
-      alert("Os valores de Retirada e Entrada precisam ser exatamente iguais!")
-      return
-    }
+    if (isCaixaTroco && valorFinal <= 0) { return alert("Informe os valores trocados.") }
+    if (tipoTroca === 'INTERNA' && !isMatchInterna) { return alert("Os valores de Retirada e Entrada precisam ser exatamente iguais!") }
 
     const notasOutEmQuantidade = converterValoresParaQuantidades(notas);
     const moedasOutEmQuantidade = converterValoresParaQuantidades(moedas);
-    
     const notasInEmQuantidade = tipoTroca === 'INTERNA' ? converterValoresParaQuantidades(notasIn) : null;
     const moedasInEmQuantidade = tipoTroca === 'INTERNA' ? converterValoresParaQuantidades(moedasIn) : null;
 
+    // Tratamento do destino para os novos campos
+    const finalDestino = tipoTroca === 'TEMPORARIA' 
+        ? data.motivo_temporaria 
+        : (data.destino === 'Outros' ? data.destino_outros : data.destino);
+
     const payload = {
-      valor: valorFinal,
-      value: valorFinal,
-      categoria: tipoTroca === 'INTERNA' ? 'Troca (Caixa de Troco)' : 'Troca Externa',
-      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : data.origem,
-      origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : data.origem,
-      destino: tipoTroca === 'EXTERNA' ? data.destino : null,
+      valor: valorFinal, value: valorFinal,
+      categoria: tipoTroca === 'INTERNA' ? 'Troca (Caixa de Troco)' : (tipoTroca === 'TEMPORARIA' ? 'Troca Temporária' : 'Troca Externa'),
+      origem: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : (tipoTroca === 'TEMPORARIA' ? 'Caixa de Troco' : data.origem),
+      origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : (tipoTroca === 'TEMPORARIA' ? 'Caixa de Troco' : data.origem),
+      destino: finalDestino,
       detalhes_troca: isCaixaTroco ? { 
-        notas: notasOutEmQuantidade, 
-        moedas: moedasOutEmQuantidade,
+        notas: notasOutEmQuantidade, moedas: moedasOutEmQuantidade,
         moedasValor: Object.values(moedas).reduce((a,b)=>a+b, 0),
         ...(tipoTroca === 'INTERNA' && {
-          notasEntrada: notasInEmQuantidade,
-          moedasEntrada: moedasInEmQuantidade,
+          notasEntrada: notasInEmQuantidade, moedasEntrada: moedasInEmQuantidade,
           moedasValorEntrada: Object.values(moedasIn).reduce((a,b)=>a+b, 0)
         })
       } : null
     }
 
     if (!editingId) {
-      payload.status_troca = tipoTroca === 'EXTERNA' ? 'PENDENTE' : 'CONCLUIDA'
+      payload.status_troca = (tipoTroca === 'EXTERNA' || tipoTroca === 'TEMPORARIA') ? 'PENDENTE' : 'CONCLUIDA'
       payload.responsavel_nome = user?.nome || 'Operador'
     }
 
     try {
       await salvarDeposito(payload, editingId)
-      if (tipoTroca === 'EXTERNA' && data.origem === 'Caixa de Troco') {
-        alert("Atenção: O dinheiro físico foi subtraído do Cofre. Quando o portador retornar da rua com o troco, você OBRIGATORIAMENTE deverá registrar o Recebimento para devolver o valor ao Caixa de Troco!")
+      if ((tipoTroca === 'EXTERNA' || tipoTroca === 'TEMPORARIA') && (data.origem === 'Caixa de Troco' || tipoTroca === 'TEMPORARIA')) {
+        alert("Atenção: Dinheiro retirado do Cofre. Quando o portador retornar, você DEVERÁ registrar o Recebimento para devolver o valor ao Caixa de Troco!")
       }
       fecharModal()
     } catch (e) {}
@@ -164,14 +150,12 @@ export const useExchanges = (user, dataFiltro) => {
   const onSubmitReceive = async (e) => {
     e.preventDefault()
     if (!isMatchRecebimento) return
-    const notasRecEmQuantidade = converterValoresParaQuantidades(notasRec);
-    const moedasRecEmQuantidade = converterValoresParaQuantidades(moedasRec);
-
+    
     await receberTroca(receivingTroca.id, {
       recebido_por: user?.nome || 'Operador',
       detalhes_troca: { 
-        notas: notasRecEmQuantidade, 
-        moedas: moedasRecEmQuantidade, 
+        notas: converterValoresParaQuantidades(notasRec), 
+        moedas: converterValoresParaQuantidades(moedasRec), 
         moedasValor: Object.values(moedasRec).reduce((a,b)=>a+b, 0) 
       },
       valor_recebido: somaRecebimento
@@ -180,17 +164,14 @@ export const useExchanges = (user, dataFiltro) => {
   }
 
   const imprimirComprovante = (registro) => {
-    const dataObj = new Date(registro.created_at)
-    const dataApenas = dataObj.toLocaleDateString('pt-BR')
-    const horaApenas = dataObj.toLocaleTimeString('pt-BR')
+    const dataApenas = new Date(registro.created_at).toLocaleDateString('pt-BR')
+    const horaApenas = new Date(registro.created_at).toLocaleTimeString('pt-BR')
     const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
     const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
-
     const detalhesLimpos = formatDetalhes(registro)
     const recebedorLimpo = formatRecebedor(registro.recebido_por)
 
-    let detalhesOutHtml = '';
-    let detalhesInHtml = '';
+    let detalhesOutHtml = ''; let detalhesInHtml = '';
 
     if (detalhesLimpos && detalhesLimpos.notas) {
       detalhesOutHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #b91c1c;">[-] Retirado do Cofre:</div>';
@@ -201,9 +182,7 @@ export const useExchanges = (user, dataFiltro) => {
         [1, 0.5, 0.25, 0.1, 0.05].forEach(m => {
           if (detalhesLimpos.moedas[m] > 0) detalhesOutHtml += `<div>Moedas R$ ${m.toFixed(2).replace('.',',')}: R$ ${(detalhesLimpos.moedas[m] * m).toFixed(2).replace('.',',')}</div>`
         });
-      } else if (detalhesLimpos.moedasValor > 0) {
-        detalhesOutHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValor).toFixed(2).replace('.',',')}</div>`
-      }
+      } else if (detalhesLimpos.moedasValor > 0) detalhesOutHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValor).toFixed(2).replace('.',',')}</div>`
       
       if (detalhesLimpos.notasEntrada) {
         detalhesInHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #15803d;">[+] Colocado no Cofre:</div>';
@@ -214,50 +193,31 @@ export const useExchanges = (user, dataFiltro) => {
           [1, 0.5, 0.25, 0.1, 0.05].forEach(m => {
             if (detalhesLimpos.moedasEntrada[m] > 0) detalhesInHtml += `<div>Moedas R$ ${m.toFixed(2).replace('.',',')}: R$ ${(detalhesLimpos.moedasEntrada[m] * m).toFixed(2).replace('.',',')}</div>`
           });
-        } else if (detalhesLimpos.moedasValorEntrada > 0) {
-          detalhesInHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValorEntrada).toFixed(2).replace('.',',')}</div>`
-        }
+        } else if (detalhesLimpos.moedasValorEntrada > 0) detalhesInHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValorEntrada).toFixed(2).replace('.',',')}</div>`
       }
     }
 
-    let conteudoCupom = '';
+    let tituloCupom = registro.categoria === 'Troca (Caixa de Troco)' ? 'COMPROVANTE DE TROCA INTERNA' : (registro.categoria === 'Troca Temporária' ? 'COMPROVANTE DE TROCA TEMPORÁRIA' : 'COMPROVANTE DE TROCA EXTERNA');
 
-    if (registro.categoria === 'Troca (Caixa de Troco)') {
-      conteudoCupom = `
-        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA INTERNA</div>
-          <div class="divisor"></div>
-          <div><span class="bold">Data/Hora:</span> ${dataApenas} ${horaApenas}</div>
-          <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
-          ${detalhesOutHtml}
-          ${detalhesInHtml}
-          <div class="divisor"></div>
-          <div class="bold" style="font-size: 18px; text-align: center;">TOTAL TROCADO<br>${valorFormatado}</div>
-          <div class="divisor"></div>
-        </body></html>`;
-    } else {
-      conteudoCupom = `
-        <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">COMPROVANTE DE TROCA EXTERNA</div>
-          <div class="divisor"></div>
-          <div><span class="bold">Data Saída:</span> ${dataApenas} ${horaApenas}</div>
-          <div><span class="bold">Origem:</span> ${registro.origem}</div>
-          <div><span class="bold">Destino:</span> ${registro.destino}</div>
-          ${!registro.recebido_por ? detalhesOutHtml : ''}
-          <div class="divisor"></div>
-          <div class="bold" style="font-size: 18px;">VALOR RETIRADO: ${valorFormatado}</div>
-          <div class="divisor"></div><br>
-          <div><span class="bold">Registrado (Saída):</span><br>${nomeOperador}</div><br>
-          ${registro.recebido_por ? `
-          <div class="divisor"></div>
-          <div class="center bold">-- RETORNO DA TROCA --</div>
-          ${detalhesOutHtml.replace('Retirado do Cofre', 'Recebido em Troco')}
-          <div class="divisor"></div>
-          <div><span class="bold">Recebido (Retorno):</span><br>${recebedorLimpo}</div><br><div class="center" style="font-size: 12px;">Entrada no Cofre: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
-        </body></html>`;
-    }
+    const conteudoCupom = `
+      <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
+      <body>
+        <div class="center bold" style="font-size: 16px;">${tituloCupom}</div>
+        <div class="divisor"></div>
+        <div><span class="bold">Data/Hora:</span> ${dataApenas} ${horaApenas}</div>
+        ${registro.categoria !== 'Troca (Caixa de Troco)' ? `<div><span class="bold">Origem:</span> ${registro.origem}</div><div><span class="bold">Destino:</span> ${registro.destino}</div>` : ''}
+        <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
+        ${!registro.recebido_por ? detalhesOutHtml : ''}
+        ${registro.categoria === 'Troca (Caixa de Troco)' ? detalhesInHtml : ''}
+        <div class="divisor"></div>
+        <div class="bold" style="font-size: 18px; text-align: center;">TOTAL<br>${valorFormatado}</div>
+        <div class="divisor"></div><br>
+        ${registro.recebido_por ? `
+        <div class="center bold">-- RETORNO DA TROCA --</div>
+        ${detalhesOutHtml.replace('Retirado do Cofre', 'Recebido em Troco')}
+        <div class="divisor"></div>
+        <div><span class="bold">Recebido (Retorno):</span><br>${recebedorLimpo}</div><br><div class="center" style="font-size: 12px;">Entrada no Cofre: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>` : ''}
+      </body></html>`;
 
     const janelaImpressao = window.open('', '', 'width=300,height=400')
     janelaImpressao.document.write(conteudoCupom)
@@ -267,12 +227,10 @@ export const useExchanges = (user, dataFiltro) => {
   }
 
   return {
-    user, formProps,
-    isPageLoading, isActionLoading, trocasList,
+    user, formProps, isPageLoading, isActionLoading, trocasList,
     isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
-    notas, moedas, notasIn, moedasIn,
-    isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
-    origemSelecionada, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
+    notas, moedas, notasIn, moedasIn, isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
+    origemSelecionada, destinoSelecionado, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
     formatRecebedor, handleNotaChange, handleMoedaChange, handleNotaInChange, handleMoedaInChange, handleNotaRecChange, handleMoedaRecChange,
     handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
   }

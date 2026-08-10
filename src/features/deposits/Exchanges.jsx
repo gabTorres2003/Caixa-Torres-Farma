@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useAuth } from '../../core/hooks/useAuth'
-import { useExchanges } from '../../core/hooks/useExchanges' // Import ajustado!
+import { useExchanges } from '../../core/hooks/useExchanges'
 import { Card } from '../../shared/components/cards/Card'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
@@ -15,13 +15,12 @@ export const Exchanges = () => {
     return new Date(Date.now() - tzOffset).toISOString().split('T')[0]
   })
 
-  // Conectando com a nossa lógica isolada no Hook
   const {
     formProps, isPageLoading, isActionLoading, trocasList,
     isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
     notas, moedas, notasIn, moedasIn,
     isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
-    origemSelecionada, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
+    origemSelecionada, destinoSelecionado, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
     formatRecebedor, handleNotaChange, handleMoedaChange, handleNotaInChange, handleMoedaInChange, handleNotaRecChange, handleMoedaRecChange,
     handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
   } = useExchanges(user, dataFiltro)
@@ -30,8 +29,8 @@ export const Exchanges = () => {
 
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
-    { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Troca Externa' ? '#9333ea' : '#1d4ed8' }}>{row.categoria === 'Troca (Caixa de Troco)' ? 'Interna' : 'Externa'}</span> },
-    { header: 'Destino/Origem', render: (row) => row.categoria === 'Troca Externa' ? <span style={{fontSize: '0.8rem'}}><b>{row.origem}</b> ➔ {row.destino}</span> : 'Caixa de Troco' },
+    { header: 'Tipo', render: (row) => <span style={{ fontWeight: '600', color: row.categoria === 'Troca Externa' ? '#9333ea' : (row.categoria === 'Troca Temporária' ? '#ea580c' : '#1d4ed8') }}>{row.categoria === 'Troca (Caixa de Troco)' ? 'Interna' : (row.categoria === 'Troca Temporária' ? 'Temporária' : 'Externa')}</span> },
+    { header: 'Destino/Origem', render: (row) => row.categoria !== 'Troca (Caixa de Troco)' ? <span style={{fontSize: '0.8rem'}}><b>{row.origem}</b> ➔ {row.destino}</span> : 'Caixa de Troco' },
     { header: 'Valor Trocado', render: (row) => <strong style={{ color: '#0f172a' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
     { header: 'Status', render: (row) => {
         if (row.categoria === 'Troca (Caixa de Troco)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
@@ -105,8 +104,9 @@ export const Exchanges = () => {
         <form onSubmit={handleSubmit(onSubmitCreate)} style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
           
           <div style={{ display: 'flex', gap: '12px', padding: '4px', backgroundColor: '#f1f5f9', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}>
-            <button type="button" onClick={() => setTipoTroca('INTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'INTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'INTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'INTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Troca - Interna</button>
-            <button type="button" onClick={() => setTipoTroca('EXTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'EXTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'EXTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'EXTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Troca - Externa</button>
+            <button type="button" onClick={() => setTipoTroca('INTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'INTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'INTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'INTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Interna</button>
+            <button type="button" onClick={() => setTipoTroca('EXTERNA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'EXTERNA' ? '#ffffff' : 'transparent', color: tipoTroca === 'EXTERNA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'EXTERNA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Externa</button>
+            <button type="button" onClick={() => setTipoTroca('TEMPORARIA')} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', fontWeight: 'bold', cursor: 'pointer', backgroundColor: tipoTroca === 'TEMPORARIA' ? '#ffffff' : 'transparent', color: tipoTroca === 'TEMPORARIA' ? 'var(--color-primary)' : '#64748b', boxShadow: tipoTroca === 'TEMPORARIA' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>Temporária</button>
           </div>
 
           {tipoTroca === 'EXTERNA' && (
@@ -120,20 +120,31 @@ export const Exchanges = () => {
                   <option value="Sangria de Depósito">Sangria de Depósito</option>
                 </select>
               </div>
-              <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
-                <label htmlFor="destino" className="input-label">Destino / Banco</label>
-                <select id="destino" className="input-field" style={{ width: '100%', boxSizing: 'border-box' }} {...register('destino', { required: 'Selecione o destino' })}>
-                  <option value="">Selecione...</option>
-                  <option value="Sicoob">Sicoob</option>
-                  <option value="Sicredi">Sicredi</option>
-                  <option value="Padaria/Rua">Padaria / Rua</option>
-                  <option value="Outros">Outros</option>
-                </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', boxSizing: 'border-box' }}>
+                <div className="input-wrapper" style={{ width: '100%', boxSizing: 'border-box' }}>
+                  <label htmlFor="destino" className="input-label">Destino / Banco</label>
+                  <select id="destino" className="input-field" style={{ width: '100%', boxSizing: 'border-box' }} {...register('destino', { required: 'Selecione o destino' })}>
+                    <option value="">Selecione...</option>
+                    <option value="Sicoob">Sicoob</option>
+                    <option value="Sicredi">Sicredi</option>
+                    <option value="Padaria/Rua">Padaria / Rua</option>
+                    <option value="Outros">Outros...</option>
+                  </select>
+                </div>
+                {destinoSelecionado === 'Outros' && (
+                  <FormInput id="destino_outros" placeholder="Com quem trocou?" register={register('destino_outros', { required: 'Obrigatório' })} error={errors?.destino_outros} />
+                )}
               </div>
             </div>
           )}
 
-          {(tipoTroca === 'INTERNA' || origemSelecionada === 'Caixa de Troco') ? (
+          {tipoTroca === 'TEMPORARIA' && (
+             <div style={{ width: '100%', boxSizing: 'border-box' }}>
+               <FormInput label="Responsável / Motivo (Destino)" id="motivo_temporaria" placeholder="Ex: Adiantamento João, Compra de material..." register={register('motivo_temporaria', { required: 'Obrigatório' })} error={errors?.motivo_temporaria} />
+             </div>
+          )}
+
+          {(tipoTroca === 'INTERNA' || tipoTroca === 'TEMPORARIA' || origemSelecionada === 'Caixa de Troco') ? (
             <div className="notes-container">
               <label className="input-label" style={{ color: '#be123c', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <ArrowUpCircle size={16}/> {tipoTroca === 'INTERNA' ? "O que o operador está PEGANDO do Cofre:" : "Informe os valores retirados do cofre:"}
@@ -167,7 +178,6 @@ export const Exchanges = () => {
             </div>
           )}
 
-          {/* QUADRO EXTRA: O que o operador está COLOCANDO no cofre (Apenas Interna) */}
           {tipoTroca === 'INTERNA' && (
             <div className="notes-container">
               <label className="input-label" style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: '6px' }}>

@@ -82,7 +82,7 @@ export const Deposits = () => {
   }
 
   const handleDelete = async (id) => {
-    if (window.confirm('ATENÇÃO: Você é um Administrador. Tem certeza que deseja apagar este DEPÓSITO permanentemente? (Isso NÃO estorna o valor no cofre automaticamente)')) {
+    if (window.confirm('ATENÇÃO: Tem certeza que deseja apagar este DEPÓSITO permanentemente?')) {
       await excluirDeposito(id)
     }
   }
@@ -91,26 +91,21 @@ export const Deposits = () => {
     setIsModalOpen(false)
     setEditingId(null)
     setNotas({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    reset({ valor: '', origem: '', data_caixa: '' })
+    reset({ valor: '', origem: '', data_caixa: '', observacao_ajuste: '' })
   }
 
   const onSubmit = async (data) => {
     const isCaixaTroco = data.origem === 'Caixa de Troco'
     const valorFinal = isCaixaTroco ? valorCalculado : parseFloat(data.valor)
 
-    if (isCaixaTroco && valorFinal <= 0) {
-      alert("Informe as quantidades de notas para depositar.")
-      return
-    }
+    if (isCaixaTroco && valorFinal <= 0) { return alert("Informe as quantidades de notas para depositar.") }
 
     const payload = {
-      valor: valorFinal,
-      value: valorFinal,
-      origem: data.origem,
-      origin: data.origem,
-      categoria: 'Depósito',
-      data_caixa: data.data_caixa,
+      valor: valorFinal, value: valorFinal,
+      origem: data.origem, origin: data.origem,
+      categoria: 'Depósito', data_caixa: data.data_caixa,
       responsavel_nome: user?.nome || 'Operador',
+      observacao_ajuste: data.observacao_ajuste, // Enviando a observacao pro hook
       ...(isCaixaTroco && { detalhes_troca: { notas: converterValoresParaQuantidades(notas), moedasValor: 0 } })
     }
 
@@ -120,7 +115,6 @@ export const Deposits = () => {
     } catch (e) {}
   }
 
-  // --- FUNÇÕES DE WHATSAPP ---
   const handleSendRowWhatsApp = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
@@ -163,7 +157,6 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
     window.open(`https://wa.me/?text=${encodedText}`, '_blank');
   }
 
-  // --- FUNÇÕES DE IMPRESSÃO ---
   const imprimirComprovante = (registro) => {
     const dataObj = new Date(registro.created_at)
     const dataApenas = dataObj.toLocaleDateString('pt-BR')
@@ -200,6 +193,7 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
           <div><span class="bold">Operador:</span> ${nomeOperador}</div>
           <div class="divisor"></div>
           <div class="bold" style="font-size: 18px;">VALOR: ${valorFormatado}</div>
+          ${registro.detalhes_troca?.observacao_ajuste ? `<div class="divisor"></div><div style="font-size:12px">Obs: ${registro.detalhes_troca.observacao_ajuste}</div>` : ''}
         </body>
       </html>
     `
@@ -264,15 +258,16 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
       )
     },
     { header: 'Responsável', render: (row) => row.responsavel_nome || row.users?.nome || 'Operador' },
-    { header: 'Valor Retirado', render: (row) => <strong style={{ color: '#dc2626' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
+    { header: 'Valor Retirado', render: (row) => (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <strong style={{ color: '#dc2626' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong>
+          {row.detalhes_troca?.observacao_ajuste && <span style={{fontSize:'0.7rem', color: '#d97706'}}>*Ajustado: {row.detalhes_troca.observacao_ajuste}</span>}
+        </div>
+    )},
     { header: 'Ações', render: (row) => (
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          
           <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir"><Printer size={20} /></button>
-          
-          {/* BOTÃO DE WHATSAPP INDIVIDUAL */}
           <button onClick={() => handleSendRowWhatsApp(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a' }} title="Enviar p/ WhatsApp"><Send size={18} /></button>
-          
           {user.role === 'ADMIN' && (
             <>
               <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar"><Pencil size={18} /></button>
@@ -299,58 +294,11 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
         .modal-buttons { display: flex; gap: 12px; margin-top: 12px; }
         .botoes-totais { display: flex; gap: 12px; align-items: center; }
         
-        /* CSS CORRIGIDO PARA EVITAR OVERFLOW */
-        .notes-container {
-          width: 100%;
-          box-sizing: border-box;
-          overflow: hidden;
-        }
-        .notes-grid { 
-          display: grid; 
-          grid-template-columns: repeat(2, 1fr); 
-          gap: 12px; 
-          margin-top: 8px; 
-          background: #f8fafc; 
-          padding: 12px; 
-          border-radius: 8px; 
-          border: 1px solid #e2e8f0; 
-          width: 100%;
-          box-sizing: border-box;
-        }
-        .note-item { 
-          display: flex; 
-          flex-direction: column; 
-          gap: 4px; 
-          min-width: 0;
-        }
-        .note-input {
-          width: 100%;
-          box-sizing: border-box;
-        }
-        .total-wrapper {
-          margin-top: 12px; 
-          padding: 12px; 
-          background-color: #e0f2fe; 
-          border-radius: 8px; 
-          display: flex; 
-          justify-content: space-between; 
-          align-items: center;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        
-        @media (max-width: 768px) {
-          .deposito-header { flex-direction: column; align-items: flex-start; }
-          .deposito-actions { width: 100%; display: flex; }
-          .deposito-actions button { width: 100%; justify-content: center; }
-          .deposito-summary-area { flex-direction: column-reverse; align-items: stretch; }
-          .deposito-total-box { flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
-          .botoes-totais { flex-direction: column; width: 100%; }
-          .botoes-totais button { width: 100%; justify-content: center; }
-          .deposito-divider { width: 100%; height: 1px; }
-          .modal-buttons { flex-direction: column; }
-          .modal-buttons button { width: 100%; justify-content: center; }
-        }
+        .notes-container { width: 100%; box-sizing: border-box; overflow: hidden; }
+        .notes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; }
+        .note-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .note-input { width: 100%; box-sizing: border-box; }
+        .total-wrapper { margin-top: 12px; padding: 12px; background-color: #e0f2fe; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; }
       `}</style>
 
       <div className="deposito-header">
@@ -388,15 +336,11 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
                 
                 <span style={{ fontSize: '1.875rem', fontWeight: '800', color: 'var(--color-primary)', lineHeight: '1', whiteSpace: 'nowrap', marginTop: '4px' }}>R$ {totalLiquidoDepositos.toFixed(2).replace('.', ',')}</span>
               </div>
-              
               <div className="deposito-divider"></div>
-              
-              {/* BOTÕES DE TOTAL (IMPRIMIR E WHATSAPP) */}
               <div className="botoes-totais">
                 <Button onClick={imprimirFechamentoDiario} icon={Printer} type="button" variant="secondary">Imprimir</Button>
                 <Button onClick={handleSendTotalWhatsApp} icon={Send} type="button" style={{ backgroundColor: '#16a34a', color: 'white', border: 'none' }}>WhatsApp</Button>
               </div>
-
             </div>
           </div>
           <div className="table-responsive-wrapper">
@@ -450,6 +394,12 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
             <input id="data_caixa" type="date" className={`input-field ${errors.data_caixa ? 'error' : ''}`} style={{ width: '100%', boxSizing: 'border-box' }} {...register('data_caixa', { required: 'Obrigatório' })} />
             {errors.data_caixa && <span className="input-error-text" style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: '4px' }}>{errors.data_caixa.message}</span>}
           </div>
+
+          {editingId && user.role === 'ADMIN' && (
+            <div style={{ width: '100%', boxSizing: 'border-box' }}>
+              <FormInput label="Observação da Alteração / Retirada" id="observacao_ajuste" placeholder="Justifique a alteração do valor..." register={register('observacao_ajuste', { required: 'Informe o motivo' })} error={errors.observacao_ajuste} />
+            </div>
+          )}
 
           <div className="modal-buttons">
             <Button type="button" variant="secondary" onClick={fecharModal}>Cancelar</Button>
