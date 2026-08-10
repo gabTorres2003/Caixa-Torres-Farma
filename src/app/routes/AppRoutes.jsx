@@ -18,6 +18,7 @@ import { Divergences } from '../../features/divergences/Divergences'
 import { Reports } from '../../features/reports/Reports'
 import { UserManagement } from '../../features/auth/UserManagement'
 import { NotesCoinsManagement } from '../../features/conference/NotesCoinsManagement'
+import { Motoboys } from '../../features/motoboys'
 
 // --- GUARDAS DE ROTA ---
 const AdminRoute = ({ children }) => {
@@ -103,6 +104,16 @@ export const AppRoutes = () => {
             element={
               <AdminRoute>
                 <UserManagement />
+              </AdminRoute>
+            }
+          />
+
+          {/* MÓDULO DE MOTOBOYS */}
+          <Route
+            path="/motoboys"
+            element={
+              <AdminRoute>
+                <Motoboys />
               </AdminRoute>
             }
           />

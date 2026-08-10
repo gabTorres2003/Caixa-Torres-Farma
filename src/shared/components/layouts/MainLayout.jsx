@@ -17,6 +17,7 @@ import {
   Coins,
   LockKeyhole,
   Menu,
+  Bike,
   X
 } from 'lucide-react'
 
@@ -70,7 +71,7 @@ export const MainLayout = () => {
 
   const textoPerfil = user?.role === 'ADMIN' ? 'Administrador' : `Turno: ${turnoAtual}`
 
-  // 2. Menus Básicos
+  // 2. Menus Básicos (Para quem não é Admin)
   const baseMenuItems = [
     { path: '/troca-turno', label: 'Troca de Turno', icon: ArrowLeftRight },
     {
@@ -86,7 +87,7 @@ export const MainLayout = () => {
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
   ]
 
-  // 3. Montagem Inteligente do Menu Admin
+  // 3. Montagem Inteligente do Menu Admin (Agora com Motoboys!)
   const menuItems =
     user?.role === 'ADMIN'
       ? [
@@ -113,6 +114,7 @@ export const MainLayout = () => {
               { path: '/divergencias', label: 'Diferenças', icon: AlertTriangle },
             ],
           },
+          { path: '/motoboys', label: 'Motoboys', icon: Bike }, 
           { path: '/relatorios', label: 'Relatórios', icon: FileText },
           { path: '/gerenciar-usuarios', label: 'Gerenciar Usuários', icon: User },
         ]
