@@ -18,6 +18,16 @@ export const SupabaseMotoboyRepository = {
     if (error) throw error
   },
 
+  async updateMotoboy(id, payload) {
+    const { error } = await supabase.from('motoboys').update(payload).eq('id', id)
+    if (error) throw error
+  },
+
+  async deleteMotoboy(id) {
+    const { error } = await supabase.from('motoboys').update({ ativo: false }).eq('id', id)
+    if (error) throw error
+  },
+
   // === REGISTRO DE PONTO (TIME TRACKING) ===
   async getTimeTracking(storeId, startDate, endDate) {
     const { data, error } = await supabase
@@ -57,7 +67,6 @@ export const SupabaseMotoboyRepository = {
   },
 
   async createRoute(routePayload, deliveriesArray) {
-    // 1. Cria a rota pai
     const { data: routeData, error: routeError } = await supabase
       .from('motoboy_routes')
       .insert([routePayload])
@@ -66,19 +75,11 @@ export const SupabaseMotoboyRepository = {
     
     if (routeError) throw routeError
 
-    // 2. Insere as entregas filhas (Se houver - Preparo pro ERP DNA)
     if (deliveriesArray && deliveriesArray.length > 0) {
-      const deliveriesToInsert = deliveriesArray.map(d => ({
-        ...d,
-        route_id: routeData.id
-      }))
-      const { error: delivError } = await supabase
-        .from('motoboy_route_deliveries')
-        .insert(deliveriesToInsert)
-      
+      const deliveriesToInsert = deliveriesArray.map(d => ({ ...d, route_id: routeData.id }))
+      const { error: delivError } = await supabase.from('motoboy_route_deliveries').insert(deliveriesToInsert)
       if (delivError) throw delivError
     }
-
     return routeData
   },
 

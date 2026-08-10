@@ -8,7 +8,6 @@ export const useMotoboys = (user, dataFiltro) => {
   const [isPageLoading, setIsPageLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
 
-  // 1. CARREGAMENTO CENTRALIZADO DE DADOS
   const carregarDados = useCallback(async () => {
     if (!user?.store_id) return
     setIsPageLoading(true)
@@ -29,38 +28,49 @@ export const useMotoboys = (user, dataFiltro) => {
     }
   }, [user, dataFiltro])
 
-  useEffect(() => {
-    carregarDados()
-  }, [carregarDados])
+  useEffect(() => { carregarDados() }, [carregarDados])
 
-  const cadastrarMotoboy = async (nome, telefone) => {
+  // === GESTÃO DE MOTOBOYS (CRIAR, EDITAR E EXCLUIR) ===
+  const salvarMotoboy = async (payload, editingId) => {
     setIsActionLoading(true)
     try {
-      await SupabaseMotoboyRepository.addMotoboy({
-        store_id: user.store_id,
-        nome,
-        telefone
-      })
+      if (editingId) {
+        await SupabaseMotoboyRepository.updateMotoboy(editingId, payload)
+        alert('Cadastro atualizado com sucesso!')
+      } else {
+        await SupabaseMotoboyRepository.addMotoboy({ ...payload, store_id: user.store_id })
+        alert('Motoboy cadastrado com sucesso!')
+      }
       await carregarDados()
-      alert('Motoboy cadastrado com sucesso!')
       return true
     } catch (err) {
-      alert('Erro ao cadastrar motoboy: ' + err.message)
+      alert('Erro ao salvar motoboy: ' + err.message)
       return false
     } finally {
       setIsActionLoading(false)
     }
   }
 
-  // 2. FUNÇÕES DO REGISTRO DE PONTO
+  const excluirMotoboy = async (id) => {
+    if(!window.confirm("Deseja excluir este motoboy? O histórico dele será mantido.")) return;
+    setIsActionLoading(true)
+    try {
+      await SupabaseMotoboyRepository.deleteMotoboy(id)
+      await carregarDados()
+    } catch (err) {
+      alert('Erro ao excluir motoboy: ' + err.message)
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  // === REGISTRO DE PONTO ===
   const registrarPonto = async (motoboyId, tipoRegistro) => {
     setIsActionLoading(true)
     try {
       await SupabaseMotoboyRepository.registerTime({
-        store_id: user.store_id,
-        motoboy_id: motoboyId,
-        tipo_registro: tipoRegistro,
-        registered_by: user.id
+        store_id: user.store_id, motoboy_id: motoboyId,
+        tipo_registro: tipoRegistro, registered_by: user.id
       })
       await carregarDados()
       alert(`Ponto de ${tipoRegistro} registrado com sucesso!`)
@@ -86,17 +96,13 @@ export const useMotoboys = (user, dataFiltro) => {
     }
   }
 
-  // 3. FUNÇÕES DE GESTÃO DE ROTAS
+  // === GESTÃO DE ROTAS ===
   const cadastrarRota = async (motoboyId, estimatedTime, distanceKm, deliveries) => {
     setIsActionLoading(true)
     try {
       const routePayload = {
-        store_id: user.store_id,
-        motoboy_id: motoboyId,
-        status: 'PREPARANDO',
-        estimated_time_minutes: estimatedTime || 0,
-        total_distance_km: distanceKm || 0,
-        created_by: user.id
+        store_id: user.store_id, motoboy_id: motoboyId, status: 'PREPARANDO',
+        estimated_time_minutes: estimatedTime || 0, total_distance_km: distanceKm || 0, created_by: user.id
       }
       await SupabaseMotoboyRepository.createRoute(routePayload, deliveries)
       await carregarDados()
@@ -114,7 +120,6 @@ export const useMotoboys = (user, dataFiltro) => {
     setIsActionLoading(true)
     try {
       const payload = { status: novoStatus }
-      
       if (novoStatus === 'EM_ROTA') payload.departure_time = new Date().toISOString()
       if (novoStatus === 'CONCLUIDA') payload.return_time = new Date().toISOString()
       
@@ -144,6 +149,7 @@ export const useMotoboys = (user, dataFiltro) => {
 
   return {
     motoboys, timeRecords, routes, isPageLoading, isActionLoading,
-    carregarDados, registrarPonto, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota, cadastrarMotoboy
+    carregarDados, registrarPonto, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota, 
+    salvarMotoboy, excluirMotoboy
   }
 }
