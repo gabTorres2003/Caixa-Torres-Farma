@@ -66,7 +66,6 @@ export const ShiftHandover = () => {
   }, [isShiftClosed])
 
   const [obsPos, setObsPos] = useState('')
-  const [esquecidas, setEsquecidas] = useState([])
   const [novaEsquecida, setNovaEsquecida] = useState({
     comanda: '',
     valor: '',
@@ -96,10 +95,13 @@ export const ShiftHandover = () => {
   const getNomePagamento = (sigla) =>
     ({ D: 'Dinheiro', C: 'Cartão', PX: 'Pix' })[sigla] || sigla
 
-  const totalDinheiro = entregas
+  const entregasNormais = entregas.filter(e => !e.observacoes?.includes('[ESQUECIDA'))
+  const entregasEsquecidasBanco = entregas.filter(e => e.observacoes?.includes('[ESQUECIDA'))
+
+  const totalDinheiro = entregasNormais
     .filter((e) => e.tipo_saida === 'D')
     .reduce((acc, curr) => acc + curr.valor, 0)
-  const totalCartao = entregas
+  const totalCartao = entregasNormais
     .filter((e) => e.tipo_saida === 'C')
     .reduce((acc, curr) => acc + curr.valor, 0)
 
@@ -148,7 +150,6 @@ export const ShiftHandover = () => {
     }
     const sucesso = await salvarEntregaEsquecida(novaEsquecida)
     if (sucesso) {
-      setEsquecidas([...esquecidas, { ...novaEsquecida, id: Date.now() }])
       setNovaEsquecida({
         comanda: '',
         valor: '',
@@ -161,12 +162,12 @@ export const ShiftHandover = () => {
   const handleSendWhatsApp = () => {
     const dataAtual = new Date().toLocaleString('pt-BR')
     const esquecidasTexto =
-      esquecidas.length > 0
-        ? esquecidas
-            .map(
-              (e) =>
-                `- Venda: ${e.comanda} | R$ ${Number(e.valor).toFixed(2).replace('.', ',')} | Pag: ${e.forma_pagamento_real} | Tipo: ${e.tipo_saida}`,
-            )
+      entregasEsquecidasBanco.length > 0
+        ? entregasEsquecidasBanco
+            .map((e) => {
+                const tipo = e.observacoes?.includes('FISCAL') ? 'Cupom Fiscal' : 'Talão Manual';
+                return `- Venda: ${e.comanda} | R$ ${Number(e.valor).toFixed(2).replace('.', ',')} | Pag: ${getNomePagamento(e.forma_pagamento_real)} | Tipo: ${tipo}`
+            })
             .join('\n')
         : 'Nenhuma registrada.'
 
@@ -665,7 +666,7 @@ ${obsPos || 'Nenhuma'}`
             </Button>
           </div>
 
-          {esquecidas.length > 0 && (
+          {entregasEsquecidasBanco.length > 0 && (
             <Table
               columns={[
                 { header: 'Cód. Venda', render: (r) => r.comanda },
@@ -674,28 +675,26 @@ ${obsPos || 'Nenhuma'}`
                   render: (r) =>
                     `R$ ${Number(r.valor).toFixed(2).replace('.', ',')}`,
                 },
-                { header: 'Pagamento', render: (r) => r.forma_pagamento_real },
+                { header: 'Pagamento', render: (r) => getNomePagamento(r.forma_pagamento_real) },
                 {
                   header: 'Tipo',
-                  render: (r) => (
-                    <strong
-                      style={{
-                        color:
-                          r.tipo_saida === 'FISCAL' ? '#16a34a' : '#d97706',
-                      }}
-                    >
-                      {r.tipo_saida}
-                    </strong>
-                  ),
+                  render: (r) => {
+                    const isFiscal = r.observacoes?.includes('FISCAL');
+                    return (
+                        <strong style={{ color: isFiscal ? '#16a34a' : '#d97706' }}>
+                          {isFiscal ? 'Cupom Fiscal' : 'Talão Manual'}
+                        </strong>
+                    )
+                  }
                 },
               ]}
-              data={esquecidas}
+              data={entregasEsquecidasBanco}
             />
           )}
         </div>
       </Card>
 
-      {esquecidas.length > 0 && (
+      {entregasEsquecidasBanco.length > 0 && (
         <div
           className="print-only"
           style={{
@@ -712,13 +711,14 @@ ${obsPos || 'Nenhuma'}`
             Entregas Não-Anotadas (Esquecidas):
           </strong>
           <ul style={{ margin: 0, paddingLeft: '20px' }}>
-            {esquecidas.map((e, i) => (
-              <li key={i}>
-                Venda: {e.comanda} | R${' '}
-                {Number(e.valor).toFixed(2).replace('.', ',')} | Pgto:{' '}
-                {e.forma_pagamento_real} | Tipo: {e.tipo_saida}
-              </li>
-            ))}
+            {entregasEsquecidasBanco.map((e, i) => {
+              const isFiscal = e.observacoes?.includes('FISCAL');
+              return (
+                <li key={i}>
+                    Venda: {e.comanda} | R$ {Number(e.valor).toFixed(2).replace('.', ',')} | Pgto: {getNomePagamento(e.forma_pagamento_real)} | Tipo: {isFiscal ? 'Cupom Fiscal' : 'Talão Manual'}
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
@@ -1002,7 +1002,7 @@ ${obsPos || 'Nenhuma'}`
                 </h4>
                 <Table
                   columns={getColunasManha()}
-                  data={entregas.filter((e) => e.tipo_saida === 'D')}
+                  data={entregasNormais.filter((e) => e.tipo_saida === 'D')}
                 />
               </div>
 
@@ -1023,7 +1023,7 @@ ${obsPos || 'Nenhuma'}`
                 </h4>
                 <Table
                   columns={getColunasManha()}
-                  data={entregas.filter((e) => e.tipo_saida === 'C')}
+                  data={entregasNormais.filter((e) => e.tipo_saida === 'C')}
                 />
               </div>
             </div>
@@ -1129,7 +1129,7 @@ ${obsPos || 'Nenhuma'}`
                 </h4>
                 <Table
                   columns={colunasTarde}
-                  data={entregas.filter((e) => e.tipo_saida === 'D')}
+                  data={entregasNormais.filter((e) => e.tipo_saida === 'D')}
                 />
               </div>
               <div>
@@ -1149,7 +1149,7 @@ ${obsPos || 'Nenhuma'}`
                 </h4>
                 <Table
                   columns={colunasTarde}
-                  data={entregas.filter((e) => e.tipo_saida === 'C')}
+                  data={entregasNormais.filter((e) => e.tipo_saida === 'C')}
                 />
               </div>
             </div>
@@ -1303,7 +1303,10 @@ ${obsPos || 'Nenhuma'}`
               },
               {
                 header: 'Status',
-                render: (r) => (r.conferido ? '✅ Conferido' : '⏳ Pendente'),
+                render: (r) => {
+                    if (r.observacoes?.includes('[ESQUECIDA')) return <span style={{color: '#ea580c', fontWeight: 'bold'}}>Esquecida</span>
+                    return r.conferido ? '✅ Conferido' : '⏳ Pendente'
+                },
               },
               {
                 header: 'Baixa',

@@ -81,6 +81,9 @@ export const useShiftHandover = (user, role, dataFiltro) => {
         tipo_saida: siglaPagamento,
         forma_pagamento_real: siglaPagamento,
         observacoes: `[ESQUECIDA - ${novaEsquecida.tipo_saida}]`,
+        // Trava para evitar que a entrega vá para a fila do Caixa Tarde
+        conferido: true,
+        conciliado: true,
         store_id: user.store_id,
         created_by: user.id,
       }
