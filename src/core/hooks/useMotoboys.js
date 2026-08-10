@@ -13,7 +13,6 @@ export const useMotoboys = (user, dataFiltro) => {
     if (!user?.store_id) return
     setIsPageLoading(true)
     try {
-      // Promise.all permite buscar tudo ao mesmo tempo, deixando a tela mais rápida!
       const [motoboysData, timeData, routesData] = await Promise.all([
         SupabaseMotoboyRepository.getMotoboys(user.store_id),
         SupabaseMotoboyRepository.getTimeTracking(user.store_id, dataFiltro, dataFiltro),
@@ -33,6 +32,25 @@ export const useMotoboys = (user, dataFiltro) => {
   useEffect(() => {
     carregarDados()
   }, [carregarDados])
+
+  const cadastrarMotoboy = async (nome, telefone) => {
+    setIsActionLoading(true)
+    try {
+      await SupabaseMotoboyRepository.addMotoboy({
+        store_id: user.store_id,
+        nome,
+        telefone
+      })
+      await carregarDados()
+      alert('Motoboy cadastrado com sucesso!')
+      return true
+    } catch (err) {
+      alert('Erro ao cadastrar motoboy: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
 
   // 2. FUNÇÕES DO REGISTRO DE PONTO
   const registrarPonto = async (motoboyId, tipoRegistro) => {
@@ -97,7 +115,6 @@ export const useMotoboys = (user, dataFiltro) => {
     try {
       const payload = { status: novoStatus }
       
-      // Carimba automaticamente a hora de saída ou retorno de acordo com a ação
       if (novoStatus === 'EM_ROTA') payload.departure_time = new Date().toISOString()
       if (novoStatus === 'CONCLUIDA') payload.return_time = new Date().toISOString()
       
@@ -127,6 +144,6 @@ export const useMotoboys = (user, dataFiltro) => {
 
   return {
     motoboys, timeRecords, routes, isPageLoading, isActionLoading,
-    carregarDados, registrarPonto, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota
+    carregarDados, registrarPonto, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota, cadastrarMotoboy
   }
 }
