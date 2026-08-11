@@ -48,7 +48,7 @@ export const useDeposits = (user, dataFiltro) => {
         else if (payload.categoria === 'Sangria de Moedas') {
           await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payload.valor, 'Sangria do Caixa Atual', payload.detalhes_troca?.moedas);
         }
-        else if ((payload.categoria === 'Moedas (Troca Externa)' || payload.categoria === 'Troca Temporária') && isOrigemCofre) {
+        else if (payload.categoria === 'Moedas (Troca Externa)' && isOrigemCofre) {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, 0, payload.valor, `${payload.categoria} (${payload.destino})`, null);
         }
         else if (isOrigemCofre && payload.categoria !== 'Moedas (Troca Externa)') {
@@ -81,13 +81,17 @@ export const useDeposits = (user, dataFiltro) => {
            await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, depositToDelete.valor, `Estorno Exclusão Moedas (Crédito)`, depositToDelete.detalhes_troca?.moedas);
         } else if (depositToDelete.categoria === 'Sangria de Moedas') {
            await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, depositToDelete.valor, `Estorno Exclusão Sangria de Moedas`, depositToDelete.detalhes_troca?.moedas);
-        } else if (depositToDelete.categoria === 'Moedas (Troca Externa)' && isOrigemCofre) {
-           await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, depositToDelete.detalhes_troca?.notas, 0, depositToDelete.valor, `Estorno Exclusão Troca de Moedas`, null);
+        } else if (depositToDelete.categoria === 'Moedas (Troca Externa)') {
+           if (isOrigemCofre) {
+              await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, depositToDelete.detalhes_troca?.notas, 0, depositToDelete.valor, `Estorno Exclusão Troca de Moedas`, null);
+           }
            if (depositToDelete.status_troca === 'CONCLUIDA' && depositToDelete.detalhes_troca?.moedasEntrada) {
                await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, depositToDelete.valor_recebido || depositToDelete.valor, `Estorno Exclusão Retorno de Moedas`, depositToDelete.detalhes_troca.moedasEntrada);
            }
-        } else if (isOrigemCofre) {
-           await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, depositToDelete.detalhes_troca?.notas, depositToDelete.detalhes_troca?.moedasValor || 0, depositToDelete.valor, `Estorno Exclusão ${depositToDelete.categoria}`, depositToDelete.detalhes_troca?.moedas);
+        } else {
+           if (isOrigemCofre) {
+               await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, depositToDelete.detalhes_troca?.notas, depositToDelete.detalhes_troca?.moedasValor || 0, depositToDelete.valor, `Estorno Exclusão ${depositToDelete.categoria}`, depositToDelete.detalhes_troca?.moedas);
+           }
            if (depositToDelete.status_troca === 'CONCLUIDA' && depositToDelete.detalhes_troca?.notasEntrada) {
                await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, depositToDelete.detalhes_troca.notasEntrada, depositToDelete.detalhes_troca.moedasValorEntrada || 0, depositToDelete.valor_recebido || depositToDelete.valor, `Estorno Exclusão Retorno de ${depositToDelete.categoria}`, depositToDelete.detalhes_troca.moedasEntrada);
            }
@@ -111,7 +115,7 @@ export const useDeposits = (user, dataFiltro) => {
           ...registroOriginal.detalhes_troca,
           notasEntrada: inflowDetails?.notas,
           moedasEntrada: inflowDetails?.moedas,
-          moedasValorEntrada: inflowDetails?.moedasValor
+          moedasValorEntrada: inflowDetails?.moedasValor || 0
       };
 
       const payloadToDb = {
@@ -124,13 +128,15 @@ export const useDeposits = (user, dataFiltro) => {
 
       await DepositRepository.receiveExchange(id, payloadToDb)
 
-      const isOrigemCofre = registroOriginal?.origem?.includes('Troco') || registroOriginal?.origem?.includes('Cofre');
+      const vaiParaCofre = registroOriginal?.origem !== 'Caixa Atual';
 
-      if (inflowDetails && inflowDetails.notas && registroOriginal.categoria !== 'Moedas (Troca Externa)') {
-          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, inflowDetails.notas, inflowDetails.moedasValor, payloadEntrada.valor_recebido, `Retorno de ${registroOriginal.categoria} (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
-      }
-      else if (inflowDetails && inflowDetails.moedas && isOrigemCofre) {
-          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+      if (vaiParaCofre) {
+          if (inflowDetails && inflowDetails.notas && registroOriginal.categoria !== 'Moedas (Troca Externa)') {
+              await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, inflowDetails.notas, inflowDetails.moedasValor || 0, payloadEntrada.valor_recebido, `Retorno de ${registroOriginal.categoria} (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+          }
+          else if (inflowDetails && inflowDetails.moedas && registroOriginal.categoria === 'Moedas (Troca Externa)') {
+              await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+          }
       }
 
       await carregarDepositos()

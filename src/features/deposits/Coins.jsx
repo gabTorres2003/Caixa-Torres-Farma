@@ -7,7 +7,7 @@ import { FormInput } from '../../shared/components/forms/FormInput'
 import { Button } from '../../shared/components/buttons/Button'
 import { Table } from '../../shared/components/tables/Table'
 import { Modal } from '../../shared/components/modals/Modal'
-import { Coins as CoinsIcon, Plus, Loader2, CheckCircle, Calendar, Trash2, ArrowRightCircle, ArrowDownCircle, Info, Pencil } from 'lucide-react'
+import { Coins as CoinsIcon, Plus, Loader2, CheckCircle, Calendar, Trash2, ArrowRightCircle, ArrowDownCircle, Info, Pencil, Printer } from 'lucide-react'
 
 const formatRecebedor = (raw) => {
   if (!raw) return 'Operador';
@@ -20,16 +20,23 @@ const formatRecebedor = (raw) => {
 const formatarValoresMovimentados = (detalhamento) => {
   if (!detalhamento) return 'Sem detalhes físicos registrados.';
   let texto = '';
+  // Físico de Saída
   if (detalhamento.notas && Object.keys(detalhamento.notas).length > 0) {
-    texto += 'NOTAS:\n';
+    texto += 'NOTAS RETIRADAS:\n';
     Object.entries(detalhamento.notas).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
   }
   if (detalhamento.moedas && Object.keys(detalhamento.moedas).length > 0) {
-    texto += '\nMOEDAS:\n';
+    texto += '\nMOEDAS RETIRADAS:\n';
     Object.entries(detalhamento.moedas).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
   }
+  // Físico de Entrada (Retorno)
+  if (detalhamento.moedasEntrada && Object.keys(detalhamento.moedasEntrada).length > 0) {
+    texto += '\nMOEDAS RECEBIDAS (RETORNO):\n';
+    Object.entries(detalhamento.moedasEntrada).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
+  }
+  // Legado de Sangria
   if (detalhamento.moedasSangria && Object.keys(detalhamento.moedasSangria).length > 0) {
-    texto += '\nMOEDAS (SANGRIA DEPOSITADA NO COFRE):\n';
+    texto += '\nMOEDAS (SANGRIA NO COFRE):\n';
     Object.entries(detalhamento.moedasSangria).forEach(([valor, qtd]) => { if (qtd !== 0) texto += `• R$ ${Number(valor).toFixed(2).replace('.', ',')}  ->  ${Math.abs(qtd)} un.\n`; });
   }
   return texto === '' ? 'Nenhum valor físico detalhado.' : texto;
@@ -85,9 +92,10 @@ export const Coins = () => {
   const converterReaisParaQtd = (valoresReais) => {
     const qtds = {};
     Object.entries(valoresReais).forEach(([face, valor]) => {
-      qtds[face] = Math.round((Number(valor) || 0) / Number(face));
+      const qtd = Math.round((Number(valor) || 0) / Number(face));
+      if (qtd > 0) qtds[face] = qtd;
     });
-    return qtds;
+    return Object.keys(qtds).length > 0 ? qtds : null;
   }
 
   const handleEdit = (row) => {
@@ -163,13 +171,15 @@ export const Coins = () => {
 
   const onSubmitReceive = async (e) => {
     e.preventDefault()
-    // AGORA EXIGE A GRID DE MOEDAS PRA TODO MUNDO (CAIXA ATUAL OU COFRE)
     if (!isMatchRecebimento) return alert("A soma informada das moedas não bate com o valor esperado pela rua!")
 
     const payloadRecebimento = {
       recebido_por: user?.nome || 'Operador',
       valor_recebido: receivingTroca.valor,
-      detalhes_troca: { moedas: converterReaisParaQtd(moedasRec) }
+      detalhes_troca: { 
+        moedas: converterReaisParaQtd(moedasRec),
+        moedasValor: totalRecebimento
+      }
     }
 
     await receberTroca(receivingTroca.id, payloadRecebimento, receivingTroca)
@@ -180,6 +190,84 @@ export const Coins = () => {
     if(window.confirm('Tem certeza que deseja excluir esta movimentação? Se as moedas vieram do cofre, elas serão estornadas.')) {
       excluirDeposito(id);
     }
+  }
+
+  const imprimirComprovante = (registro) => {
+    const dataApenas = new Date(registro.created_at).toLocaleDateString('pt-BR')
+    const horaApenas = new Date(registro.created_at).toLocaleTimeString('pt-BR')
+    const valorFormatado = `R$ ${registro.valor.toFixed(2).replace('.', ',')}`
+    const nomeOperador = registro.responsavel_nome || registro.users?.nome || 'Operador'
+    const detalhesLimpos = registro.detalhes_troca;
+    const recebedorLimpo = formatRecebedor(registro.recebido_por)
+
+    let detalhesOutHtml = ''; let detalhesInHtml = '';
+
+    if (detalhesLimpos) {
+      if (detalhesLimpos.notas && Object.keys(detalhesLimpos.notas).length > 0) {
+        detalhesOutHtml += '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #b91c1c;">[-] Retirado:</div>';
+        [200, 100, 50, 20, 10, 5, 2].forEach(n => {
+          if (detalhesLimpos.notas[n] > 0) detalhesOutHtml += `<div>Notas R$ ${n}: R$ ${(detalhesLimpos.notas[n] * n).toFixed(2).replace('.',',')}</div>`
+        });
+      }
+      
+      if (detalhesLimpos.moedas && Object.keys(detalhesLimpos.moedas).length > 0) {
+        if (!detalhesOutHtml) detalhesOutHtml += '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #b91c1c;">[-] Retirado/Gerado:</div>';
+        [1, 0.5, 0.25, 0.1, 0.05].forEach(m => {
+          if (detalhesLimpos.moedas[m] > 0) detalhesOutHtml += `<div>Moedas R$ ${m.toFixed(2).replace('.',',')}: R$ ${(detalhesLimpos.moedas[m] * m).toFixed(2).replace('.',',')}</div>`
+        });
+      } else if (detalhesLimpos.moedasValor > 0) {
+        if (!detalhesOutHtml) detalhesOutHtml += '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #b91c1c;">[-] Retirado/Gerado:</div>';
+        detalhesOutHtml += `<div>Moedas: R$ ${parseFloat(detalhesLimpos.moedasValor).toFixed(2).replace('.',',')}</div>`
+      }
+      
+      if (detalhesLimpos.moedasSangria && Object.keys(detalhesLimpos.moedasSangria).length > 0) {
+        detalhesOutHtml += '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #b91c1c;">[-] Sangria (Cofre):</div>';
+        [1, 0.5, 0.25, 0.1, 0.05].forEach(m => {
+          if (detalhesLimpos.moedasSangria[m] > 0) detalhesOutHtml += `<div>Moedas R$ ${m.toFixed(2).replace('.',',')}: R$ ${(detalhesLimpos.moedasSangria[m] * m).toFixed(2).replace('.',',')}</div>`
+        });
+      }
+
+      if (detalhesLimpos.moedasEntrada && Object.keys(detalhesLimpos.moedasEntrada).length > 0) {
+        detalhesInHtml = '<div class="divisor"></div><div class="bold" style="margin-bottom: 4px; color: #15803d;">[+] Recebido (Retorno):</div>';
+        [1, 0.5, 0.25, 0.1, 0.05].forEach(m => {
+          if (detalhesLimpos.moedasEntrada[m] > 0) detalhesInHtml += `<div>Moedas R$ ${m.toFixed(2).replace('.',',')}: R$ ${(detalhesLimpos.moedasEntrada[m] * m).toFixed(2).replace('.',',')}</div>`
+        });
+      }
+    }
+
+    const isTrocaExterna = registro.categoria === 'Moedas (Troca Externa)';
+    const titulo = isTrocaExterna ? 'COMPROVANTE DE TROCA DE MOEDAS' : (registro.categoria === 'Sangria de Moedas' ? 'SANGRIA DE MOEDAS' : 'CRÉDITO EM CAIXA (MOEDAS)');
+
+    const conteudoCupom = `
+      <html><head><style>@page { margin: 0; } body { font-family: 'Courier New', Courier, monospace; width: 76mm; margin: 0; padding: 5mm; font-size: 15px; } .center { text-align: center; } .bold { font-weight: bold; } .divisor { border-top: 1px dashed #000; margin: 10px 0; }</style></head>
+      <body>
+          <div class="center bold" style="font-size: 16px;">${titulo}</div>
+          <div class="divisor"></div>
+          <div><span class="bold">Data/Hora:</span> ${dataApenas} ${horaApenas}</div>
+          ${isTrocaExterna ? `<div><span class="bold">Origem:</span> ${registro.origem}</div><div><span class="bold">Destino:</span> ${registro.destino}</div>` : ''}
+          <div><span class="bold">Usuário:</span> ${nomeOperador}</div>
+          
+          ${detalhesOutHtml}
+          
+          <div class="divisor"></div>
+          <div class="bold" style="font-size: 18px; text-align: center;">TOTAL<br>${valorFormatado}</div>
+          <div class="divisor"></div><br>
+          
+          ${registro.recebido_por ? `
+          <div class="center bold">-- RETORNO DA TROCA --</div>
+          ${detalhesInHtml}
+          <div class="divisor"></div>
+          <div><span class="bold">Recebido (Retorno):</span><br>${recebedorLimpo}</div><br>
+          <div class="center" style="font-size: 12px;">Destino do Retorno: ${registro.origem === 'Caixa Atual' ? 'Caixa' : 'Cofre'}</div>
+          <div class="center" style="font-size: 12px;">Horário: ${new Date(registro.recebido_em).toLocaleString('pt-BR')}</div>
+          ` : ''}
+      </body></html>`;
+
+    const janelaImpressao = window.open('', '', 'width=300,height=400')
+    janelaImpressao.document.write(conteudoCupom)
+    janelaImpressao.document.close()
+    janelaImpressao.focus()
+    setTimeout(() => { janelaImpressao.print(); janelaImpressao.close() }, 250)
   }
 
   const columns = [
@@ -209,6 +297,11 @@ export const Coins = () => {
 
         return (
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* NOVO BOTÃO DE IMPRESSÃO */}
+            <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', fontSize: '0.8rem' }} title="Imprimir Comprovante">
+              <Printer size={16} /> Imp.
+            </button>
+            
             <button onClick={() => alert(`=== DETALHES DE VALORES FÍSICOS ===\n\n${detalhesFormatados}`)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold', fontSize: '0.8rem' }}>
               <Info size={16} /> Ver
             </button>
