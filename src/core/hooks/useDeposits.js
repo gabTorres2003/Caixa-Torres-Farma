@@ -28,31 +28,31 @@ export const useDeposits = (user, dataFiltro) => {
   const salvarDeposito = async (payload, editingId) => {
     setIsActionLoading(true)
     try {
+      if (payload.observacao_ajuste) {
+         payload.detalhes_troca = { ...payload.detalhes_troca, observacao_ajuste: payload.observacao_ajuste };
+      }
+      delete payload.observacao_ajuste;
+
       if (editingId) {
-        // Se houver observação de ajuste do ADM, injeta no JSON de detalhes
-        if (payload.observacao_ajuste) {
-           payload.detalhes_troca = { ...payload.detalhes_troca, observacao_ajuste: payload.observacao_ajuste };
-           delete payload.observacao_ajuste;
-        }
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
         const isOrigemCofre = payload.origem?.includes('Troco') || payload.origem?.includes('Cofre');
 
         if (payload.categoria === 'Troca (Caixa de Troco)') {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, payload.detalhes_troca.moedasValor, payload.valor, 'Gaveta do Operador (Troca Interna)', payload.detalhes_troca.moedas);
-          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, payload.detalhes_troca.notasEntrada, payload.detalhes_troca.moedasValorEntrada, payload.valor, 'Gaveta do Operador (Troca Interna)', payload.detalhes_troca.moedasEntrada);
+          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, payload.detalhes_troca?.moedasValor, payload.valor, 'Gaveta do Operador (Troca Interna)', payload.detalhes_troca?.moedas);
+          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, payload.detalhes_troca?.notasEntrada, payload.detalhes_troca?.moedasValorEntrada, payload.valor, 'Gaveta do Operador (Troca Interna)', payload.detalhes_troca?.moedasEntrada);
         } 
         else if (payload.categoria === 'Moedas (Crédito)') {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca.moedas);
+          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca?.moedas);
         }
         else if (payload.categoria === 'Sangria de Moedas') {
-          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payload.valor, 'Sangria do Caixa Atual', payload.detalhes_troca.moedas);
+          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payload.valor, 'Sangria do Caixa Atual', payload.detalhes_troca?.moedas);
         }
         else if ((payload.categoria === 'Moedas (Troca Externa)' || payload.categoria === 'Troca Temporária') && isOrigemCofre) {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, 0, payload.valor, `${payload.categoria} (${payload.destino})`, null);
+          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, 0, payload.valor, `${payload.categoria} (${payload.destino})`, null);
         }
         else if (isOrigemCofre && payload.categoria !== 'Moedas (Troca Externa)') {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca.notas, payload.detalhes_troca.moedasValor, payload.valor, payload.categoria === 'Depósito' ? 'Depósito Bancário' : `${payload.categoria} (${payload.destino})`, payload.detalhes_troca.moedas);
+          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, payload.detalhes_troca?.moedasValor, payload.valor, payload.categoria === 'Depósito' ? 'Depósito Bancário' : `${payload.categoria} (${payload.destino})`, payload.detalhes_troca?.moedas);
         }
         
         await DepositRepository.addDeposit({ ...payload, store_id: user.store_id, created_by: user.id })
