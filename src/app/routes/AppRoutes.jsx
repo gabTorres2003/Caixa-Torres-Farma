@@ -111,11 +111,7 @@ export const AppRoutes = () => {
           {/* MÓDULO DE MOTOBOYS */}
           <Route
             path="/motoboys"
-            element={
-              <AdminRoute>
-                <Motoboys />
-              </AdminRoute>
-            }
+            element={<Motoboys />}
           />
 
           {/* MÓDULO DE CONFERÊNCIA */}

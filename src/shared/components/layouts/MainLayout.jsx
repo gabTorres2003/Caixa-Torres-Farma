@@ -85,6 +85,7 @@ export const MainLayout = () => {
       ],
     },
     { path: '/pre-fechamento', label: 'Pré-Fechamento', icon: Calculator },
+    { path: '/motoboys', label: 'Motoboys', icon: Bike },
   ]
 
   // 3. Montagem Inteligente do Menu Admin (Agora com Motoboys!)
