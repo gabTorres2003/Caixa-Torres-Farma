@@ -18,6 +18,59 @@ export const MotoboyReports = ({ user, motoboys }) => {
     return meses[mesIndex];
   }
 
+  const parseHorarioTrabalho = (texto) => {
+    if (!texto) return { semana: '', sabado: '', domingo: '' }
+
+    const padrao = { semana: '', sabado: '', domingo: '' }
+    const partes = String(texto).split('|').map(p => p.trim()).filter(Boolean)
+
+    partes.forEach((parte) => {
+      const lower = parte.toLowerCase()
+      if (lower.includes('segunda') || lower.includes('seg') || lower.includes('semana')) {
+        padrao.semana = parte.replace(/^(segunda a sexta|segundas? a sextas?|seg-sex|semana)\s*:\s*/i, '').trim()
+        return
+      }
+      if (lower.includes('sábado') || lower.includes('sabado') || lower.includes('sab')) {
+        padrao.sabado = parte.replace(/^(sábado|sabado|sab)\s*:\s*/i, '').trim()
+        return
+      }
+      if (lower.includes('domingo') || lower.includes('dom')) {
+        padrao.domingo = parte.replace(/^(domingo|dom)\s*:\s*/i, '').trim()
+        return
+      }
+      if (!padrao.semana) padrao.semana = parte.trim()
+    })
+
+    return padrao
+  }
+
+  const getHorarioResumo = (texto) => {
+    const horarios = parseHorarioTrabalho(texto)
+    const partes = []
+    if (horarios.semana) partes.push(`SEG-SEX: ${horarios.semana}`)
+    if (horarios.sabado) partes.push(`SÁB: ${horarios.sabado}`)
+    if (horarios.domingo) partes.push(`DOM: ${horarios.domingo}`)
+    return partes.length > 0 ? partes.join(' | ') : 'NÃO INFORMADO'
+  }
+
+  const getHorarioDoDia = (dateString, texto) => {
+    const horarios = parseHorarioTrabalho(texto)
+    const dia = new Date(`${dateString}T00:00:00`).getDay()
+
+    if (dia === 0 && horarios.domingo) return horarios.domingo
+    if (dia === 6 && horarios.sabado) return horarios.sabado
+    if (horarios.semana) return horarios.semana
+    return horarios.semana || horarios.sabado || horarios.domingo || 'NÃO INFORMADO'
+  }
+
+  const obterStatusDoDia = (dayString, recordsOfDay) => {
+    if (recordsOfDay.some(r => r.tipo_registro === 'FERIAS')) return 'FÉRIAS'
+    if (recordsOfDay.some(r => r.tipo_registro === 'ATESTADO')) return 'ATESTADO'
+    if (recordsOfDay.some(r => r.tipo_registro === 'FOLGA')) return 'FOLGA'
+    if (recordsOfDay.some(r => r.tipo_registro === 'ENTRADA' || r.tipo_registro === 'SAIDA')) return null
+    return 'FALTA'
+  }
+
   const handleGenerateReport = async () => {
     if (!selectedMotoboy || !selectedMonth) return alert("Selecione o motoboy e o mês/ano.")
     setIsGenerating(true)
@@ -78,27 +131,31 @@ export const MotoboyReports = ({ user, motoboys }) => {
 
         if (i <= diasNoMes) {
             const dayString = `${year}-${month}-${String(i).padStart(2, '0')}`;
-            // Filtra os registros apenas daquele dia
             const recordsOfDay = reportData.timeRecords.filter(t => t.registro_time.startsWith(dayString));
+            const statusDoDia = obterStatusDoDia(dayString, recordsOfDay);
             
-            // Pega o primeiro registro de entrada e o último de saída do dia
             const entradas = recordsOfDay.filter(t => t.tipo_registro === 'ENTRADA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
             const saidas = recordsOfDay.filter(t => t.tipo_registro === 'SAIDA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
 
             if (entradas.length > 0) entradaTime = new Date(entradas[0].registro_time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
             if (saidas.length > 0) saidaTime = new Date(saidas[saidas.length - 1].registro_time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+
+            if (statusDoDia) {
+                entradaTime = statusDoDia;
+                saidaTime = statusDoDia;
+            }
+
+            if (statusDoDia === 'FALTA') {
+                entradaTime = 'FALTA';
+                saidaTime = 'FALTA';
+            }
         }
 
         rowsHtml += `
             <tr>
                 <td class="bold">${i}</td>
                 <td>${entradaTime}</td>
-                <td></td>
-                <td>-</td>
-                <td>-</td>
                 <td>${saidaTime}</td>
-                <td></td>
-                <td></td>
             </tr>
         `;
     }
@@ -116,6 +173,9 @@ export const MotoboyReports = ({ user, motoboys }) => {
             th, td { border: 1px solid #000; padding: 6px 2px; }
             th { font-weight: bold; text-transform: uppercase; background-color: #f8f9fa; }
             .bold { font-weight: bold; }
+            .signature-box { margin-top: 28px; text-align: center; }
+            .signature-line { border-bottom: 2px solid #000; width: 70%; margin: 0 auto 8px; height: 18px; }
+            .signature-text { font-size: 12px; font-weight: bold; text-transform: uppercase; }
           </style>
         </head>
         <body>
@@ -124,26 +184,26 @@ export const MotoboyReports = ({ user, motoboys }) => {
           <div class="header-info">
             <div>MOTOBOY: &nbsp; ${reportData.motoboy.nome}</div>
             <div>MÊS: ${nomeMesStr} ${year}</div>
-            <div>HORÁRIO: ${reportData.motoboy.horario_trabalho || 'NÃO INFORMADO'}</div>
+            <div>HORÁRIO: ${getHorarioResumo(reportData.motoboy.horario_trabalho)}</div>
           </div>
 
           <table>
             <thead>
               <tr>
-                <th style="width: 5%;">DIA</th>
-                <th style="width: 12%;">ENTRADA</th>
-                <th style="width: 18%;">ASSINATURA</th>
-                <th style="width: 10%;">ALMOÇO</th>
-                <th style="width: 10%;">RETORNO</th>
-                <th style="width: 12%;">SAÍDA</th>
-                <th style="width: 18%;">ASSINATURA</th>
-                <th style="width: 15%;">HORA EXTRA</th>
+                <th style="width: 20%;">DIA</th>
+                <th style="width: 40%;">HORÁRIO DE ENTRADA</th>
+                <th style="width: 40%;">HORÁRIO DE SAÍDA</th>
               </tr>
             </thead>
             <tbody>
               ${rowsHtml}
             </tbody>
           </table>
+
+          <div class="signature-box">
+            <div class="signature-line"></div>
+            <div class="signature-text">Assinatura</div>
+          </div>
         </body>
       </html>
     `;

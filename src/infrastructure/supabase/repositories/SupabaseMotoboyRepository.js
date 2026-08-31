@@ -46,6 +46,17 @@ export const SupabaseMotoboyRepository = {
     if (error) throw error
   },
 
+  async registerTimeBulk(records) {
+    if (!records || records.length === 0) return
+    const { error } = await supabase.from('motoboy_time_tracking').insert(records)
+    if (error) throw error
+  },
+
+  async updateTimeRecord(id, payload) {
+    const { error } = await supabase.from('motoboy_time_tracking').update(payload).eq('id', id)
+    if (error) throw error
+  },
+
   async deleteTimeRecord(id) {
     const { error } = await supabase.from('motoboy_time_tracking').delete().eq('id', id)
     if (error) throw error

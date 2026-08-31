@@ -64,6 +64,71 @@ export const useMotoboys = (user, dataFiltro) => {
     }
   }
 
+  // === REGISTRO DE PONTO MANUAL E AUSÊNCIAS ===
+  const registrarHorarioManual = async ({ id, motoboy_id, tipo_registro, registro_time }) => {
+    setIsActionLoading(true)
+    try {
+      const payload = {
+        store_id: user.store_id,
+        motoboy_id,
+        tipo_registro,
+        registro_time,
+        registered_by: user.id
+      }
+
+      if (id) {
+        await SupabaseMotoboyRepository.updateTimeRecord(id, payload)
+        alert('Registro manual atualizado com sucesso!')
+      } else {
+        await SupabaseMotoboyRepository.registerTime(payload)
+        alert('Registro manual inserido com sucesso!')
+      }
+      await carregarDados()
+      return true
+    } catch (err) {
+      alert('Erro ao salvar horário manual: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const registrarAusencia = async ({ motoboyId, tipoRegistro, dataInicio, dataFim }) => {
+    setIsActionLoading(true)
+    try {
+      const start = new Date(`${dataInicio}T00:00:00`)
+      const end = new Date(`${dataFim}T00:00:00`)
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+        throw new Error('Informe datas válidas para o período.')
+      }
+
+      const dias = []
+      const cursor = new Date(start)
+      while (cursor <= end) {
+        const dateString = cursor.toISOString().slice(0, 10)
+        dias.push({
+          store_id: user.store_id,
+          motoboy_id: motoboyId,
+          tipo_registro: tipoRegistro,
+          registro_time: new Date(`${dateString}T12:00:00-03:00`).toISOString(),
+          registered_by: user.id
+        })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+
+      await SupabaseMotoboyRepository.registerTimeBulk(dias)
+      await carregarDados()
+      alert(`${tipoRegistro} registrado com sucesso!`)
+      return true
+    } catch (err) {
+      alert('Erro ao registrar ausência: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   // === REGISTRO DE PONTO ===
   const registrarPonto = async (motoboyId, tipoRegistro) => {
     setIsActionLoading(true)
@@ -149,7 +214,7 @@ export const useMotoboys = (user, dataFiltro) => {
 
   return {
     motoboys, timeRecords, routes, isPageLoading, isActionLoading,
-    carregarDados, registrarPonto, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota, 
+    carregarDados, registrarPonto, registrarHorarioManual, registrarAusencia, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota, 
     salvarMotoboy, excluirMotoboy
   }
 }
