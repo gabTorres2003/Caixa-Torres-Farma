@@ -174,9 +174,26 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
           const dayRecords = records.filter((r) => r.motoboy_id === selectedMotoboy && String(r.registro_time).startsWith(dayString))
           const schedule = targetMotoboy ? getShiftForDate(dayString, targetMotoboy.horario_trabalho) : null
 
-          const status = isSpecialStatus(dayRecords, ['FERIAS', 'ATESTADO', 'FOLGA'])
-            ? (dayRecords.find((r) => r.tipo_registro === 'FERIAS') ? 'FÉRIAS' : dayRecords.find((r) => r.tipo_registro === 'ATESTADO') ? 'ATESTADO' : 'FOLGA')
-            : (dayRecords.some((r) => r.tipo_registro === 'FALTA') ? 'FALTA' : null)
+          const specialStatus = dayRecords.find((r) => ['FERIAS', 'ATESTADO', 'FOLGA', 'TROCA_DE_ESCALA', 'FOLGA_FERIADO', 'FALTA'].includes(r.tipo_registro))
+          const status = specialStatus
+            ? (specialStatus.tipo_registro === 'FERIAS'
+              ? 'FÉRIAS'
+              : specialStatus.tipo_registro === 'ATESTADO'
+                ? 'ATESTADO'
+                : specialStatus.tipo_registro === 'FOLGA'
+                  ? 'FOLGA'
+                  : specialStatus.tipo_registro === 'TROCA_DE_ESCALA'
+                    ? 'TROCA DE ESCALA'
+                    : specialStatus.tipo_registro === 'FOLGA_FERIADO'
+                      ? 'FOLGA FERIADO'
+                      : 'FALTA')
+            : (() => {
+                const day = getDatePart(dayString).day
+                const hasWorkRecords = dayRecords.some((r) => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
+                if (!hasWorkRecords && (day === 0 || day === 6)) return 'FOLGA'
+                if (!hasWorkRecords && schedule) return 'FALTA'
+                return null
+              })()
 
           const entradaRecords = dayRecords.filter((r) => r.tipo_registro === 'ENTRADA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
           const saidaRecords = dayRecords.filter((r) => r.tipo_registro === 'SAIDA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))

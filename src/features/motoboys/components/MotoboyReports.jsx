@@ -46,11 +46,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
 
   const getHorarioResumo = (texto) => {
     const horarios = parseHorarioTrabalho(texto)
-    const partes = []
-    if (horarios.semana) partes.push(`SEG-SEX: ${horarios.semana}`)
-    if (horarios.sabado) partes.push(`SÁB: ${horarios.sabado}`)
-    if (horarios.domingo) partes.push(`DOM: ${horarios.domingo}`)
-    return partes.length > 0 ? partes.join(' | ') : 'NÃO INFORMADO'
+    return horarios.semana ? `SEG-SEX: ${horarios.semana}` : 'NÃO INFORMADO'
   }
 
   const getHorarioDoDia = (dateString, texto) => {
@@ -67,7 +63,14 @@ export const MotoboyReports = ({ user, motoboys }) => {
     if (recordsOfDay.some(r => r.tipo_registro === 'FERIAS')) return 'FÉRIAS'
     if (recordsOfDay.some(r => r.tipo_registro === 'ATESTADO')) return 'ATESTADO'
     if (recordsOfDay.some(r => r.tipo_registro === 'FOLGA')) return 'FOLGA'
+    if (recordsOfDay.some(r => r.tipo_registro === 'TROCA_DE_ESCALA')) return 'TROCA DE ESCALA'
+    if (recordsOfDay.some(r => r.tipo_registro === 'FOLGA_FERIADO')) return 'FOLGA FERIADO'
+    if (recordsOfDay.some(r => r.tipo_registro === 'FALTA')) return 'FALTA'
     if (recordsOfDay.some(r => r.tipo_registro === 'ENTRADA' || r.tipo_registro === 'SAIDA')) return null
+
+    const dia = new Date(`${dayString}T00:00:00`).getDay()
+    if (dia === 0 || dia === 6) return 'FOLGA'
+
     return 'FALTA'
   }
 
@@ -165,17 +168,90 @@ export const MotoboyReports = ({ user, motoboys }) => {
         <head>
           <title>Folha de Ponto - ${reportData.motoboy.nome}</title>
           <style>
-            @page { size: A4 portrait; margin: 15mm; }
-            body { font-family: 'Arial', sans-serif; color: #000; margin: 0; padding: 0; }
-            .title { text-align: center; font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 40px; margin-top: 20px; }
-            .header-info { display: flex; justify-content: space-between; align-items: flex-end; font-weight: bold; font-size: 13px; text-transform: uppercase; margin-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; }
-            th, td { border: 1px solid #000; padding: 6px 2px; }
-            th { font-weight: bold; text-transform: uppercase; background-color: #f8f9fa; }
+            @page { size: A4 portrait; margin: 5mm 6mm 0.5mm 6mm; }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100%;
+              height: auto;
+              font-family: 'Arial', sans-serif;
+              color: #000;
+              background: #fff;
+            }
+            body {
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .title {
+              text-align: center;
+              font-size: 20px;
+              font-weight: bold;
+              text-transform: uppercase;
+              margin: 0 0 16px 0;
+            }
+            .header-info {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+              font-weight: bold;
+              font-size: 12px;
+              text-transform: uppercase;
+              margin-bottom: 8px;
+              gap: 8px;
+            }
+            .header-info > div {
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              text-align: center;
+              font-size: 12px;
+              table-layout: fixed;
+            }
+            th, td {
+              border: 1px solid #000;
+              padding: 4px 2px;
+              vertical-align: middle;
+            }
+            th {
+              font-weight: bold;
+              text-transform: uppercase;
+              background-color: #f8f9fa;
+            }
             .bold { font-weight: bold; }
-            .signature-box { margin-top: 28px; text-align: center; }
-            .signature-line { border-bottom: 2px solid #000; width: 70%; margin: 0 auto 8px; height: 18px; }
-            .signature-text { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+            .signature-box {
+              margin-top: 20px;
+              text-align: center;
+            }
+            .signature-line {
+              border-bottom: 2px solid #000;
+              width: 72%;
+              margin: 0 auto 8px;
+              height: 16px;
+            }
+            .signature-text {
+              font-size: 12px;
+              font-weight: bold;
+              text-transform: uppercase;
+            }
+            @media print {
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+              }
+              @page {
+                size: A4 portrait;
+                margin: 5mm 6mm 0.5mm 6mm;
+              }
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+            }
           </style>
         </head>
         <body>

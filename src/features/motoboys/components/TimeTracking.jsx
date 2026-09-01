@@ -17,7 +17,9 @@ const getTipoLabel = (tipo) => {
     FOLGA: 'FOLGA',
     FERIAS: 'FÉRIAS',
     ATESTADO: 'ATESTADO',
-    FALTA: 'FALTA'
+    FALTA: 'FALTA',
+    TROCA_DE_ESCALA: 'TROCA DE ESCALA',
+    FOLGA_FERIADO: 'FOLGA FERIADO'
   }
   return mapa[tipo] || tipo
 }
@@ -82,11 +84,11 @@ export const TimeTracking = ({
 
   const handleSaveAbsence = async (tipo = absenceForm.tipoRegistro) => {
     if (!absenceForm.motoboyId || !absenceForm.dataInicio || !absenceForm.dataFim) {
-      return alert('Informe o motoboy e o período da ausência/folga.')
+      return alert('Informe o motoboy e o período da ausência.')
     }
 
-    if (!isAdmin && tipo !== 'FOLGA') {
-      return alert('Apenas ADMIN pode registrar férias ou atestado.')
+    if (!isAdmin) {
+      return alert('Apenas ADMIN pode registrar e resolver ausências.')
     }
 
     await registrarAusencia({
@@ -96,7 +98,7 @@ export const TimeTracking = ({
       dataFim: absenceForm.dataFim
     })
 
-    setAbsenceForm({ motoboyId: '', tipoRegistro: 'FOLGA', dataInicio: '', dataFim: '' })
+    setAbsenceForm({ motoboyId: '', tipoRegistro: 'FALTA', dataInicio: '', dataFim: '' })
   }
 
   const handleEditManualTime = (row) => {
@@ -191,55 +193,45 @@ export const TimeTracking = ({
         )}
       </Card>
 
-      <Card title="Gerenciamento de Ausências e Folgas">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-          <div style={{ padding: '14px', border: '1px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#f8fafc' }}>
-            <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold' }}>Folga</h4>
-            <div style={{ display: 'grid', gap: '10px' }}>
-              <select className="input-field" value={absenceForm.motoboyId} onChange={(e) => setAbsenceForm({ ...absenceForm, motoboyId: e.target.value })}>
-                <option value="">Selecione o motoboy</option>
-                {motoboys.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-              </select>
-              <input type="date" className="input-field" value={absenceForm.dataInicio} onChange={(e) => setAbsenceForm({ ...absenceForm, dataInicio: e.target.value })} />
-              <input type="date" className="input-field" value={absenceForm.dataFim} onChange={(e) => setAbsenceForm({ ...absenceForm, dataFim: e.target.value })} />
-              <Button onClick={() => setAbsenceForm({ ...absenceForm, tipoRegistro: 'FOLGA' })} variant="secondary">Marcar como folga</Button>
-              <Button onClick={() => handleSaveAbsence('FOLGA')} isLoading={isActionLoading} style={{ backgroundColor: '#7c3aed', border: 'none' }}>Salvar folga</Button>
+      {isAdmin && (
+        <Card title="Gerenciamento de Ausências e Folgas">
+          <div style={{ display: 'grid', gap: '16px' }}>
+            <div style={{ padding: '14px', border: '1px solid #dbeafe', borderRadius: '10px', backgroundColor: '#eff6ff' }}>
+              <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold', color: '#1d4ed8' }}>Resolver Falta / Ausência</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', alignItems: 'end' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Motoboy</label>
+                  <select className="input-field" value={absenceForm.motoboyId} onChange={(e) => setAbsenceForm({ ...absenceForm, motoboyId: e.target.value })} style={{ width: '100%' }}>
+                    <option value="">Selecione...</option>
+                    {motoboys.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data inicial</label>
+                  <input type="date" className="input-field" value={absenceForm.dataInicio} onChange={(e) => setAbsenceForm({ ...absenceForm, dataInicio: e.target.value })} style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data final</label>
+                  <input type="date" className="input-field" value={absenceForm.dataFim} onChange={(e) => setAbsenceForm({ ...absenceForm, dataFim: e.target.value })} style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Situação</label>
+                  <select className="input-field" value={absenceForm.tipoRegistro} onChange={(e) => setAbsenceForm({ ...absenceForm, tipoRegistro: e.target.value })} style={{ width: '100%' }}>
+                    <option value="FALTA">Confirmar Falta</option>
+                    <option value="ATESTADO">Atestado</option>
+                    <option value="TROCA_DE_ESCALA">Troca de Escala</option>
+                    <option value="FOLGA_FERIADO">Folga Feriado</option>
+                    <option value="FERIAS">Férias</option>
+                  </select>
+                </div>
+                <div>
+                  <Button onClick={() => handleSaveAbsence(absenceForm.tipoRegistro)} isLoading={isActionLoading} style={{ backgroundColor: '#2563eb', border: 'none' }}>Salvar situação</Button>
+                </div>
+              </div>
             </div>
           </div>
-
-          {isAdmin && (
-            <>
-              <div style={{ padding: '14px', border: '1px solid #dcfce7', borderRadius: '10px', backgroundColor: '#f0fdf4' }}>
-                <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold', color: '#166534' }}>Férias</h4>
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  <select className="input-field" value={absenceForm.motoboyId} onChange={(e) => setAbsenceForm({ ...absenceForm, motoboyId: e.target.value })}>
-                    <option value="">Selecione o motoboy</option>
-                    {motoboys.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-                  </select>
-                  <input type="date" className="input-field" value={absenceForm.dataInicio} onChange={(e) => setAbsenceForm({ ...absenceForm, dataInicio: e.target.value })} />
-                  <input type="date" className="input-field" value={absenceForm.dataFim} onChange={(e) => setAbsenceForm({ ...absenceForm, dataFim: e.target.value })} />
-                  <Button onClick={() => setAbsenceForm({ ...absenceForm, tipoRegistro: 'FERIAS' })} style={{ backgroundColor: '#16a34a', border: 'none' }}>Marcar férias</Button>
-                  <Button onClick={() => handleSaveAbsence('FERIAS')} isLoading={isActionLoading} style={{ backgroundColor: '#16a34a', border: 'none' }}>Salvar férias</Button>
-                </div>
-              </div>
-
-              <div style={{ padding: '14px', border: '1px solid #dbeafe', borderRadius: '10px', backgroundColor: '#eff6ff' }}>
-                <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold', color: '#1d4ed8' }}>Atestado</h4>
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  <select className="input-field" value={absenceForm.motoboyId} onChange={(e) => setAbsenceForm({ ...absenceForm, motoboyId: e.target.value })}>
-                    <option value="">Selecione o motoboy</option>
-                    {motoboys.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-                  </select>
-                  <input type="date" className="input-field" value={absenceForm.dataInicio} onChange={(e) => setAbsenceForm({ ...absenceForm, dataInicio: e.target.value })} />
-                  <input type="date" className="input-field" value={absenceForm.dataFim} onChange={(e) => setAbsenceForm({ ...absenceForm, dataFim: e.target.value })} />
-                  <Button onClick={() => setAbsenceForm({ ...absenceForm, tipoRegistro: 'ATESTADO' })} style={{ backgroundColor: '#2563eb', border: 'none' }}>Marcar atestado</Button>
-                  <Button onClick={() => handleSaveAbsence('ATESTADO')} isLoading={isActionLoading} style={{ backgroundColor: '#2563eb', border: 'none' }}>Salvar atestado</Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <Card title="Registros de Ponto do Dia">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
