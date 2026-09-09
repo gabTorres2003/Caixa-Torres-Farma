@@ -34,8 +34,9 @@ export const SupabaseMotoboyRepository = {
       .from('motoboy_time_tracking')
       .select('*, motoboys(nome), users:registered_by(nome)')
       .eq('store_id', storeId)
-      .or(`registro_time.and.gte.${startDate}T00:00:00-03:00,registro_time.lte.${endDate}T23:59:59-03:00,registro_time.is.null`)
-      .order('registro_time', { ascending: false, nullsFirst: false })
+      .gte('created_at', `${startDate}T00:00:00-03:00`)
+      .lte('created_at', `${endDate}T23:59:59-03:00`)
+      .order('created_at', { ascending: false })
     if (error) throw error
     return (data || []).map(r => ({
       ...r,
