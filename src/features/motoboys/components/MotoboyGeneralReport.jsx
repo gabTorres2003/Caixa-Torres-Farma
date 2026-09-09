@@ -37,8 +37,8 @@ const parseHorario = (texto) => {
     const lower = parte.toLowerCase()
     if (lower.includes('segunda') || lower.includes('seg')) {
       padrao.semana = parte.replace(/^(segunda a sexta|segundas? a sextas?|seg-sex|semana)\s*:\s*/i, '').trim()
-    } else if (lower.includes('sabado') || lower.includes('sab')) {
-      padrao.sabado = parte.replace(/^(sabado|sab)\s*:\s*/i, '').trim()
+    } else if (lower.includes('sabado') || lower.includes('sábado') || lower.includes('sab')) {
+      padrao.sabado = parte.replace(/^(sabado|sábado|sab)\s*:\s*/i, '').trim()
     } else if (lower.includes('domingo') || lower.includes('dom')) {
       padrao.domingo = parte.replace(/^(domingo|dom)\s*:\s*/i, '').trim()
     } else if (!padrao.semana) {
@@ -51,7 +51,7 @@ const parseHorario = (texto) => {
 const parseRange = (value) => {
   if (!value) return null
   const normalized = String(value).replace(/\s+/g, ' ').trim()
-  const match = normalized.match(/(\d{1,2}:\d{2})\s*(?:as|-|–|—)\s*(\d{1,2}:\d{2})/i)
+  const match = normalized.match(/(\d{1,2}:\d{2})\s*(?:às|as|-|–|—)\s*(\d{1,2}:\d{2})/i)
   if (!match) return null
   const toMinutes = (time) => { const [h, m] = time.split(':').map(Number); return h * 60 + m }
   return { entrada: toMinutes(match[1]), saida: toMinutes(match[2]) }

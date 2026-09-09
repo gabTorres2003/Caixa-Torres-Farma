@@ -84,11 +84,10 @@ export const TimeTracking = ({
   const [selectedMotoboyIds, setSelectedMotoboyIds] = useState([])
   const [obsModal, setObsModal] = useState({ open: false, recordId: null, value: '' })
   const [trocaForm, setTrocaForm] = useState({
-    motoboyEntraId: '',
-    motoboySaiId: '',
-    data: getTodayStr(),
-    horaEntrada: '08:00',
-    horaSaida: '18:00'
+    motoboyIds: [],
+    modo: 'HOJE',
+    dataInicio: getTodayStr(),
+    dataFim: getTodayStr()
   })
 
   const resetManualForm = () => {
@@ -164,14 +163,27 @@ export const TimeTracking = ({
   }
 
   const handleTrocaTurno = async () => {
-    if (!trocaForm.motoboyEntraId || !trocaForm.motoboySaiId) {
-      return alert('Selecione ambos os motoboys para a troca.')
+    if (trocaForm.motoboyIds.length < 2) {
+      return alert('Selecione pelo menos 2 motoboys para a troca.')
     }
-    if (trocaForm.motoboyEntraId === trocaForm.motoboySaiId) {
-      return alert('Selecione motoboys diferentes para a troca.')
-    }
-    await registrarTrocaTurno(trocaForm)
-    setTrocaForm({ motoboyEntraId: '', motoboySaiId: '', data: getTodayStr(), horaEntrada: '08:00', horaSaida: '18:00' })
+    const dataInicio = trocaForm.modo === 'HOJE' ? getTodayStr() : trocaForm.dataInicio
+    const dataFim = trocaForm.modo === 'HOJE' ? getTodayStr() : trocaForm.dataFim
+    await registrarTrocaTurno({
+      motoboyIds: trocaForm.motoboyIds,
+      modo: trocaForm.modo,
+      dataInicio,
+      dataFim
+    })
+    setTrocaForm({ motoboyIds: [], modo: 'HOJE', dataInicio: getTodayStr(), dataFim: getTodayStr() })
+  }
+
+  const toggleTrocaMotoboy = (motoboyId) => {
+    setTrocaForm(prev => ({
+      ...prev,
+      motoboyIds: prev.motoboyIds.includes(motoboyId)
+        ? prev.motoboyIds.filter(id => id !== motoboyId)
+        : [...prev.motoboyIds, motoboyId]
+    }))
   }
 
   const toggleMotoboySelection = (motoboyId) => {
@@ -269,39 +281,64 @@ export const TimeTracking = ({
       {isAdmin && (
         <Card title="Troca de Turno (Rodizio)" icon={ArrowLeftRight}>
           <div style={{ padding: '16px', border: '1px solid #fef3c7', borderRadius: '10px', backgroundColor: '#fffbeb' }}>
-            <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold', color: '#92400e' }}>Registrar Troca de Horario</h4>
-            <p style={{ margin: '0 0 12px', fontSize: '0.85rem', color: '#78716c' }}>
-              Registre a troca de turno entre motoboys. O motoboy que entra assume o horario de saida do motoboy que sai, e vice-versa.
+            <h4 style={{ margin: '0 0 8px', fontSize: '1rem', fontWeight: 'bold', color: '#92400e' }}>Troca de Horario entre Motoboys</h4>
+            <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#78716c' }}>
+              Selecione os motoboys que vao trocar o turno. Os registros de ENTRADA e SAIDA (incluindo os cadastrados manualmente) serao trocados entre si.
             </p>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#92400e' }}>Selecione os Motoboys para a troca:</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {motoboys.map(m => (
+                  <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', backgroundColor: trocaForm.motoboyIds.includes(m.id) ? '#fef3c7' : '#fff', fontSize: '0.9rem' }}>
+                    <input type="checkbox" checked={trocaForm.motoboyIds.includes(m.id)} onChange={() => toggleTrocaMotoboy(m.id)} />
+                    {m.nome}
+                  </label>
+                ))}
+              </div>
+              {trocaForm.motoboyIds.length > 0 && (
+                <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#92400e' }}>
+                  {trocaForm.motoboyIds.length} motoboys selecionados para troca.
+                </p>
+              )}
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', alignItems: 'end' }}>
               <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Motoboy que ENTRA</label>
-                <select className="input-field" value={trocaForm.motoboyEntraId} onChange={(e) => setTrocaForm({ ...trocaForm, motoboyEntraId: e.target.value })} style={{ width: '100%' }}>
-                  <option value="">Selecione...</option>
-                  {motoboys.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-                </select>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Periodo</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => setTrocaForm({ ...trocaForm, modo: 'HOJE' })}
+                    style={{ padding: '8px 16px', fontSize: '0.85rem', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', backgroundColor: trocaForm.modo === 'HOJE' ? '#d97706' : '#fff', color: trocaForm.modo === 'HOJE' ? '#fff' : '#475569' }}
+                  >
+                    Apenas hoje
+                  </button>
+                  <button
+                    onClick={() => setTrocaForm({ ...trocaForm, modo: 'PERSONALIZADO' })}
+                    style={{ padding: '8px 16px', fontSize: '0.85rem', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', backgroundColor: trocaForm.modo === 'PERSONALIZADO' ? '#d97706' : '#fff', color: trocaForm.modo === 'PERSONALIZADO' ? '#fff' : '#475569' }}
+                  >
+                    Periodo personalizado
+                  </button>
+                </div>
               </div>
+
+              {trocaForm.modo === 'PERSONALIZADO' && (
+                <>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data inicio</label>
+                    <input type="date" className="input-field" value={trocaForm.dataInicio} onChange={(e) => setTrocaForm({ ...trocaForm, dataInicio: e.target.value })} style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data fim</label>
+                    <input type="date" className="input-field" value={trocaForm.dataFim} onChange={(e) => setTrocaForm({ ...trocaForm, dataFim: e.target.value })} style={{ width: '100%' }} />
+                  </div>
+                </>
+              )}
+
               <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Motoboy que SAI</label>
-                <select className="input-field" value={trocaForm.motoboySaiId} onChange={(e) => setTrocaForm({ ...trocaForm, motoboySaiId: e.target.value })} style={{ width: '100%' }}>
-                  <option value="">Selecione...</option>
-                  {motoboys.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data</label>
-                <input type="date" className="input-field" value={trocaForm.data} onChange={(e) => setTrocaForm({ ...trocaForm, data: e.target.value })} style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Horario Entrada (quem entra)</label>
-                <input type="time" className="input-field" value={trocaForm.horaEntrada} onChange={(e) => setTrocaForm({ ...trocaForm, horaEntrada: e.target.value })} style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Horario Saida (quem sai)</label>
-                <input type="time" className="input-field" value={trocaForm.horaSaida} onChange={(e) => setTrocaForm({ ...trocaForm, horaSaida: e.target.value })} style={{ width: '100%' }} />
-              </div>
-              <div>
-                <Button onClick={handleTrocaTurno} isLoading={isActionLoading} style={{ backgroundColor: '#d97706', border: 'none' }} icon={ArrowLeftRight}>Registrar Troca</Button>
+                <Button onClick={handleTrocaTurno} isLoading={isActionLoading} style={{ backgroundColor: '#d97706', border: 'none' }} icon={ArrowLeftRight}>
+                  {trocaForm.modo === 'HOJE' ? 'Trocar hoje' : 'Trocar no periodo'}
+                </Button>
               </div>
             </div>
           </div>

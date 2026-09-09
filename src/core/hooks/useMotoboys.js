@@ -163,30 +163,71 @@ export const useMotoboys = (user, dataFiltro) => {
     }
   }
 
-  const registrarTrocaTurno = async ({ motoboyEntraId, motoboySaiId, data, horaEntrada, horaSaida }) => {
+  const registrarTrocaTurno = async ({ motoboyIds, modo, dataInicio, dataFim }) => {
     setIsActionLoading(true)
     try {
-      const registros = [
-        {
-          store_id: user.store_id,
-          motoboy_id: motoboyEntraId,
-          tipo_registro: 'TROCA_DE_ESCALA',
-          registro_time: new Date(`${data}T${horaEntrada}:00-03:00`).toISOString(),
-          registered_by: user.id,
-          observacoes: `Troca de turno: entrou no lugar de motoboy selecionado`
-        },
-        {
-          store_id: user.store_id,
-          motoboy_id: motoboySaiId,
-          tipo_registro: 'TROCA_DE_ESCALA',
-          registro_time: new Date(`${data}T${horaSaida}:00-03:00`).toISOString(),
-          registered_by: user.id,
-          observacoes: `Troca de turno: saiu, substituido por motoboy selecionado`
+      if (!motoboyIds || motoboyIds.length < 2) {
+        throw new Error('Selecione pelo menos 2 motoboys para a troca.')
+      }
+
+      const start = new Date(`${dataInicio}T00:00:00`)
+      const end = new Date(`${dataFim}T00:00:00`)
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+        throw new Error('Periodo invalido.')
+      }
+
+      const allRecords = await SupabaseMotoboyRepository.getTimeTracking(user.store_id, dataInicio, dataFim)
+      let totalSwap = 0
+
+      const cursor = new Date(start)
+      while (cursor <= end) {
+        const dayStr = cursor.toISOString().slice(0, 10)
+        const dayRecords = allRecords.filter(r => r.registro_time && r.registro_time.startsWith(dayStr))
+
+        for (let i = 0; i < motoboyIds.length; i++) {
+          const j = (i + 1) % motoboyIds.length
+          const idA = motoboyIds[i]
+          const idB = motoboyIds[j]
+
+          const entradasA = dayRecords.filter(r => r.motoboy_id === idA && r.tipo_registro === 'ENTRADA')
+          const entradasB = dayRecords.filter(r => r.motoboy_id === idB && r.tipo_registro === 'ENTRADA')
+          const saidasA = dayRecords.filter(r => r.motoboy_id === idA && r.tipo_registro === 'SAIDA')
+          const saidasB = dayRecords.filter(r => r.motoboy_id === idB && r.tipo_registro === 'SAIDA')
+
+          for (const rec of entradasA) {
+            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
+              motoboy_id: idB,
+              observacoes: `Troca de turno em ${dayStr}`
+            })
+            totalSwap++
+          }
+          for (const rec of entradasB) {
+            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
+              motoboy_id: idA,
+              observacoes: `Troca de turno em ${dayStr}`
+            })
+            totalSwap++
+          }
+          for (const rec of saidasA) {
+            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
+              motoboy_id: idB,
+              observacoes: `Troca de turno em ${dayStr}`
+            })
+            totalSwap++
+          }
+          for (const rec of saidasB) {
+            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
+              motoboy_id: idA,
+              observacoes: `Troca de turno em ${dayStr}`
+            })
+            totalSwap++
+          }
         }
-      ]
-      await SupabaseMotoboyRepository.registerTimeBulk(registros)
+        cursor.setDate(cursor.getDate() + 1)
+      }
+
       await carregarDados()
-      alert('Troca de turno registrada com sucesso!')
+      alert(`Troca de turno concluida! ${totalSwap} registros trocados.`)
       return true
     } catch (err) {
       alert('Erro ao registrar troca de turno: ' + err.message)
