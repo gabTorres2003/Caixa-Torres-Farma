@@ -34,11 +34,13 @@ export const SupabaseMotoboyRepository = {
       .from('motoboy_time_tracking')
       .select('*, motoboys(nome), users:registered_by(nome)')
       .eq('store_id', storeId)
-      .gte('registro_time', `${startDate}T00:00:00-03:00`)
-      .lte('registro_time', `${endDate}T23:59:59-03:00`)
-      .order('registro_time', { ascending: false })
+      .or(`registro_time.and.gte.${startDate}T00:00:00-03:00,registro_time.lte.${endDate}T23:59:59-03:00,registro_time.is.null`)
+      .order('registro_time', { ascending: false, nullsFirst: false })
     if (error) throw error
-    return data || []
+    return (data || []).map(r => ({
+      ...r,
+      registro_time: r.registro_time || r.created_at
+    }))
   },
 
   async registerTime(payload) {
