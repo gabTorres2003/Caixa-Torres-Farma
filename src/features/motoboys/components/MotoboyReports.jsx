@@ -5,6 +5,16 @@ import { FileBarChart, Printer, Download } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 import { generateMotoboyPdf } from '../../../core/utils/pdfGenerator'
 
+const getLocalDateStr = (isoString) => {
+  const d = new Date(isoString)
+  const tzOffset = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
+}
+
+const getLocalTimeStr = (isoString) => {
+  return new Date(isoString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
 export const MotoboyReports = ({ user, motoboys }) => {
   const [selectedMotoboy, setSelectedMotoboy] = useState('')
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -136,14 +146,14 @@ export const MotoboyReports = ({ user, motoboys }) => {
 
         if (i <= diasNoMes) {
             const dayString = `${year}-${month}-${String(i).padStart(2, '0')}`;
-            const recordsOfDay = reportData.timeRecords.filter(t => t.registro_time.startsWith(dayString));
+            const recordsOfDay = reportData.timeRecords.filter(t => getLocalDateStr(t.registro_time) === dayString);
             const statusDoDia = obterStatusDoDia(dayString, recordsOfDay);
             
             const entradas = recordsOfDay.filter(t => t.tipo_registro === 'ENTRADA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
             const saidas = recordsOfDay.filter(t => t.tipo_registro === 'SAIDA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
 
-            if (entradas.length > 0) entradaTime = new Date(entradas[0].registro_time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-            if (saidas.length > 0) saidaTime = new Date(saidas[saidas.length - 1].registro_time).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+            if (entradas.length > 0) entradaTime = getLocalTimeStr(entradas[0].registro_time);
+            if (saidas.length > 0) saidaTime = getLocalTimeStr(saidas[saidas.length - 1].registro_time);
 
             if (statusDoDia) {
                 entradaTime = statusDoDia;

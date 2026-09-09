@@ -182,7 +182,13 @@ export const useMotoboys = (user, dataFiltro) => {
       const cursor = new Date(start)
       while (cursor <= end) {
         const dayStr = cursor.toISOString().slice(0, 10)
-        const dayRecords = allRecords.filter(r => r.registro_time && r.registro_time.startsWith(dayStr))
+        const dayRecords = allRecords.filter(r => {
+          if (!r.registro_time) return false
+          const d = new Date(r.registro_time)
+          const tzOffset = d.getTimezoneOffset() * 60000
+          const localDateStr = new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
+          return localDateStr === dayStr
+        })
 
         for (let i = 0; i < motoboyIds.length; i++) {
           const j = (i + 1) % motoboyIds.length

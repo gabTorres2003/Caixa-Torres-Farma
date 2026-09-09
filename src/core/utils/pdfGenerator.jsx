@@ -36,6 +36,12 @@ const formatDate = (dateStr) => {
   return `${d}/${m}/${y}`
 }
 
+const getLocalDateStr = (isoString) => {
+  const d = new Date(isoString)
+  const tzOffset = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
+}
+
 export const generateMotoboyPdf = async (reportData) => {
   const [year, month] = reportData.month.split('-')
   const nomeMes = ['JANEIRO','FEVEREIRO','MARCO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'][parseInt(month) - 1]
@@ -66,7 +72,7 @@ export const generateMotoboyPdf = async (reportData) => {
   const rows = []
   for (let i = 1; i <= diasNoMes; i++) {
     const dayStr = `${year}-${month}-${String(i).padStart(2, '0')}`
-    const dayRecords = reportData.timeRecords.filter(t => t.registro_time && t.registro_time.startsWith(dayStr))
+    const dayRecords = reportData.timeRecords.filter(t => t.registro_time && getLocalDateStr(t.registro_time) === dayStr)
     const entradas = dayRecords.filter(t => t.tipo_registro === 'ENTRADA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
     const saidas = dayRecords.filter(t => t.tipo_registro === 'SAIDA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
     const special = dayRecords.find(r => ['FERIAS','ATESTADO','FOLGA','TROCA_DE_ESCALA','FOLGA_FERIADO','FALTA'].includes(r.tipo_registro))

@@ -4,6 +4,12 @@ import { Button } from '../../../shared/components/buttons/Button'
 import { FileText, CalendarRange } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 
+const getLocalDateStr = (isoString) => {
+  const d = new Date(isoString)
+  const tzOffset = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
+}
+
 const PERIOD_OPTIONS = [
   { value: 'SEMANAL', label: 'Semanal' },
   { value: 'MENSAL', label: 'Mensal' },
@@ -171,7 +177,7 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
         const targetMotoboy = motoboys.find((m) => m.id === selectedMotoboy)
         const days = buildDaysInRange(start, end)
         const rows = days.map((dayString) => {
-          const dayRecords = records.filter((r) => r.motoboy_id === selectedMotoboy && String(r.registro_time).startsWith(dayString))
+          const dayRecords = records.filter((r) => r.motoboy_id === selectedMotoboy && getLocalDateStr(r.registro_time) === dayString)
           const schedule = targetMotoboy ? getShiftForDate(dayString, targetMotoboy.horario_trabalho) : null
 
           const specialStatus = dayRecords.find((r) => ['FERIAS', 'ATESTADO', 'FOLGA', 'TROCA_DE_ESCALA', 'FOLGA_FERIADO', 'FALTA'].includes(r.tipo_registro))

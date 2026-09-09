@@ -5,6 +5,12 @@ import { FileBarChart, Download, Users } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 import { generateGeneralReportPdf } from '../../../core/utils/pdfGenerator'
 
+const getLocalDateStr = (isoString) => {
+  const d = new Date(isoString)
+  const tzOffset = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
+}
+
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   const [y, m, d] = dateStr.split('-')
@@ -104,7 +110,7 @@ export const MotoboyGeneralReport = ({ user, motoboys }) => {
           const motoboyRecords = records.filter(r => r.motoboy_id === motoboy.id)
 
           const dayRows = days.map(dayStr => {
-            const dayRecords = motoboyRecords.filter(r => r.registro_time && r.registro_time.startsWith(dayStr))
+            const dayRecords = motoboyRecords.filter(r => r.registro_time && getLocalDateStr(r.registro_time) === dayStr)
             const schedule = getShiftForDate(dayStr, motoboy.horario_trabalho)
 
             const specialStatus = dayRecords.find(r => ['FERIAS','ATESTADO','FOLGA','TROCA_DE_ESCALA','FOLGA_FERIADO','FALTA'].includes(r.tipo_registro))
