@@ -6,12 +6,13 @@ import { TimeTracking } from './components/TimeTracking'
 import { RouteManager } from './components/RouteManager'
 import { MotoboyReports } from './components/MotoboyReports'
 import { MotoboyPayrollReport } from './components/MotoboyPayrollReport'
+import { MotoboyGeneralReport } from './components/MotoboyGeneralReport'
 import { Button } from '../../shared/components/buttons/Button'
 import { Modal } from '../../shared/components/modals/Modal'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Card } from '../../shared/components/cards/Card'
 import { Table } from '../../shared/components/tables/Table'
-import { Loader2, Clock, Map, FileBarChart, FileText, UserPlus, Users, Pencil, Trash2 } from 'lucide-react'
+import { Loader2, Clock, Map, FileBarChart, FileText, UserPlus, Users, Pencil, Trash2, BarChart3 } from 'lucide-react'
 
 const parseHorarioTrabalho = (texto) => {
   const padrao = {
@@ -71,7 +72,7 @@ export const Motoboys = () => {
   const [editingMotoboyId, setEditingMotoboyId] = useState(null)
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
-  const visibleTabs = isAdmin ? ['PONTO', 'ROTAS', 'RELATORIOS', 'PAGAMENTOS', 'EQUIPE'] : ['PONTO', 'RELATORIOS', 'EQUIPE']
+  const visibleTabs = isAdmin ? ['PONTO', 'ROTAS', 'RELATORIOS', 'PAGAMENTOS', 'RELATORIO_GERAL', 'EQUIPE'] : ['PONTO', 'RELATORIOS', 'EQUIPE']
   const equipeColumns = [
     { header: 'Nome', accessorKey: 'nome' },
     { header: 'Horário de Trabalho', render: (row) => row.horario_trabalho || '-' },
@@ -167,7 +168,15 @@ export const Motoboys = () => {
             onClick={() => setActiveTab('PAGAMENTOS')}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: activeTab === 'PAGAMENTOS' ? '#0f766e' : 'transparent', color: activeTab === 'PAGAMENTOS' ? '#fff' : '#64748b', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            <FileText size={18} /> Relatórios & Pagamentos
+            <FileText size={18} /> Relatorios & Pagamentos
+          </button>
+        )}
+        {isAdmin && (
+          <button 
+            onClick={() => setActiveTab('RELATORIO_GERAL')}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: activeTab === 'RELATORIO_GERAL' ? '#7c3aed' : 'transparent', color: activeTab === 'RELATORIO_GERAL' ? '#fff' : '#64748b', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            <BarChart3 size={18} /> Relatorio Geral
           </button>
         )}
         {visibleTabs.includes('EQUIPE') && (
@@ -184,6 +193,7 @@ export const Motoboys = () => {
       {isAdmin && activeTab === 'ROTAS' && <RouteManager {...hookData} dataFiltro={dataFiltro} setDataFiltro={setDataFiltro} />}
       {activeTab === 'RELATORIOS' && <MotoboyReports user={user} motoboys={hookData.motoboys} />}
       {isAdmin && activeTab === 'PAGAMENTOS' && <MotoboyPayrollReport user={user} motoboys={hookData.motoboys} />}
+      {isAdmin && activeTab === 'RELATORIO_GERAL' && <MotoboyGeneralReport user={user} motoboys={hookData.motoboys} />}
       
       {activeTab === 'EQUIPE' && (
         <Card title="Motoboys Cadastrados" icon={Users}>

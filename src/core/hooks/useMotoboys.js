@@ -135,13 +135,99 @@ export const useMotoboys = (user, dataFiltro) => {
     try {
       await SupabaseMotoboyRepository.registerTime({
         store_id: user.store_id, motoboy_id: motoboyId,
-        tipo_registro: tipoRegistro, registered_by: user.id
+        tipo_registro: tipoRegistro, registro_time: new Date().toISOString(),
+        registered_by: user.id
       })
       await carregarDados()
       alert(`Ponto de ${tipoRegistro} registrado com sucesso!`)
       return true
     } catch (err) {
       alert('Erro ao registrar ponto: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const salvarObservacao = async (id, observacoes) => {
+    setIsActionLoading(true)
+    try {
+      await SupabaseMotoboyRepository.updateTimeRecord(id, { observacoes })
+      await carregarDados()
+      return true
+    } catch (err) {
+      alert('Erro ao salvar observacao: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const registrarTrocaTurno = async ({ motoboyEntraId, motoboySaiId, data, horaEntrada, horaSaida }) => {
+    setIsActionLoading(true)
+    try {
+      const registros = [
+        {
+          store_id: user.store_id,
+          motoboy_id: motoboyEntraId,
+          tipo_registro: 'TROCA_DE_ESCALA',
+          registro_time: new Date(`${data}T${horaEntrada}:00-03:00`).toISOString(),
+          registered_by: user.id,
+          observacoes: `Troca de turno: entrou no lugar de motoboy selecionado`
+        },
+        {
+          store_id: user.store_id,
+          motoboy_id: motoboySaiId,
+          tipo_registro: 'TROCA_DE_ESCALA',
+          registro_time: new Date(`${data}T${horaSaida}:00-03:00`).toISOString(),
+          registered_by: user.id,
+          observacoes: `Troca de turno: saiu, substituido por motoboy selecionado`
+        }
+      ]
+      await SupabaseMotoboyRepository.registerTimeBulk(registros)
+      await carregarDados()
+      alert('Troca de turno registrada com sucesso!')
+      return true
+    } catch (err) {
+      alert('Erro ao registrar troca de turno: ' + err.message)
+      return false
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const registrarAusenciaMulti = async ({ motoboyIds, tipoRegistro, dataInicio, dataFim }) => {
+    setIsActionLoading(true)
+    try {
+      const start = new Date(`${dataInicio}T00:00:00`)
+      const end = new Date(`${dataFim}T00:00:00`)
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+        throw new Error('Informe datas validas para o periodo.')
+      }
+
+      const todosRegistros = []
+      const cursor = new Date(start)
+      while (cursor <= end) {
+        const dateString = cursor.toISOString().slice(0, 10)
+        motoboyIds.forEach(motoboyId => {
+          todosRegistros.push({
+            store_id: user.store_id,
+            motoboy_id: motoboyId,
+            tipo_registro: tipoRegistro,
+            registro_time: new Date(`${dateString}T12:00:00-03:00`).toISOString(),
+            registered_by: user.id
+          })
+        })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+
+      await SupabaseMotoboyRepository.registerTimeBulk(todosRegistros)
+      await carregarDados()
+      alert(`${tipoRegistro} registrado para ${motoboyIds.length} motoboys com sucesso!`)
+      return true
+    } catch (err) {
+      alert('Erro ao registrar ausencia: ' + err.message)
       return false
     } finally {
       setIsActionLoading(false)
@@ -215,6 +301,6 @@ export const useMotoboys = (user, dataFiltro) => {
   return {
     motoboys, timeRecords, routes, isPageLoading, isActionLoading,
     carregarDados, registrarPonto, registrarHorarioManual, registrarAusencia, excluirPonto, cadastrarRota, atualizarStatusRota, excluirRota, 
-    salvarMotoboy, excluirMotoboy
+    salvarMotoboy, excluirMotoboy, salvarObservacao, registrarTrocaTurno, registrarAusenciaMulti
   }
 }

@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { Card } from '../../../shared/components/cards/Card'
 import { Button } from '../../../shared/components/buttons/Button'
-import { FileBarChart, Printer } from 'lucide-react'
+import { FileBarChart, Printer, Download } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
+import { generateMotoboyPdf } from '../../../core/utils/pdfGenerator'
 
 export const MotoboyReports = ({ user, motoboys }) => {
   const [selectedMotoboy, setSelectedMotoboy] = useState('')
@@ -12,6 +13,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
   
   const [reportData, setReportData] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
 
   const getNomeMes = (mesIndex) => {
     const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
@@ -291,6 +293,18 @@ export const MotoboyReports = ({ user, motoboys }) => {
     setTimeout(() => { janela.print(); janela.close() }, 250)
   }
 
+  const handleExportPdf = async () => {
+    if (!reportData) return
+    setIsExportingPdf(true)
+    try {
+      await generateMotoboyPdf(reportData)
+    } catch (err) {
+      alert('Erro ao gerar PDF: ' + err.message)
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
       <Card title="Geração da Folha de Ponto" icon={FileBarChart}>
@@ -316,6 +330,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--color-primary)' }}>Folha Pronta para Impressão</h3>
               <Button onClick={handlePrint} icon={Printer} style={{ backgroundColor: '#16a34a', border: 'none' }}>Imprimir Folha A4</Button>
+              <Button onClick={handleExportPdf} isLoading={isExportingPdf} icon={Download} style={{ backgroundColor: '#7c3aed', border: 'none' }}>Exportar PDF</Button>
             </div>
             <div style={{ padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #86efac', color: '#166534', fontSize: '0.9rem' }}>
               O sistema mesclou o modelo fotográfico com as informações digitais. Se o motoboy tiver pontos registrados pelo ADM no sistema, os campos <b>"Entrada"</b> e <b>"Saída"</b> já sairão preenchidos! Os demais dias e a assinatura ficarão em branco para caneta.
