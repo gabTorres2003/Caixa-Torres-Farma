@@ -154,6 +154,14 @@ const buildDaysInRange = (start, end) => {
 
 const getTimeValue = (dateIso) => new Date(`${dateIso}T00:00:00`).getDay()
 
+const FERIADO_SCHEDULE = { entrada: 8 * 60, saida: 20 * 60 }
+
+const hasHolidayForStore = (dayString, allRecords) => {
+  return allRecords.some(r =>
+    getLocalDateStr(r.registro_time) === dayString && r.tipo_registro === 'FOLGA_FERIADO'
+  )
+}
+
 export const MotoboyPayrollReport = ({ user, motoboys }) => {
   const [selectedMotoboy, setSelectedMotoboy] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState('SEMANAL')
@@ -178,7 +186,13 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
         const days = buildDaysInRange(start, end)
         const rows = days.map((dayString) => {
           const dayRecords = records.filter((r) => r.motoboy_id === selectedMotoboy && getLocalDateStr(r.registro_time) === dayString)
-          const schedule = targetMotoboy ? getShiftForDate(dayString, targetMotoboy.horario_trabalho) : null
+          let schedule = targetMotoboy ? getShiftForDate(dayString, targetMotoboy.horario_trabalho) : null
+
+          const isFolgaFeriado = dayRecords.some(r => r.tipo_registro === 'FOLGA_FERIADO')
+          const hasWorkRecords = dayRecords.some(r => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
+          if (!isFolgaFeriado && hasWorkRecords && hasHolidayForStore(dayString, records)) {
+            schedule = FERIADO_SCHEDULE
+          }
 
           const specialStatus = dayRecords.find((r) => ['FERIAS', 'ATESTADO', 'FOLGA', 'TROCA_DE_ESCALA', 'FOLGA_FERIADO', 'FALTA'].includes(r.tipo_registro))
           const status = specialStatus
@@ -213,6 +227,7 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
           const trabalhadasMinutos = realEntry !== null && realExit !== null ? Math.max(0, realExit - realEntry) : 0
           const atrasoEntrada = realEntry !== null && scheduledEntry !== null ? Math.max(0, realEntry - scheduledEntry) : 0
           const diferencaSaida = realExit !== null && scheduledExit !== null ? realExit - scheduledExit : 0
+          const saldoHoras = (status ? 0 : trabalhadasMinutos) - previstoMinutos
 
           return {
             date: dayString,
@@ -227,13 +242,14 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
             horasPrevistas: previstoMinutos,
             horasTrabalhadas: status ? 0 : trabalhadasMinutos,
             totalHorasDia: status ? 0 : trabalhadasMinutos,
+            saldoHoras,
             statusText: status || (entradaRecords.length || saidaRecords.length ? 'OK' : 'FALTA')
           }
         })
 
         const totalPrevistas = rows.reduce((sum, row) => sum + row.horasPrevistas, 0)
         const totalTrabalhadas = rows.reduce((sum, row) => sum + row.horasTrabalhadas, 0)
-        const residual = totalPrevistas - totalTrabalhadas
+        const residual = totalTrabalhadas - totalPrevistas
         const totalAtrasoEntrada = rows.reduce((sum, row) => sum + row.atrasoEntrada, 0)
         const totalDiferencaSaida = rows.reduce((sum, row) => sum + row.diferencaSaida, 0)
 
@@ -311,7 +327,7 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
             </div>
             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
               <div style={{ fontSize: '0.8rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Diferença</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '4px' }}>{formatHours(reportSummary.diferenca)}</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 'bold', marginTop: '4px', color: reportSummary.diferenca >= 0 ? '#16a34a' : '#dc2626' }}>{formatHours(reportSummary.diferenca)}</div>
             </div>
             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
               <div style={{ fontSize: '0.8rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Atraso entrada</div>
@@ -342,11 +358,12 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Data</th>
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Prev. entrada</th>
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Real entrada</th>
-                        <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Atraso entrada</th>
+                        <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Atraso</th>
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Prev. saída</th>
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Real saída</th>
-                        <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Diferença saída</th>
+                        <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Extras</th>
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Total dia</th>
+                        <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Saldo</th>
                         <th style={{ border: '1px solid #e2e8f0', padding: '8px', textAlign: 'left' }}>Status</th>
                       </tr>
                     </thead>
@@ -356,11 +373,12 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.date} ({row.diaSemana})</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.previstoEntrada}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.realEntrada}</td>
-                          <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{formatMinutesClock(row.atrasoEntrada)}</td>
+                          <td style={{ border: '1px solid #e2e8f0', padding: '8px', color: row.atrasoEntrada > 0 ? '#dc2626' : undefined }}>{formatMinutesClock(row.atrasoEntrada)}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.previstoSaida}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.realSaida}</td>
-                          <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{formatMinutesClock(row.diferencaSaida)}</td>
-                          <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{formatHours(row.totalHorasDia)}</td>
+                          <td style={{ border: '1px solid #e2e8f0', padding: '8px', color: row.diferencaSaida > 0 ? '#16a34a' : row.diferencaSaida < 0 ? '#dc2626' : undefined }}>{formatMinutesClock(row.diferencaSaida)}</td>
+                          <td style={{ border: '1px solid #e2e8f0', padding: '8px', color: row.horasTrabalhadas > row.horasPrevistas ? '#16a34a' : row.horasTrabalhadas < row.horasPrevistas ? '#dc2626' : undefined }}>{formatHours(row.horasTrabalhadas)}</td>
+                          <td style={{ border: '1px solid #e2e8f0', padding: '8px', fontWeight: 'bold', color: row.saldoHoras >= 0 ? '#16a34a' : '#dc2626' }}>{formatHours(row.saldoHoras)}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.status || row.statusText}</td>
                         </tr>
                       ))}
