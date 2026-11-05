@@ -2,6 +2,12 @@ const SPECIAL_STATUSES = ['FERIAS', 'ATESTADO', 'FOLGA', 'TROCA_DE_ESCALA', 'FOL
 
 export const FERIADO_SCHEDULE = { entrada: 8 * 60, saida: 20 * 60 }
 
+const getDefaultHolidaySchedule = (dateString) => (
+  new Date(`${dateString}T00:00:00`).getDay() === 0
+    ? { entrada: 8 * 60, saida: 14 * 60 }
+    : FERIADO_SCHEDULE
+)
+
 export const getLocalDateStr = (isoString) => {
   const date = new Date(isoString)
   const tzOffset = date.getTimezoneOffset() * 60000
@@ -42,7 +48,11 @@ const parseSchedule = (value) => {
 export const getScheduleForDate = (dateString, storedSchedule, holiday) => {
   if (holiday?.status === 'CONFIRMADA') {
     if (!holiday.works) return null
-    return FERIADO_SCHEDULE
+    const manualSchedule = holiday.scheduleFor?.(holiday.motoboyId)
+      || (holiday.horarioInicio && holiday.horarioFim
+        ? { entrada: holiday.horarioInicio, saida: holiday.horarioFim }
+        : null)
+    return manualSchedule || getDefaultHolidaySchedule(dateString)
   }
 
   const day = new Date(`${dateString}T00:00:00`).getDay()

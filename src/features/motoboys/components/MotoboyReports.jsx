@@ -153,7 +153,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
             const recordsOfDay = reportData.timeRecords.filter(t => getLocalDateStr(t.registro_time) === dayString);
             const holiday = reportData.holidayData.find((item) => item.data === dayString)
             const holidayForMotoboy = holiday
-              ? { ...holiday, works: holiday.works(selectedMotoboy) }
+              ? { ...holiday, motoboyId: selectedMotoboy, works: holiday.works(selectedMotoboy) }
               : null
             const dayData = calculateDay({
               dateString: dayString,

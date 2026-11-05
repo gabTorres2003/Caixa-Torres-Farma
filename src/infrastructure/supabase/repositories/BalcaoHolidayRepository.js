@@ -26,24 +26,38 @@ export const BalcaoHolidayRepository = {
       .select('id, feriado_id, status, horario_inicio, horario_fim, updated_at')
       .in('feriado_id', holidayIds)
     if (scheduleError) throw scheduleError
-    if (!schedules?.length) return []
-
-    const scheduleIds = schedules.map((schedule) => schedule.id)
-    const { data: members, error: memberError } = await balcaoClient
-      .from('escala_feriados_membros')
-      .select('escala_id, tipo_funcionario, motoboy_id, situacao, horario_inicio, horario_fim, updated_at')
-      .in('escala_id', scheduleIds)
-      .eq('tipo_funcionario', 'MOTOBOY')
-    if (memberError) throw memberError
+    const scheduleIds = (schedules || []).map((schedule) => schedule.id)
+    let members = []
+    if (scheduleIds.length) {
+      const { data, error: memberError } = await balcaoClient
+        .from('escala_feriados_membros')
+        .select('escala_id, tipo_funcionario, motoboy_id, situacao, horario_inicio, horario_fim, updated_at')
+        .in('escala_id', scheduleIds)
+        .eq('tipo_funcionario', 'MOTOBOY')
+      if (memberError) throw memberError
+      members = data || []
+    }
 
     return holidays.map((holiday) => {
       const schedule = schedules.find((item) => item.feriado_id === holiday.id)
       const holidayMembers = (members || []).filter((member) => member.escala_id === schedule?.id)
+      const toMinutes = (value) => {
+        if (!value) return null
+        const [hours, minutes] = String(value).split(':').map(Number)
+        return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null
+      }
+      const scheduleFor = (motoboyId) => {
+        const member = holidayMembers.find((item) => item.motoboy_id === motoboyId && item.situacao === 'TRABALHA')
+        const inicio = toMinutes(member?.horario_inicio || schedule?.horario_inicio)
+        const fim = toMinutes(member?.horario_fim || schedule?.horario_fim)
+        return inicio !== null && fim !== null ? { entrada: inicio, saida: fim } : null
+      }
       return {
         ...holiday,
         status: schedule?.status || null,
         works: (motoboyId) => schedule?.status === 'CONFIRMADA'
           && holidayMembers.some((member) => member.motoboy_id === motoboyId && member.situacao === 'TRABALHA'),
+        scheduleFor,
         members: holidayMembers
       }
     })

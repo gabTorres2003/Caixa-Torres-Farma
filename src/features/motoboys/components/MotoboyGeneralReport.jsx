@@ -130,7 +130,7 @@ export const MotoboyGeneralReport = ({ user, motoboys }) => {
               dateString: dayStr,
               records: dayRecords,
               storedSchedule: motoboy.horario_trabalho,
-              holiday: holiday ? { ...holiday, works: holiday.works(motoboy.id) } : null
+              holiday: holiday ? { ...holiday, motoboyId: motoboy.id, works: holiday.works(motoboy.id) } : null
             })
             const { schedule, status, realEntry, realExit, hoursExpected, hoursWorked, balance, entryDelay, exitDifference } = dayData
 
