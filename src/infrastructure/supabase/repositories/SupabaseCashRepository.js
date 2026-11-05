@@ -24,6 +24,64 @@ export const SupabaseCashRepository = {
     if (error) throw error
   },
 
+  async registerInternalExchange(storeId, userId, notasOut, moedasOut, notasIn, moedasIn) {
+    const { data: currentStocks, error: stockError } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId)
+    if (stockError) throw stockError
+
+    const cents = (face, quantity) => Math.round(Number(face) * Number(quantity) * 100)
+    const totalOut = Object.entries({ ...(notasOut || {}), ...(moedasOut || {}) }).reduce((sum, [face, quantity]) => sum + cents(face, quantity), 0)
+    const totalIn = Object.entries({ ...(notasIn || {}), ...(moedasIn || {}) }).reduce((sum, [face, quantity]) => sum + cents(face, quantity), 0)
+    if (totalOut <= 0 || totalOut !== totalIn) {
+      throw new Error('Os valores retirados e guardados no cofre precisam ser exatamente iguais.')
+    }
+
+    const changes = []
+    const validate = (values, type, direction) => {
+      Object.entries(values || {}).forEach(([face, quantity]) => {
+        const qty = Number(quantity)
+        if (!Number.isInteger(qty) || qty < 0) throw new Error('As quantidades das denominações devem ser inteiras e não negativas.')
+        if (!qty) return
+        const stock = currentStocks.find((item) => item.tipo === type && Number(item.valor) === Number(face))
+        if (!stock) throw new Error(`Denominação de ${type.toLowerCase()} não cadastrada: R$ ${face}.`)
+        const newQuantity = stock.quantidade_atual + (direction * qty)
+        if (newQuantity < 0) throw new Error(`Saldo insuficiente para a denominação de R$ ${Number(face).toFixed(2)}.`)
+        const existing = changes.find((change) => change.id === stock.id)
+        if (existing) existing.newQuantity += direction * qty
+        else changes.push({ id: stock.id, newQuantity })
+      })
+    }
+    validate(notasOut, 'NOTA', -1)
+    validate(moedasOut, 'MOEDA', -1)
+    validate(notasIn, 'NOTA', 1)
+    validate(moedasIn, 'MOEDA', 1)
+    changes.forEach((change) => {
+      if (change.newQuantity < 0) throw new Error('A operação deixaria uma denominação com saldo negativo.')
+    })
+
+    const operationId = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const updates = await Promise.all(changes.map((change) =>
+      supabase.from('cash_denominations').update({ quantidade_atual: change.newQuantity, updated_at: now }).eq('id', change.id)
+    ))
+    const updateError = updates.find((result) => result.error)?.error
+    if (updateError) throw updateError
+
+    const movements = await Promise.all([
+      supabase.from('cash_movements').insert([{
+        store_id: storeId, created_by: userId, tipo_movimento: 'SAIDA', valor_total: totalOut / 100,
+        origem: 'Caixa de Troco', destino: 'Gaveta do Operador (Troca Interna)',
+        detalhamento: { operacao: 'TROCA_INTERNA', operacao_id: operationId, notas: notasOut || {}, moedas: moedasOut || {} }
+      }]),
+      supabase.from('cash_movements').insert([{
+        store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', valor_total: totalIn / 100,
+        origem: 'Gaveta do Operador (Troca Interna)', destino: 'Caixa de Troco',
+        detalhamento: { operacao: 'TROCA_INTERNA', operacao_id: operationId, notas: notasIn || {}, moedas: moedasIn || {} }
+      }])
+    ])
+    const movementError = movements.find((result) => result.error)?.error
+    if (movementError) throw movementError
+  },
+
   async getLastConference(storeId) {
     const { data, error } = await supabase.from('cash_movements').select('created_at, users ( nome )').eq('store_id', storeId).eq('tipo_movimento', 'CONTAGEM_INICIAL').order('created_at', { ascending: false }).limit(1).single()
     if (error && error.code !== 'PGRST116') throw error
@@ -46,7 +104,8 @@ export const SupabaseCashRepository = {
 
   // === INCLUIDO AS MOEDAS ===
   async registerOutflowFromVault(storeId, userId, notas, moedasValor, totalValue, destino, moedasIndividuais = null) {
-    const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
+    const { data: currentStocks, error: stockError } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
+    if (stockError) throw stockError;
     const updates = [];
     
     if (notas) {
@@ -69,7 +128,8 @@ export const SupabaseCashRepository = {
     }
 
     for (const u of updates) {
-      await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
+      const { error } = await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
+      if (error) throw error;
     }
 
     const payloadMovimento = { 
@@ -77,19 +137,22 @@ export const SupabaseCashRepository = {
         valor_total: totalValue, origem: 'Caixa de Troco', destino: destino, 
         detalhamento: { notas, moedas: moedasIndividuais, moedasValor } 
     };
-    await supabase.from('cash_movements').insert([payloadMovimento]);
+    const { error } = await supabase.from('cash_movements').insert([payloadMovimento]);
+    if (error) throw error;
   },
 
   // === INCLUIDO AS MOEDAS ===
   async registerInflowToVault(storeId, userId, notas, moedasValor, totalValue, origem, moedasIndividuais = null) {
-    const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
+    const { data: currentStocks, error: stockError } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
+    if (stockError) throw stockError;
     const updates = [];
     
     if (notas) {
       for (const [v, q] of Object.entries(notas)) {
         if (q > 0) {
           const stock = currentStocks.find(s => s.tipo === 'NOTA' && s.valor === Number(v));
-          if (stock) updates.push({ id: stock.id, novaQtd: stock.quantidade_atual + q });
+          if (!stock) throw new Error(`Denominação de nota não cadastrada: R$ ${v}.`);
+          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual + q });
         }
       }
     }
@@ -97,13 +160,15 @@ export const SupabaseCashRepository = {
       for (const [v, q] of Object.entries(moedasIndividuais)) {
         if (q > 0) {
           const stock = currentStocks.find(s => s.tipo === 'MOEDA' && s.valor === Number(v));
-          if (stock) updates.push({ id: stock.id, novaQtd: stock.quantidade_atual + q });
+          if (!stock) throw new Error(`Denominação de moeda não cadastrada: R$ ${v}.`);
+          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual + q });
         }
       }
     }
 
     for (const u of updates) {
-      await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
+      const { error } = await supabase.from('cash_denominations').update({ quantidade_atual: u.novaQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
+      if (error) throw error;
     }
 
     const payloadMovimento = { 
@@ -111,7 +176,8 @@ export const SupabaseCashRepository = {
         valor_total: totalValue, origem: origem, destino: 'Caixa de Troco', 
         detalhamento: { notas, moedas: moedasIndividuais, moedasValor } 
     };
-    await supabase.from('cash_movements').insert([payloadMovimento]);
+    const { error } = await supabase.from('cash_movements').insert([payloadMovimento]);
+    if (error) throw error;
   },
 
   async adjustBalance(storeId, userId, newQuantities, manualOriginDest, observation) {

@@ -3,7 +3,9 @@ import { Card } from '../../../shared/components/cards/Card'
 import { Button } from '../../../shared/components/buttons/Button'
 import { FileBarChart, Download, Users } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
+import { BalcaoHolidayRepository } from '../../../infrastructure/supabase/repositories/BalcaoHolidayRepository'
 import { generateGeneralReportPdf } from '../../../core/utils/pdfGenerator'
+import { calculateDay, getLocalDateStr as getAttendanceDate } from '../utils/attendance'
 
 const getLocalDateStr = (isoString) => {
   const d = new Date(isoString)
@@ -111,61 +113,39 @@ export const MotoboyGeneralReport = ({ user, motoboys }) => {
         const lastDay = new Date(year, month, 0).getDate()
         const endOfMonth = `${year}-${month}-${lastDay}`
 
-        const records = await SupabaseMotoboyRepository.getTimeTracking(user.store_id, startOfMonth, endOfMonth)
+        const [records, holidayData] = await Promise.all([
+          SupabaseMotoboyRepository.getTimeTracking(user.store_id, startOfMonth, endOfMonth),
+          BalcaoHolidayRepository.getSchedules(startOfMonth, endOfMonth)
+        ])
         const days = buildDaysInRange(startOfMonth, endOfMonth)
 
         const summaries = motoboys.map(motoboy => {
           const motoboyRecords = records.filter(r => r.motoboy_id === motoboy.id)
 
           const dayRows = days.map(dayStr => {
-            const dayRecords = motoboyRecords.filter(r => r.registro_time && getLocalDateStr(r.registro_time) === dayStr)
-            let schedule = getShiftForDate(dayStr, motoboy.horario_trabalho)
-
-            const isFolgaFeriado = dayRecords.some(r => r.tipo_registro === 'FOLGA_FERIADO')
-            const hasWork = dayRecords.some(r => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
-            if (!isFolgaFeriado && hasWork && hasHolidayForStore(dayStr, records)) {
-              schedule = FERIADO_SCHEDULE
-            }
-
-            const specialStatus = dayRecords.find(r => ['FERIAS','ATESTADO','FOLGA','TROCA_DE_ESCALA','FOLGA_FERIADO','FALTA'].includes(r.tipo_registro))
-            const dia = new Date(`${dayStr}T00:00:00`).getDay()
-            const hasWorkRecords = dayRecords.some(r => ['ENTRADA','SAIDA'].includes(r.tipo_registro))
-
-            let status = null
-            if (specialStatus) {
-              status = { FERIAS: 'FERIAS', ATESTADO: 'ATESTADO', FOLGA: 'FOLGA', TROCA_DE_ESCALA: 'TROCA DE ESCALA', FOLGA_FERIADO: 'FOLGA FERIADO', FALTA: 'FALTA' }[specialStatus.tipo_registro]
-            } else if (!hasWorkRecords && (dia === 0 || dia === 6)) {
-              status = 'FOLGA'
-            } else if (!hasWorkRecords && schedule) {
-              status = 'FALTA'
-            }
-
-            const entradaRecords = dayRecords.filter(r => r.tipo_registro === 'ENTRADA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
-            const saidaRecords = dayRecords.filter(r => r.tipo_registro === 'SAIDA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
-
-            const scheduledEntry = schedule ? schedule.entrada : null
-            const scheduledExit = schedule ? schedule.saida : null
-            const realEntry = entradaRecords.length > 0 ? new Date(entradaRecords[0].registro_time).getHours() * 60 + new Date(entradaRecords[0].registro_time).getMinutes() : null
-            const realExit = saidaRecords.length > 0 ? new Date(saidaRecords[saidaRecords.length - 1].registro_time).getHours() * 60 + new Date(saidaRecords[saidaRecords.length - 1].registro_time).getMinutes() : null
-
-            const horasPrevistas = schedule ? (scheduledExit - scheduledEntry) : 0
-            const horasTrabalhadas = (realEntry !== null && realExit !== null && !status) ? Math.max(0, realExit - realEntry) : 0
-            const atrasoEntrada = realEntry !== null && scheduledEntry !== null ? Math.max(0, realEntry - scheduledEntry) : 0
-            const diferencaSaida = realExit !== null && scheduledExit !== null ? realExit - scheduledExit : 0
-            const saldoHoras = horasTrabalhadas - horasPrevistas
+            const dayRecords = motoboyRecords.filter(r => r.registro_time && getAttendanceDate(r.registro_time) === dayStr)
+            const hasWorkRecords = dayRecords.some(r => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
+            const holiday = holidayData.find((item) => item.data === dayStr)
+            const dayData = calculateDay({
+              dateString: dayStr,
+              records: dayRecords,
+              storedSchedule: motoboy.horario_trabalho,
+              holiday: holiday ? { ...holiday, works: holiday.works(motoboy.id) } : null
+            })
+            const { schedule, status, realEntry, realExit, hoursExpected, hoursWorked, balance, entryDelay, exitDifference } = dayData
 
             return {
               date: dayStr,
               diaSemana: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'][new Date(`${dayStr}T00:00:00`).getDay()],
-              previstoEntrada: scheduledEntry != null ? `${String(Math.floor(scheduledEntry / 60)).padStart(2, '0')}:${String(scheduledEntry % 60).padStart(2, '0')}` : '-',
+              previstoEntrada: schedule ? `${String(Math.floor(schedule.entrada / 60)).padStart(2, '0')}:${String(schedule.entrada % 60).padStart(2, '0')}` : '-',
               realEntrada: realEntry != null ? `${String(Math.floor(realEntry / 60)).padStart(2, '0')}:${String(realEntry % 60).padStart(2, '0')}` : '-',
-              previstoSaida: scheduledExit != null ? `${String(Math.floor(scheduledExit / 60)).padStart(2, '0')}:${String(scheduledExit % 60).padStart(2, '0')}` : '-',
+              previstoSaida: schedule ? `${String(Math.floor(schedule.saida / 60)).padStart(2, '0')}:${String(schedule.saida % 60).padStart(2, '0')}` : '-',
               realSaida: realExit != null ? `${String(Math.floor(realExit / 60)).padStart(2, '0')}:${String(realExit % 60).padStart(2, '0')}` : '-',
-              horasPrevistas,
-              horasTrabalhadas,
-              atrasoEntrada,
-              diferencaSaida,
-              saldoHoras,
+              horasPrevistas: hoursExpected,
+              horasTrabalhadas: hoursWorked,
+              atrasoEntrada: entryDelay,
+              diferencaSaida: exitDifference,
+              saldoHoras: balance,
               statusText: status || (hasWorkRecords ? 'OK' : 'FALTA')
             }
           })

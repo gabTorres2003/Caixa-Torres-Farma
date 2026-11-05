@@ -52,8 +52,9 @@ export const useExchanges = (user, dataFiltro) => {
   const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleMoedaRecChange = (moeda, valor) => { setMoedasRec(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
 
-  const valorCalculadoOut = Object.values(notas).reduce((a, b) => a + b, 0) + Object.values(moedas).reduce((a, b) => a + b, 0)
-  const valorCalculadoIn = Object.values(notasIn).reduce((a, b) => a + b, 0) + Object.values(moedasIn).reduce((a, b) => a + b, 0)
+  const calcularCentavos = (valores) => Object.entries(valores).reduce((total, [face, valor]) => total + Math.round(Number(face) * Number(valor) * 100), 0)
+  const valorCalculadoOut = calcularCentavos(notas) / 100 + calcularCentavos(moedas) / 100
+  const valorCalculadoIn = calcularCentavos(notasIn) / 100 + calcularCentavos(moedasIn) / 100
   const somaRecebimento = Object.values(notasRec).reduce((a, b) => a + b, 0) + Object.values(moedasRec).reduce((a, b) => a + b, 0)
   
   useEffect(() => {
@@ -62,7 +63,7 @@ export const useExchanges = (user, dataFiltro) => {
     }
   }, [notas, moedas, tipoTroca, origemSelecionada, setValue, valorCalculadoOut])
 
-  const isMatchInterna = tipoTroca === 'INTERNA' ? (valorCalculadoOut === valorCalculadoIn && valorCalculadoOut > 0) : true;
+  const isMatchInterna = tipoTroca === 'INTERNA' ? (Math.round(valorCalculadoOut * 100) === Math.round(valorCalculadoIn * 100) && valorCalculadoOut > 0) : true;
   const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
 
   const converterValoresParaQuantidades = (valoresReais) => {
@@ -73,6 +74,11 @@ export const useExchanges = (user, dataFiltro) => {
     });
     return Object.keys(qtds).length > 0 ? qtds : null;
   }
+
+  const valoresPorDenominacaoValidos = (valoresReais) => Object.entries(valoresReais).every(([face, valor]) => {
+    const faceCentavos = Math.round(Number(face) * 100)
+    return faceCentavos === 0 || Math.round(Number(valor) * 100) % faceCentavos === 0
+  })
 
   const handleEdit = () => alert("Movimentações físicas do cofre não devem ser editadas diretamente para não gerar furos de caixa. Exclua a troca (o estorno será automático) e lance novamente.")
 
@@ -99,6 +105,11 @@ export const useExchanges = (user, dataFiltro) => {
 
     if (isCaixaTroco && valorFinal <= 0) { return alert("Informe os valores trocados.") }
     if (tipoTroca === 'INTERNA' && !isMatchInterna) { return alert("Os valores de Retirada e Entrada precisam ser exatamente iguais!") }
+    if ((isCaixaTroco && !valoresPorDenominacaoValidos(notas)) ||
+        (isCaixaTroco && !valoresPorDenominacaoValidos(moedas)) ||
+        (tipoTroca === 'INTERNA' && (!valoresPorDenominacaoValidos(notasIn) || !valoresPorDenominacaoValidos(moedasIn)))) {
+      return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
+    }
 
     const notasOutEmQuantidade = converterValoresParaQuantidades(notas);
     const moedasOutEmQuantidade = converterValoresParaQuantidades(moedas);

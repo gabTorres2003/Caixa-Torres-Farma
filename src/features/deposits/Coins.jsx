@@ -98,6 +98,11 @@ export const Coins = () => {
     return Object.keys(qtds).length > 0 ? qtds : null;
   }
 
+  const valoresPorDenominacaoValidos = (valoresReais) => Object.entries(valoresReais).every(([face, valor]) => {
+    const faceCentavos = Math.round(Number(face) * 100)
+    return faceCentavos === 0 || Math.round(Number(valor) * 100) % faceCentavos === 0
+  })
+
   const handleEdit = (row) => {
     setEditingId(row.id);
     setValue('valor', row.valor);
@@ -121,6 +126,7 @@ export const Coins = () => {
   const onSubmitSangria = async (e) => {
     e.preventDefault()
     if (totalSangria <= 0) return alert("Informe os valores das moedas.")
+    if (!valoresPorDenominacaoValidos(moedasSangria)) return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
     const payload = {
       valor: totalSangria, value: totalSangria,
       categoria: 'Sangria de Moedas', origem: 'Caixa Atual', origin: 'Caixa Atual',
@@ -137,6 +143,10 @@ export const Coins = () => {
   const onSubmitCreate = async (data) => {
     const valorFinal = tipoMoeda === 'CREDITO' ? totalCredito : (origemSelecionada === 'Caixa de Troco' ? totalNotasSaida : parseFloat(data.valor))
     if (valorFinal <= 0) return alert("Informe os valores.")
+    if ((tipoMoeda === 'CREDITO' && !valoresPorDenominacaoValidos(moedasCredito)) ||
+        (tipoMoeda === 'EXTERNA' && origemSelecionada === 'Caixa de Troco' && !valoresPorDenominacaoValidos(notasSaida))) {
+      return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
+    }
 
     const payload = {
       valor: valorFinal, value: valorFinal,
@@ -172,6 +182,7 @@ export const Coins = () => {
   const onSubmitReceive = async (e) => {
     e.preventDefault()
     if (!isMatchRecebimento) return alert("A soma informada das moedas não bate com o valor esperado pela rua!")
+    if (!valoresPorDenominacaoValidos(moedasRec)) return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
 
     const payloadRecebimento = {
       recebido_por: user?.nome || 'Operador',

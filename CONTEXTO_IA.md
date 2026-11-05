@@ -177,11 +177,16 @@ A aplicação utiliza o perfil da tabela `users` para obter informações como `
 
 ### Perfis
 
-O código atualmente utiliza principalmente o perfil:
+O banco restringe `users.role` por CHECK a três valores:
 
-- `ADMIN`
+- `ADMIN` — acesso administrativo (dashboard, relatórios, gestão de usuários,
+  motoboys, conferências);
+- `CAIXA_MANHA` — operação do turno da manhã;
+- `CAIXA_TARDE` — operação do turno da tarde.
 
-Usuários que não são ADMIN são tratados como operadores/usuários comuns em várias áreas.
+Usuários que não são ADMIN são tratados como operadores do próprio
+turno/loja em várias áreas. **Não criar valores de `role` fora desses três:
+o CHECK do banco rejeita.**
 
 **Não assumir que todo usuário pode acessar dados de todas as lojas.** O `store_id` é parte central do modelo de autorização.
 
@@ -394,12 +399,12 @@ Representa as lojas/unidades.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `nome` | text | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `nome` | text | NOT NULL |
 | `endereco` | text | Nullable |
 | `telefone` | text | Nullable |
-| `ativo` | bool | Nullable |
-| `created_at` | timestamptz | — |
+| `ativo` | bool | Nullable, default `true` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 
 ## `users`
 
@@ -407,12 +412,12 @@ Perfil de usuário da aplicação associado ao Supabase Auth.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `nome` | text | — |
-| `email` | text | Unique |
-| `role` | text | — |
-| `store_id` | uuid | — |
-| `created_at` | timestamptz | — |
+| `id` | uuid | Primary Key, FK → `auth.users(id)` |
+| `nome` | text | NOT NULL |
+| `email` | text | NOT NULL, Unique |
+| `role` | text | NOT NULL, CHECK (`ADMIN`, `CAIXA_MANHA`, `CAIXA_TARDE`) |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 
 Relacionamento conceitual:
 
@@ -428,20 +433,20 @@ Registra entregas/comandas pendentes e seus dados de conferência/conciliação.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `created_by` | uuid | — |
-| `created_at` | timestamptz | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `created_by` | uuid | NOT NULL, FK → `users(id)` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 | `received_at` | timestamptz | Nullable |
 | `notes` | text | Nullable |
-| `motorcycle_courier_id` | uuid | Nullable |
+| `motorcycle_courier_id` | uuid | Nullable, sem FK declarada no schema |
 | `comanda` | text | Nullable |
 | `valor` | numeric | Nullable |
 | `tipo_saida` | varchar | Nullable |
 | `forma_pagamento_real` | varchar | Nullable |
-| `conferido` | bool | — |
+| `conferido` | bool | NOT NULL, default `false` |
 | `observacoes` | text | Nullable |
-| `conciliado` | bool | — |
+| `conciliado` | bool | NOT NULL, default `false` |
 
 Relacionamentos conceituais:
 
@@ -457,24 +462,24 @@ Registra depósitos e operações financeiras relacionadas.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `value` | numeric | — |
-| `origin` | text | — |
-| `created_by` | uuid | — |
-| `created_at` | timestamptz | — |
-| `cancelled` | bool | Nullable |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `value` | numeric | NOT NULL |
+| `origin` | text | NOT NULL |
+| `created_by` | uuid | NOT NULL, FK → `users(id)` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
+| `cancelled` | bool | Nullable, default `false` |
 | `origem` | varchar | Nullable |
 | `data_caixa` | date | Nullable |
 | `valor` | numeric | Nullable |
 | `categoria` | varchar | Nullable |
 | `responsavel_nome` | varchar | Nullable |
 | `destino` | text | Nullable |
-| `status_troca` | varchar | Nullable |
+| `status_troca` | varchar | Nullable, default `'CONCLUIDA'` |
 | `recebido_por` | varchar | Nullable |
 | `recebido_em` | timestamptz | Nullable |
 | `detalhes_troca` | jsonb | Nullable |
-| `valor_recebido` | numeric | Nullable |
+| `valor_recebido` | numeric | Nullable, default `0.00` |
 
 ### Atenção
 
@@ -486,19 +491,19 @@ Registra o pré-fechamento por loja.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `cash_value` | numeric | Nullable |
-| `card_value` | numeric | Nullable |
-| `pix_value` | numeric | Nullable |
-| `check_value` | numeric | Nullable |
-| `pending_card` | numeric | Nullable |
-| `pending_pix` | numeric | Nullable |
-| `total` | numeric | — |
-| `created_by` | uuid | — |
-| `created_at` | timestamptz | — |
-| `vale_compras_value` | numeric | Nullable |
-| `pending_cash` | numeric | Nullable |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `cash_value` | numeric | Nullable, default `0.00` |
+| `card_value` | numeric | Nullable, default `0.00` |
+| `pix_value` | numeric | Nullable, default `0.00` |
+| `check_value` | numeric | Nullable, default `0.00` |
+| `pending_card` | numeric | Nullable, default `0.00` |
+| `pending_pix` | numeric | Nullable, default `0.00` |
+| `total` | numeric | NOT NULL |
+| `created_by` | uuid | NOT NULL, FK → `users(id)` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
+| `vale_compras_value` | numeric | Nullable, default `0.00` |
+| `pending_cash` | numeric | Nullable, default `0.00` |
 | `obs_dinheiro` | text | Nullable |
 | `obs_cartao` | text | Nullable |
 | `obs_pix` | text | Nullable |
@@ -512,12 +517,12 @@ Registra divergências encontradas na operação.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `delivery_id` | uuid | Nullable |
-| `type` | text | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `delivery_id` | uuid | Nullable, FK → `pending_deliveries(id)` |
+| `type` | text | NOT NULL |
 | `description` | text | Nullable |
-| `created_at` | timestamptz | — |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 
 Relacionamento conceitual:
 
@@ -531,14 +536,14 @@ Controla quantidades físicas de cada denominação disponível.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `tipo` | text | — |
-| `valor` | numeric | — |
-| `quantidade_atual` | int4 | Nullable |
-| `quantidade_ideal` | int4 | Nullable |
-| `quantidade_minima` | int4 | Nullable |
-| `updated_at` | timestamptz | Nullable |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `tipo` | text | NOT NULL, CHECK (`NOTA`, `MOEDA`) |
+| `valor` | numeric | NOT NULL |
+| `quantidade_atual` | int4 | Nullable, default `0` |
+| `quantidade_ideal` | int4 | Nullable, default `0` |
+| `quantidade_minima` | int4 | Nullable, default `0` |
+| `updated_at` | timestamptz | Nullable, default `now()` (UTC) |
 
 Relacionamento conceitual:
 
@@ -552,15 +557,15 @@ Livro de movimentações financeiras/quantidades do caixa/cofre.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `created_by` | uuid | — |
-| `tipo_movimento` | text | — |
-| `valor_total` | numeric | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `created_by` | uuid | NOT NULL, FK → `users(id)` |
+| `tipo_movimento` | text | NOT NULL, CHECK (`ENTRADA`, `SAIDA`, `CONTAGEM_INICIAL`) |
+| `valor_total` | numeric | NOT NULL |
 | `origem` | text | Nullable |
 | `destino` | text | Nullable |
-| `detalhamento` | jsonb | — |
-| `created_at` | timestamptz | Nullable |
+| `detalhamento` | jsonb | NOT NULL |
+| `created_at` | timestamptz | Nullable, default `now()` (UTC) |
 
 O campo `detalhamento` é estruturado como `jsonb` e pode carregar o detalhamento das denominações envolvidas. **Não presumir sua estrutura sem consultar o repository que grava/lê esses registros.**
 
@@ -570,12 +575,12 @@ Registra fechamento de turno.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `shift_date` | date | — |
-| `shift_type` | text | — |
-| `closed_by` | uuid | — |
-| `closed_at` | timestamptz | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `shift_date` | date | NOT NULL |
+| `shift_type` | text | NOT NULL, CHECK (`CAIXA_MANHA`, `CAIXA_TARDE`) |
+| `closed_by` | uuid | NOT NULL, FK → `users(id)` |
+| `closed_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 
 ## `motoboys`
 
@@ -583,12 +588,12 @@ Cadastro de entregadores/motoboys.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `nome` | text | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `nome` | text | NOT NULL |
 | `telefone` | text | Nullable |
-| `ativo` | bool | Nullable |
-| `created_at` | timestamptz | — |
+| `ativo` | bool | Nullable, default `true` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 | `horario_trabalho` | text | Nullable |
 
 ## `motoboy_time_tracking`
@@ -597,13 +602,14 @@ Registra eventos de ponto dos motoboys.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `motoboy_id` | uuid | — |
-| `tipo_registro` | text | — |
-| `registro_time` | timestamptz | — |
-| `registered_by` | uuid | — |
-| `created_at` | timestamptz | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `motoboy_id` | uuid | NOT NULL, FK → `motoboys(id)` |
+| `tipo_registro` | text | NOT NULL, CHECK (`ENTRADA`, `SAIDA`, `FOLGA`, `FERIAS`, `ATESTADO`, `FALTA`, `TROCA_DE_ESCALA`, `FOLGA_FERIADO`) |
+| `registro_time` | timestamptz | NOT NULL, default `now()` (UTC) |
+| `registered_by` | uuid | NOT NULL, FK → `users(id)` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
+| `observacoes` | text | Nullable |
 
 ## `motoboy_routes`
 
@@ -611,16 +617,16 @@ Representa uma rota realizada/planejada por um motoboy.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `store_id` | uuid | — |
-| `motoboy_id` | uuid | — |
-| `status` | text | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `store_id` | uuid | NOT NULL, FK → `stores(id)` |
+| `motoboy_id` | uuid | NOT NULL, FK → `motoboys(id)` |
+| `status` | text | NOT NULL, default `'PREPARANDO'`, CHECK (`PREPARANDO`, `EM_ROTA`, `CONCLUIDA`) |
 | `departure_time` | timestamptz | Nullable |
 | `return_time` | timestamptz | Nullable |
-| `total_distance_km` | numeric | Nullable |
-| `estimated_time_minutes` | int4 | Nullable |
-| `created_by` | uuid | — |
-| `created_at` | timestamptz | — |
+| `total_distance_km` | numeric | Nullable, default `0.00` |
+| `estimated_time_minutes` | int4 | Nullable, default `0` |
+| `created_by` | uuid | NOT NULL, FK → `users(id)` |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 
 ## `motoboy_route_deliveries`
 
@@ -628,14 +634,14 @@ Itens de entrega pertencentes a uma rota.
 
 | Coluna | Tipo | Restrições |
 |---|---|---|
-| `id` | uuid | Primary Key |
-| `route_id` | uuid | — |
+| `id` | uuid | Primary Key, default `gen_random_uuid()` |
+| `route_id` | uuid | NOT NULL, FK → `motoboy_routes(id)` |
 | `dna_order_id` | text | Nullable |
-| `customer_name` | text | — |
-| `address` | text | — |
-| `delivery_status` | text | Nullable |
+| `customer_name` | text | NOT NULL |
+| `address` | text | NOT NULL |
+| `delivery_status` | text | Nullable, default `'PENDENTE'`, CHECK (`PENDENTE`, `ENTREGUE`, `FALHA`) |
 | `time_limit_minutes` | int4 | Nullable |
-| `created_at` | timestamptz | — |
+| `created_at` | timestamptz | NOT NULL, default `now()` (UTC) |
 
 Relacionamento conceitual:
 

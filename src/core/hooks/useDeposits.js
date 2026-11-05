@@ -39,8 +39,11 @@ export const useDeposits = (user, dataFiltro) => {
         const isOrigemCofre = payload.origem?.includes('Troco') || payload.origem?.includes('Cofre');
 
         if (payload.categoria === 'Troca (Caixa de Troco)') {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, payload.detalhes_troca?.moedasValor, payload.valor, 'Gaveta do Operador (Troca Interna)', payload.detalhes_troca?.moedas);
-          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, payload.detalhes_troca?.notasEntrada, payload.detalhes_troca?.moedasValorEntrada, payload.valor, 'Gaveta do Operador (Troca Interna)', payload.detalhes_troca?.moedasEntrada);
+          await SupabaseCashRepository.registerInternalExchange(
+            user.store_id, user.id,
+            payload.detalhes_troca?.notas, payload.detalhes_troca?.moedas,
+            payload.detalhes_troca?.notasEntrada, payload.detalhes_troca?.moedasEntrada
+          );
         } 
         else if (payload.categoria === 'Moedas (Crédito)') {
           await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca?.moedas);

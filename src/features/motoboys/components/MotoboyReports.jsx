@@ -3,7 +3,9 @@ import { Card } from '../../../shared/components/cards/Card'
 import { Button } from '../../../shared/components/buttons/Button'
 import { FileBarChart, Printer, Download } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
+import { BalcaoHolidayRepository } from '../../../infrastructure/supabase/repositories/BalcaoHolidayRepository'
 import { generateMotoboyPdf } from '../../../core/utils/pdfGenerator'
+import { calculateDay, formatMinutesClock } from '../utils/attendance'
 
 const getLocalDateStr = (isoString) => {
   const d = new Date(isoString)
@@ -96,9 +98,10 @@ export const MotoboyReports = ({ user, motoboys }) => {
       const lastDay = new Date(year, month, 0).getDate();
       const endOfMonth = `${year}-${month}-${lastDay}`;
 
-      const [timeData, routesData] = await Promise.all([
+      const [timeData, routesData, holidayData] = await Promise.all([
         SupabaseMotoboyRepository.getTimeTracking(user.store_id, startOfMonth, endOfMonth),
-        SupabaseMotoboyRepository.getRoutesByDate(user.store_id, startOfMonth, endOfMonth) 
+        SupabaseMotoboyRepository.getRoutesByDate(user.store_id, startOfMonth, endOfMonth),
+        BalcaoHolidayRepository.getSchedules(startOfMonth, endOfMonth)
       ])
 
       const myTime = timeData.filter(t => t.motoboy_id === selectedMotoboy)
@@ -121,6 +124,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
 
       setReportData({
         motoboy: targetMotoboy, month: selectedMonth, timeRecords: myTime, routes: myRoutes,
+        holidayData,
         metrics: { totalKm, totalRotas, noPrazo, atrasadas }
       })
 
@@ -147,7 +151,23 @@ export const MotoboyReports = ({ user, motoboys }) => {
         if (i <= diasNoMes) {
             const dayString = `${year}-${month}-${String(i).padStart(2, '0')}`;
             const recordsOfDay = reportData.timeRecords.filter(t => getLocalDateStr(t.registro_time) === dayString);
-            const statusDoDia = obterStatusDoDia(dayString, recordsOfDay);
+            const holiday = reportData.holidayData.find((item) => item.data === dayString)
+            const holidayForMotoboy = holiday
+              ? { ...holiday, works: holiday.works(selectedMotoboy) }
+              : null
+            const dayData = calculateDay({
+              dateString: dayString,
+              records: recordsOfDay,
+              storedSchedule: reportData.motoboy.horario_trabalho,
+              holiday: holidayForMotoboy
+            })
+            const statusDoDia = dayData.status === 'FERIAS' ? 'FÉRIAS'
+              : dayData.status === 'ATESTADO' ? 'ATESTADO'
+                : dayData.status === 'FOLGA_FERIADO' ? 'FOLGA FERIADO'
+                  : dayData.status === 'TROCA_DE_ESCALA' ? 'TROCA DE ESCALA'
+                    : dayData.status === 'FOLGA' ? 'FOLGA'
+                      : dayData.status === 'FALTA' ? 'FALTA'
+                        : null;
             
             const entradas = recordsOfDay.filter(t => t.tipo_registro === 'ENTRADA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
             const saidas = recordsOfDay.filter(t => t.tipo_registro === 'SAIDA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
@@ -171,7 +191,8 @@ export const MotoboyReports = ({ user, motoboys }) => {
                 <td class="bold">${i}</td>
                 <td>${entradaTime}</td>
                 <td>${saidaTime}</td>
-            </tr>
+            <td>${statusDoDia ? '00:00' : formatMinutesClock(dayData.balance)}</td>
+        </tr>
         `;
     }
 
@@ -278,9 +299,10 @@ export const MotoboyReports = ({ user, motoboys }) => {
           <table>
             <thead>
               <tr>
-                <th style="width: 20%;">DIA</th>
-                <th style="width: 40%;">HORÁRIO DE ENTRADA</th>
-                <th style="width: 40%;">HORÁRIO DE SAÍDA</th>
+                <th style="width: 15%;">DIA</th>
+                <th style="width: 30%;">HORÁRIO DE ENTRADA</th>
+                <th style="width: 30%;">HORÁRIO DE SAÍDA</th>
+                <th style="width: 25%;">HORAS (+/-)</th>
               </tr>
             </thead>
             <tbody>

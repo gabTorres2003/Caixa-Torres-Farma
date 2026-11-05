@@ -3,12 +3,8 @@ import { Card } from '../../../shared/components/cards/Card'
 import { Button } from '../../../shared/components/buttons/Button'
 import { FileText, CalendarRange } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
-
-const getLocalDateStr = (isoString) => {
-  const d = new Date(isoString)
-  const tzOffset = d.getTimezoneOffset() * 60000
-  return new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
-}
+import { BalcaoHolidayRepository } from '../../../infrastructure/supabase/repositories/BalcaoHolidayRepository'
+import { calculateDay, formatMinutes as formatHours, formatMinutesClock, getLocalDateStr } from '../utils/attendance'
 
 const PERIOD_OPTIONS = [
   { value: 'SEMANAL', label: 'Semanal' },
@@ -69,25 +65,6 @@ const parseRange = (value) => {
     entrada: toMinutes(match[1]),
     saida: toMinutes(match[2]),
   }
-}
-
-const formatMinutesClock = (minutes) => {
-  if (minutes == null || Number.isNaN(minutes)) return '-'
-  const rounded = Math.round(minutes)
-  const sign = rounded < 0 ? '-' : ''
-  const absolute = Math.abs(rounded)
-  const hours = Math.floor(absolute / 60)
-  const mins = absolute % 60
-  return `${sign}${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
-}
-
-const formatHours = (minutes) => {
-  if (minutes == null || Number.isNaN(minutes)) return '0:00'
-  const sign = minutes < 0 ? '-' : ''
-  const absolute = Math.abs(minutes)
-  const hours = Math.floor(absolute / 60)
-  const mins = absolute % 60
-  return `${sign}${hours}:${String(mins).padStart(2, '0')}`
 }
 
 const getShiftForDate = (dateString, schedule) => {
@@ -154,14 +131,6 @@ const buildDaysInRange = (start, end) => {
 
 const getTimeValue = (dateIso) => new Date(`${dateIso}T00:00:00`).getDay()
 
-const FERIADO_SCHEDULE = { entrada: 8 * 60, saida: 20 * 60 }
-
-const hasHolidayForStore = (dayString, allRecords) => {
-  return allRecords.some(r =>
-    getLocalDateStr(r.registro_time) === dayString && r.tipo_registro === 'FOLGA_FERIADO'
-  )
-}
-
 export const MotoboyPayrollReport = ({ user, motoboys }) => {
   const [selectedMotoboy, setSelectedMotoboy] = useState('')
   const [selectedPeriod, setSelectedPeriod] = useState('SEMANAL')
@@ -181,68 +150,37 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
     const load = async () => {
       setIsLoading(true)
       try {
-        const records = await SupabaseMotoboyRepository.getTimeTracking(user.store_id, start, end)
+        const [records, holidayData] = await Promise.all([
+          SupabaseMotoboyRepository.getTimeTracking(user.store_id, start, end),
+          BalcaoHolidayRepository.getSchedules(start, end)
+        ])
         const targetMotoboy = motoboys.find((m) => m.id === selectedMotoboy)
         const days = buildDaysInRange(start, end)
         const rows = days.map((dayString) => {
           const dayRecords = records.filter((r) => r.motoboy_id === selectedMotoboy && getLocalDateStr(r.registro_time) === dayString)
-          let schedule = targetMotoboy ? getShiftForDate(dayString, targetMotoboy.horario_trabalho) : null
-
-          const isFolgaFeriado = dayRecords.some(r => r.tipo_registro === 'FOLGA_FERIADO')
-          const hasWorkRecords = dayRecords.some(r => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
-          if (!isFolgaFeriado && hasWorkRecords && hasHolidayForStore(dayString, records)) {
-            schedule = FERIADO_SCHEDULE
-          }
-
-          const specialStatus = dayRecords.find((r) => ['FERIAS', 'ATESTADO', 'FOLGA', 'TROCA_DE_ESCALA', 'FOLGA_FERIADO', 'FALTA'].includes(r.tipo_registro))
-          const status = specialStatus
-            ? (specialStatus.tipo_registro === 'FERIAS'
-              ? 'FÉRIAS'
-              : specialStatus.tipo_registro === 'ATESTADO'
-                ? 'ATESTADO'
-                : specialStatus.tipo_registro === 'FOLGA'
-                  ? 'FOLGA'
-                  : specialStatus.tipo_registro === 'TROCA_DE_ESCALA'
-                    ? 'TROCA DE ESCALA'
-                    : specialStatus.tipo_registro === 'FOLGA_FERIADO'
-                      ? 'FOLGA FERIADO'
-                      : 'FALTA')
-            : (() => {
-                const day = getDatePart(dayString).day
-                const hasWorkRecords = dayRecords.some((r) => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
-                if (!hasWorkRecords && (day === 0 || day === 6)) return 'FOLGA'
-                if (!hasWorkRecords && schedule) return 'FALTA'
-                return null
-              })()
-
-          const entradaRecords = dayRecords.filter((r) => r.tipo_registro === 'ENTRADA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
-          const saidaRecords = dayRecords.filter((r) => r.tipo_registro === 'SAIDA').sort((a, b) => new Date(a.registro_time) - new Date(b.registro_time))
-
-          let scheduledEntry = schedule ? schedule.entrada : null
-          let scheduledExit = schedule ? schedule.saida : null
-          let realEntry = entradaRecords.length > 0 ? new Date(entradaRecords[0].registro_time).getHours() * 60 + new Date(entradaRecords[0].registro_time).getMinutes() : null
-          let realExit = saidaRecords.length > 0 ? new Date(saidaRecords[saidaRecords.length - 1].registro_time).getHours() * 60 + new Date(saidaRecords[saidaRecords.length - 1].registro_time).getMinutes() : null
-
-          const previstoMinutos = schedule ? (scheduledExit - scheduledEntry) : 0
-          const trabalhadasMinutos = realEntry !== null && realExit !== null ? Math.max(0, realExit - realEntry) : 0
-          const atrasoEntrada = realEntry !== null && scheduledEntry !== null ? Math.max(0, realEntry - scheduledEntry) : 0
-          const diferencaSaida = realExit !== null && scheduledExit !== null ? realExit - scheduledExit : 0
-          const saldoHoras = (status ? 0 : trabalhadasMinutos) - previstoMinutos
+          const holiday = holidayData.find((item) => item.data === dayString)
+          const dayData = calculateDay({
+            dateString: dayString,
+            records: dayRecords,
+            storedSchedule: targetMotoboy?.horario_trabalho,
+            holiday: holiday ? { ...holiday, works: holiday.works(selectedMotoboy) } : null
+          })
+          const status = dayData.status
 
           return {
             date: dayString,
             diaSemana: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][getTimeValue(dayString)],
             status,
-            previstoEntrada: scheduledEntry != null ? `${String(Math.floor(scheduledEntry / 60)).padStart(2, '0')}:${String(scheduledEntry % 60).padStart(2, '0')}` : '-',
-            realEntrada: realEntry != null ? `${String(Math.floor(realEntry / 60)).padStart(2, '0')}:${String(realEntry % 60).padStart(2, '0')}` : '-',
-            atrasoEntrada,
-            previstoSaida: scheduledExit != null ? `${String(Math.floor(scheduledExit / 60)).padStart(2, '0')}:${String(scheduledExit % 60).padStart(2, '0')}` : '-',
-            realSaida: realExit != null ? `${String(Math.floor(realExit / 60)).padStart(2, '0')}:${String(realExit % 60).padStart(2, '0')}` : '-',
-            diferencaSaida,
-            horasPrevistas: previstoMinutos,
-            horasTrabalhadas: status ? 0 : trabalhadasMinutos,
-            totalHorasDia: status ? 0 : trabalhadasMinutos,
-            saldoHoras,
+            previstoEntrada: dayData.schedule ? `${String(Math.floor(dayData.schedule.entrada / 60)).padStart(2, '0')}:${String(dayData.schedule.entrada % 60).padStart(2, '0')}` : '-',
+            realEntrada: dayData.realEntry != null ? `${String(Math.floor(dayData.realEntry / 60)).padStart(2, '0')}:${String(dayData.realEntry % 60).padStart(2, '0')}` : '-',
+            atrasoEntrada: dayData.entryDelay,
+            previstoSaida: dayData.schedule ? `${String(Math.floor(dayData.schedule.saida / 60)).padStart(2, '0')}:${String(dayData.schedule.saida % 60).padStart(2, '0')}` : '-',
+            realSaida: dayData.realExit != null ? `${String(Math.floor(dayData.realExit / 60)).padStart(2, '0')}:${String(dayData.realExit % 60).padStart(2, '0')}` : '-',
+            diferencaSaida: dayData.exitDifference,
+            horasPrevistas: dayData.hoursExpected,
+            horasTrabalhadas: dayData.hoursWorked,
+            totalHorasDia: dayData.hoursWorked,
+            saldoHoras: dayData.balance,
             statusText: status || (entradaRecords.length || saidaRecords.length ? 'OK' : 'FALTA')
           }
         })
