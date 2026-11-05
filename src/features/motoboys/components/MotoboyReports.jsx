@@ -147,6 +147,8 @@ export const MotoboyReports = ({ user, motoboys }) => {
     for (let i = 1; i <= 31; i++) {
         let entradaTime = '';
         let saidaTime = '';
+        let statusDoDia = null;
+        let balanceDoDia = 0;
 
         if (i <= diasNoMes) {
             const dayString = `${year}-${month}-${String(i).padStart(2, '0')}`;
@@ -161,13 +163,14 @@ export const MotoboyReports = ({ user, motoboys }) => {
               storedSchedule: reportData.motoboy.horario_trabalho,
               holiday: holidayForMotoboy
             })
-            const statusDoDia = dayData.status === 'FERIAS' ? 'FÉRIAS'
+            statusDoDia = dayData.status === 'FERIAS' ? 'FÉRIAS'
               : dayData.status === 'ATESTADO' ? 'ATESTADO'
                 : dayData.status === 'FOLGA_FERIADO' ? 'FOLGA FERIADO'
                   : dayData.status === 'TROCA_DE_ESCALA' ? 'TROCA DE ESCALA'
                     : dayData.status === 'FOLGA' ? 'FOLGA'
                       : dayData.status === 'FALTA' ? 'FALTA'
                         : null;
+            balanceDoDia = dayData.balance;
             
             const entradas = recordsOfDay.filter(t => t.tipo_registro === 'ENTRADA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
             const saidas = recordsOfDay.filter(t => t.tipo_registro === 'SAIDA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
@@ -191,7 +194,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
                 <td class="bold">${i}</td>
                 <td>${entradaTime}</td>
                 <td>${saidaTime}</td>
-            <td>${statusDoDia ? '00:00' : formatMinutesClock(dayData.balance)}</td>
+            <td>${statusDoDia ? '00:00' : formatMinutesClock(balanceDoDia)}</td>
         </tr>
         `;
     }
