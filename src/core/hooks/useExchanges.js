@@ -26,15 +26,11 @@ export const useExchanges = (user, dataFiltro) => {
   const [tipoTroca, setTipoTroca] = useState('INTERNA') // INTERNA | EXTERNA | TEMPORARIA
 
   const [notas, setNotas] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedas, setMoedas] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
-
   const [notasIn, setNotasIn] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedasIn, setMoedasIn] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
 
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
   const [notasRec, setNotasRec] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-  const [moedasRec, setMoedasRec] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
 
   const formProps = useForm()
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = formProps
@@ -46,22 +42,19 @@ export const useExchanges = (user, dataFiltro) => {
   const trocasList = depositsList.filter(d => d.categoria === 'Troca (Caixa de Troco)' || d.categoria === 'Troca Externa' || d.categoria === 'Troca Temporária')
 
   const handleNotaChange = (nota, valor) => { setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
-  const handleMoedaChange = (moeda, valor) => { setMoedas(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
   const handleNotaInChange = (nota, valor) => { setNotasIn(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
-  const handleMoedaInChange = (moeda, valor) => { setMoedasIn(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
   const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
-  const handleMoedaRecChange = (moeda, valor) => { setMoedasRec(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
 
-  const calcularCentavos = (valores) => Object.entries(valores).reduce((total, [face, valor]) => total + Math.round(Number(face) * Number(valor) * 100), 0)
-  const valorCalculadoOut = calcularCentavos(notas) / 100 + calcularCentavos(moedas) / 100
-  const valorCalculadoIn = calcularCentavos(notasIn) / 100 + calcularCentavos(moedasIn) / 100
-  const somaRecebimento = Object.values(notasRec).reduce((a, b) => a + b, 0) + Object.values(moedasRec).reduce((a, b) => a + b, 0)
+  const calcularCentavos = (valores) => Object.values(valores).reduce((total, valor) => total + Math.round((Number(valor) || 0) * 100), 0)
+  const valorCalculadoOut = calcularCentavos(notas) / 100
+  const valorCalculadoIn = calcularCentavos(notasIn) / 100
+  const somaRecebimento = calcularCentavos(notasRec) / 100
   
   useEffect(() => {
     if (tipoTroca === 'INTERNA' || tipoTroca === 'TEMPORARIA' || origemSelecionada === 'Caixa de Troco') {
       setValue('valor', valorCalculadoOut)
     }
-  }, [notas, moedas, tipoTroca, origemSelecionada, setValue, valorCalculadoOut])
+  }, [notas, tipoTroca, origemSelecionada, setValue, valorCalculadoOut])
 
   const isMatchInterna = tipoTroca === 'INTERNA' ? (Math.round(valorCalculadoOut * 100) === Math.round(valorCalculadoIn * 100) && valorCalculadoOut > 0) : true;
   const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
@@ -69,7 +62,10 @@ export const useExchanges = (user, dataFiltro) => {
   const converterValoresParaQuantidades = (valoresReais) => {
     const qtds = {};
     Object.entries(valoresReais).forEach(([face, valorTotal]) => {
-      const qtd = Math.round((Number(valorTotal) || 0) / Number(face));
+      const faceCentavos = Math.round(Number(face) * 100)
+      const valorCentavos = Math.round((Number(valorTotal) || 0) * 100)
+      const qtd = faceCentavos > 0 ? valorCentavos / faceCentavos : 0
+      if (!Number.isInteger(qtd)) throw new Error(`O valor informado para a nota de R$ ${Number(face).toFixed(2)} deve ser múltiplo da denominação.`)
       if (qtd > 0) qtds[face] = qtd;
     });
     return Object.keys(qtds).length > 0 ? qtds : null;
@@ -77,7 +73,8 @@ export const useExchanges = (user, dataFiltro) => {
 
   const valoresPorDenominacaoValidos = (valoresReais) => Object.entries(valoresReais).every(([face, valor]) => {
     const faceCentavos = Math.round(Number(face) * 100)
-    return faceCentavos === 0 || Math.round(Number(valor) * 100) % faceCentavos === 0
+    const valorCentavos = Math.round((Number(valor) || 0) * 100)
+    return Number.isFinite(valorCentavos) && (faceCentavos === 0 || valorCentavos % faceCentavos === 0)
   })
 
   const handleEdit = () => alert("Movimentações físicas do cofre não devem ser editadas diretamente para não gerar furos de caixa. Exclua a troca (o estorno será automático) e lance novamente.")
@@ -92,9 +89,7 @@ export const useExchanges = (user, dataFiltro) => {
     setIsModalOpen(false)
     setEditingId(null)
     setNotas({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedas({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
     setNotasIn({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedasIn({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
     reset({ valor: '', origem: '', destino: '', destino_outros: '', motivo_temporaria: '' })
     setTipoTroca('INTERNA')
   }
@@ -106,15 +101,12 @@ export const useExchanges = (user, dataFiltro) => {
     if (isCaixaTroco && valorFinal <= 0) { return alert("Informe os valores trocados.") }
     if (tipoTroca === 'INTERNA' && !isMatchInterna) { return alert("Os valores de Retirada e Entrada precisam ser exatamente iguais!") }
     if ((isCaixaTroco && !valoresPorDenominacaoValidos(notas)) ||
-        (isCaixaTroco && !valoresPorDenominacaoValidos(moedas)) ||
-        (tipoTroca === 'INTERNA' && (!valoresPorDenominacaoValidos(notasIn) || !valoresPorDenominacaoValidos(moedasIn)))) {
+        (tipoTroca === 'INTERNA' && !valoresPorDenominacaoValidos(notasIn))) {
       return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
     }
 
     const notasOutEmQuantidade = converterValoresParaQuantidades(notas);
-    const moedasOutEmQuantidade = converterValoresParaQuantidades(moedas);
     const notasInEmQuantidade = tipoTroca === 'INTERNA' ? converterValoresParaQuantidades(notasIn) : null;
-    const moedasInEmQuantidade = tipoTroca === 'INTERNA' ? converterValoresParaQuantidades(moedasIn) : null;
 
     // Tratamento do destino para os novos campos
     const finalDestino = tipoTroca === 'TEMPORARIA' 
@@ -128,11 +120,9 @@ export const useExchanges = (user, dataFiltro) => {
       origin: tipoTroca === 'INTERNA' ? 'Caixa de Troco (Interna)' : (tipoTroca === 'TEMPORARIA' ? 'Caixa de Troco' : data.origem),
       destino: finalDestino,
       detalhes_troca: isCaixaTroco ? { 
-        notas: notasOutEmQuantidade, moedas: moedasOutEmQuantidade,
-        moedasValor: Object.values(moedas).reduce((a,b)=>a+b, 0),
+        notas: notasOutEmQuantidade,
         ...(tipoTroca === 'INTERNA' && {
-          notasEntrada: notasInEmQuantidade, moedasEntrada: moedasInEmQuantidade,
-          moedasValorEntrada: Object.values(moedasIn).reduce((a,b)=>a+b, 0)
+          notasEntrada: notasInEmQuantidade
         })
       } : null
     }
@@ -154,7 +144,6 @@ export const useExchanges = (user, dataFiltro) => {
   const handleOpenReceive = (troca) => {
     setReceivingTroca(troca)
     setNotasRec({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
-    setMoedasRec({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0 })
     setIsReceiveModalOpen(true)
   }
 
@@ -165,9 +154,7 @@ export const useExchanges = (user, dataFiltro) => {
     await receberTroca(receivingTroca.id, {
       recebido_por: user?.nome || 'Operador',
       detalhes_troca: { 
-        notas: converterValoresParaQuantidades(notasRec), 
-        moedas: converterValoresParaQuantidades(moedasRec), 
-        moedasValor: Object.values(moedasRec).reduce((a,b)=>a+b, 0) 
+        notas: converterValoresParaQuantidades(notasRec)
       },
       valor_recebido: somaRecebimento
     }, receivingTroca)
@@ -240,9 +227,9 @@ export const useExchanges = (user, dataFiltro) => {
   return {
     user, formProps, isPageLoading, isActionLoading, trocasList,
     isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
-    notas, moedas, notasIn, moedasIn, isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
+    notas, notasIn, isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec,
     origemSelecionada, destinoSelecionado, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
-    formatRecebedor, handleNotaChange, handleMoedaChange, handleNotaInChange, handleMoedaInChange, handleNotaRecChange, handleMoedaRecChange,
+    formatRecebedor, handleNotaChange, handleNotaInChange, handleNotaRecChange,
     handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
   }
 }

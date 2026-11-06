@@ -18,10 +18,10 @@ export const Exchanges = () => {
   const {
     formProps, isPageLoading, isActionLoading, trocasList,
     isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
-    notas, moedas, notasIn, moedasIn,
-    isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
+    notas, notasIn,
+    isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec,
     origemSelecionada, destinoSelecionado, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
-    formatRecebedor, handleNotaChange, handleMoedaChange, handleNotaInChange, handleMoedaInChange, handleNotaRecChange, handleMoedaRecChange,
+    formatRecebedor, handleNotaChange, handleNotaInChange, handleNotaRecChange,
     handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
   } = useExchanges(user, dataFiltro)
 
@@ -144,18 +144,8 @@ export const Exchanges = () => {
               <div className="notes-grid out">
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Notas R$ {nota}</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Valor total em notas de R$ {nota}</label>
                     <input type="number" step="0.01" min="0" className="input-field note-input" value={notas[nota] || ''} onChange={(e) => handleNotaChange(nota, e.target.value)} placeholder="0,00" />
-                  </div>
-                ))}
-                
-                <div style={{ gridColumn: '1 / -1', height: '1px', backgroundColor: '#fecdd3', margin: '4px 0' }}></div>
-                <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', fontWeight: 'bold', color: '#9f1239' }}>Moedas Retiradas</div>
-
-                {[1, 0.5, 0.25, 0.1, 0.05].map(moeda => (
-                  <div key={moeda} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas R$ {moeda.toFixed(2).replace('.', ',')}</label>
-                    <input type="number" step="0.01" min="0" className="input-field note-input" value={moedas[moeda] || ''} onChange={(e) => handleMoedaChange(moeda, e.target.value)} placeholder="0,00" />
                   </div>
                 ))}
               </div>
@@ -178,18 +168,8 @@ export const Exchanges = () => {
               <div className="notes-grid in">
                 {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                   <div key={nota} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Notas R$ {nota}</label>
+                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Valor total em notas de R$ {nota}</label>
                     <input type="number" step="0.01" min="0" className="input-field note-input" value={notasIn[nota] || ''} onChange={(e) => handleNotaInChange(nota, e.target.value)} placeholder="0,00" />
-                  </div>
-                ))}
-
-                <div style={{ gridColumn: '1 / -1', height: '1px', backgroundColor: '#bbf7d0', margin: '4px 0' }}></div>
-                <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', fontWeight: 'bold', color: '#166534' }}>Moedas Devolvidas</div>
-
-                {[1, 0.5, 0.25, 0.1, 0.05].map(moeda => (
-                  <div key={moeda} className="note-item">
-                    <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas R$ {moeda.toFixed(2).replace('.', ',')}</label>
-                    <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasIn[moeda] || ''} onChange={(e) => handleMoedaInChange(moeda, e.target.value)} placeholder="0,00" />
                   </div>
                 ))}
               </div>
@@ -235,18 +215,8 @@ export const Exchanges = () => {
             <div className="notes-grid in">
               {[200, 100, 50, 20, 10, 5, 2].map(nota => (
                 <div key={nota} className="note-item">
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Notas R$ {nota}</label>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Valor total em notas de R$ {nota}</label>
                   <input type="number" step="0.01" min="0" className="input-field note-input" value={notasRec[nota] || ''} onChange={(e) => handleNotaRecChange(nota, e.target.value)} placeholder="0,00" />
-                </div>
-              ))}
-
-              <div style={{ gridColumn: '1 / -1', height: '1px', backgroundColor: '#bbf7d0', margin: '4px 0' }}></div>
-              <div style={{ gridColumn: '1 / -1', fontSize: '0.85rem', fontWeight: 'bold', color: '#065f46' }}>Moedas Recebidas</div>
-
-              {[1, 0.5, 0.25, 0.1, 0.05].map(moeda => (
-                <div key={moeda} className="note-item">
-                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Moedas R$ {moeda.toFixed(2).replace('.', ',')}</label>
-                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasRec[moeda] || ''} onChange={(e) => handleMoedaRecChange(moeda, e.target.value)} placeholder="0,00" />
                 </div>
               ))}
             </div>

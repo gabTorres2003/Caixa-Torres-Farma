@@ -1,5 +1,11 @@
 import { supabase } from '../supabaseClient'
 
+const toCents = (value) => Math.round(Number(value) * 100)
+
+const findDenomination = (stocks, type, value) => stocks.find((stock) =>
+  stock.tipo === type && toCents(stock.valor) === toCents(value)
+)
+
 export const SupabaseCashRepository = {
   async getDenominations(storeId) {
     const { data, error } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId).order('valor', { ascending: false })
@@ -41,9 +47,9 @@ export const SupabaseCashRepository = {
         const qty = Number(quantity)
         if (!Number.isInteger(qty) || qty < 0) throw new Error('As quantidades das denominações devem ser inteiras e não negativas.')
         if (!qty) return
-        const stock = currentStocks.find((item) => item.tipo === type && Number(item.valor) === Number(face))
+        const stock = findDenomination(currentStocks, type, face)
         if (!stock) throw new Error(`Denominação de ${type.toLowerCase()} não cadastrada: R$ ${face}.`)
-        const newQuantity = stock.quantidade_atual + (direction * qty)
+        const newQuantity = Number(stock.quantidade_atual || 0) + (direction * qty)
         if (newQuantity < 0) throw new Error(`Saldo insuficiente para a denominação de R$ ${Number(face).toFixed(2)}.`)
         const existing = changes.find((change) => change.id === stock.id)
         if (existing) existing.newQuantity += direction * qty
@@ -111,18 +117,18 @@ export const SupabaseCashRepository = {
     if (notas) {
       for (const [v, q] of Object.entries(notas)) {
         if (q > 0) {
-          const stock = currentStocks.find(s => s.tipo === 'NOTA' && s.valor === Number(v));
+          const stock = findDenomination(currentStocks, 'NOTA', v);
           if (!stock || stock.quantidade_atual < q) throw new Error(`Saldo insuficiente. Faltam notas de R$ ${v}.`);
-          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual - q });
+          updates.push({ id: stock.id, novaQtd: Number(stock.quantidade_atual || 0) - q });
         }
       }
     }
     if (moedasIndividuais) {
       for (const [v, q] of Object.entries(moedasIndividuais)) {
         if (q > 0) {
-          const stock = currentStocks.find(s => s.tipo === 'MOEDA' && s.valor === Number(v));
+          const stock = findDenomination(currentStocks, 'MOEDA', v);
           if (!stock || stock.quantidade_atual < q) throw new Error(`Saldo insuficiente. Faltam moedas de R$ ${v}.`);
-          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual - q });
+          updates.push({ id: stock.id, novaQtd: Number(stock.quantidade_atual || 0) - q });
         }
       }
     }
@@ -150,18 +156,18 @@ export const SupabaseCashRepository = {
     if (notas) {
       for (const [v, q] of Object.entries(notas)) {
         if (q > 0) {
-          const stock = currentStocks.find(s => s.tipo === 'NOTA' && s.valor === Number(v));
+          const stock = findDenomination(currentStocks, 'NOTA', v);
           if (!stock) throw new Error(`Denominação de nota não cadastrada: R$ ${v}.`);
-          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual + q });
+          updates.push({ id: stock.id, novaQtd: Number(stock.quantidade_atual || 0) + q });
         }
       }
     }
     if (moedasIndividuais) {
       for (const [v, q] of Object.entries(moedasIndividuais)) {
         if (q > 0) {
-          const stock = currentStocks.find(s => s.tipo === 'MOEDA' && s.valor === Number(v));
+          const stock = findDenomination(currentStocks, 'MOEDA', v);
           if (!stock) throw new Error(`Denominação de moeda não cadastrada: R$ ${v}.`);
-          updates.push({ id: stock.id, novaQtd: stock.quantidade_atual + q });
+          updates.push({ id: stock.id, novaQtd: Number(stock.quantidade_atual || 0) + q });
         }
       }
     }
