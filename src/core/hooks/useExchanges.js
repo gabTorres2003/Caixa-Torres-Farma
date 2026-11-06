@@ -57,7 +57,7 @@ export const useExchanges = (user, dataFiltro) => {
   }, [notas, tipoTroca, origemSelecionada, setValue, valorCalculadoOut])
 
   const isMatchInterna = tipoTroca === 'INTERNA' ? (Math.round(valorCalculadoOut * 100) === Math.round(valorCalculadoIn * 100) && valorCalculadoOut > 0) : true;
-  const isMatchRecebimento = receivingTroca && somaRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
+  const isMatchRecebimento = receivingTroca && Math.round(somaRecebimento * 100) === Math.round(Number(receivingTroca.valor) * 100)
 
   const converterValoresParaQuantidades = (valoresReais) => {
     const qtds = {};
@@ -74,7 +74,7 @@ export const useExchanges = (user, dataFiltro) => {
   const valoresPorDenominacaoValidos = (valoresReais) => Object.entries(valoresReais).every(([face, valor]) => {
     const faceCentavos = Math.round(Number(face) * 100)
     const valorCentavos = Math.round((Number(valor) || 0) * 100)
-    return Number.isFinite(valorCentavos) && (faceCentavos === 0 || valorCentavos % faceCentavos === 0)
+    return Number.isFinite(valorCentavos) && valorCentavos >= 0 && (faceCentavos === 0 || valorCentavos % faceCentavos === 0)
   })
 
   const handleEdit = () => alert("Movimentações físicas do cofre não devem ser editadas diretamente para não gerar furos de caixa. Exclua a troca (o estorno será automático) e lance novamente.")
@@ -150,6 +150,9 @@ export const useExchanges = (user, dataFiltro) => {
   const onSubmitReceive = async (e) => {
     e.preventDefault()
     if (!isMatchRecebimento) return
+    if (!valoresPorDenominacaoValidos(notasRec)) {
+      return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
+    }
     
     await receberTroca(receivingTroca.id, {
       recebido_por: user?.nome || 'Operador',

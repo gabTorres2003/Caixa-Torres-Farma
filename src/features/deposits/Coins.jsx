@@ -77,22 +77,31 @@ export const Coins = () => {
   const handleMoedaSangriaChange = (moeda, valor) => { setMoedasSangria(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
   const handleMoedaRecChange = (moeda, valor) => { setMoedasRec(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
 
-  const totalCredito = Object.values(moedasCredito).reduce((acc, val) => acc + val, 0)
-  const totalNotasSaida = Object.values(notasSaida).reduce((acc, val) => acc + val, 0)
-  const totalSangria = Object.values(moedasSangria).reduce((acc, val) => acc + val, 0)
-  const totalRecebimento = Object.values(moedasRec).reduce((acc, val) => acc + val, 0)
+  const calcularTotalCentavos = (valores) => Object.values(valores).reduce(
+    (total, valor) => total + Math.round((Number(valor) || 0) * 100),
+    0
+  )
+  const totalCredito = calcularTotalCentavos(moedasCredito) / 100
+  const totalNotasSaida = calcularTotalCentavos(notasSaida) / 100
+  const totalSangria = calcularTotalCentavos(moedasSangria) / 100
+  const totalRecebimento = calcularTotalCentavos(moedasRec) / 100
 
   useEffect(() => {
     if (tipoMoeda === 'CREDITO') setValue('valor', totalCredito)
     else if (tipoMoeda === 'EXTERNA' && origemSelecionada === 'Caixa de Troco') setValue('valor', totalNotasSaida)
   }, [tipoMoeda, origemSelecionada, totalCredito, totalNotasSaida, setValue])
 
-  const isMatchRecebimento = receivingTroca && totalRecebimento.toFixed(2) === parseFloat(receivingTroca.valor).toFixed(2)
+  const isMatchRecebimento = receivingTroca && Math.round(totalRecebimento * 100) === Math.round(Number(receivingTroca.valor) * 100)
 
   const converterReaisParaQtd = (valoresReais) => {
     const qtds = {};
     Object.entries(valoresReais).forEach(([face, valor]) => {
-      const qtd = Math.round((Number(valor) || 0) / Number(face));
+      const faceCentavos = Math.round(Number(face) * 100)
+      const valorCentavos = Math.round((Number(valor) || 0) * 100)
+      const qtd = faceCentavos > 0 ? valorCentavos / faceCentavos : 0
+      if (!Number.isInteger(qtd)) {
+        throw new Error(`O valor informado para a moeda de R$ ${Number(face).toFixed(2)} deve ser múltiplo da denominação.`)
+      }
       if (qtd > 0) qtds[face] = qtd;
     });
     return Object.keys(qtds).length > 0 ? qtds : null;
@@ -100,7 +109,8 @@ export const Coins = () => {
 
   const valoresPorDenominacaoValidos = (valoresReais) => Object.entries(valoresReais).every(([face, valor]) => {
     const faceCentavos = Math.round(Number(face) * 100)
-    return faceCentavos === 0 || Math.round(Number(valor) * 100) % faceCentavos === 0
+    const valorCentavos = Math.round((Number(valor) || 0) * 100)
+    return Number.isFinite(valorCentavos) && valorCentavos >= 0 && (faceCentavos === 0 || valorCentavos % faceCentavos === 0)
   })
 
   const handleEdit = (row) => {

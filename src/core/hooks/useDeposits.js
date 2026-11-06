@@ -156,7 +156,29 @@ export const useDeposits = (user, dataFiltro) => {
   const receberTroca = async (id, payloadEntrada, registroOriginal) => {
     setIsActionLoading(true)
     try {
+      if (!registroOriginal || registroOriginal.status_troca === 'CONCLUIDA' || registroOriginal.detalhes_troca?.estornada) {
+        throw new Error('Esta troca já foi recebida ou desfeita.')
+      }
+
       const inflowDetails = payloadEntrada.detalhes_troca;
+      const isTrocaMoedas = registroOriginal.categoria === 'Moedas (Troca Externa)';
+      const denominacoesRecebidas = isTrocaMoedas ? inflowDetails?.moedas : inflowDetails?.notas;
+      if (!denominacoesRecebidas || Object.keys(denominacoesRecebidas).length === 0) {
+        throw new Error(`Informe as ${isTrocaMoedas ? 'moedas' : 'notas'} recebidas por denominação.`)
+      }
+
+      const valorRecebidoCentavos = Math.round(Number(payloadEntrada.valor_recebido) * 100)
+      const valorFisicoCentavos = Object.entries(denominacoesRecebidas).reduce((total, [face, quantidade]) => {
+        const qtd = Number(quantidade)
+        if (!Number.isInteger(qtd) || qtd < 0) {
+          throw new Error('As quantidades físicas recebidas devem ser inteiras e não negativas.')
+        }
+        return total + Math.round(Number(face) * 100) * qtd
+      }, 0)
+      if (!Number.isFinite(valorRecebidoCentavos) || valorRecebidoCentavos !== valorFisicoCentavos) {
+        throw new Error('O valor recebido não corresponde às denominações informadas.')
+      }
+
       const mergedDetalhes = {
           ...registroOriginal.detalhes_troca,
           notasEntrada: inflowDetails?.notas,
