@@ -136,10 +136,15 @@ export const MotoboyReports = ({ user, motoboys }) => {
   }
 
   const handlePrint = () => {
-    if(!reportData) return;
+    if (!reportData?.motoboy) {
+      alert('Carregue a folha de ponto antes de imprimir.')
+      return
+    }
+
     const [year, month] = reportData.month.split('-');
     const nomeMesStr = getNomeMes(parseInt(month) - 1);
     const diasNoMes = new Date(year, month, 0).getDate();
+    const holidayData = reportData.holidayData || [];
 
     let rowsHtml = '';
     
@@ -153,7 +158,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
         if (i <= diasNoMes) {
             const dayString = `${year}-${month}-${String(i).padStart(2, '0')}`;
             const recordsOfDay = reportData.timeRecords.filter(t => getLocalDateStr(t.registro_time) === dayString);
-            const holiday = reportData.holidayData.find((item) => item.data === dayString)
+            const holiday = holidayData.find((item) => item.data === dayString)
             const holidayForMotoboy = holiday
               ? { ...holiday, motoboyId: selectedMotoboy, works: holiday.works(selectedMotoboy) }
               : null
@@ -321,11 +326,22 @@ export const MotoboyReports = ({ user, motoboys }) => {
       </html>
     `;
 
-    const janela = window.open('', '', 'width=800,height=600')
+    const janela = window.open('', '_blank', 'width=800,height=600')
+    if (!janela) {
+      alert('Não foi possível abrir a folha para impressão. Permita pop-ups para este site e tente novamente.')
+      return
+    }
+
+    janela.document.open()
     janela.document.write(conteudoPDF)
     janela.document.close()
     janela.focus()
-    setTimeout(() => { janela.print(); janela.close() }, 250)
+    janela.onload = () => {
+      janela.print()
+    }
+    janela.onafterprint = () => {
+      janela.close()
+    }
   }
 
   const handleExportPdf = async () => {
