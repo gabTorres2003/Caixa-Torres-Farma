@@ -33,6 +33,7 @@ export const Exchanges = () => {
     { header: 'Destino/Origem', render: (row) => row.categoria !== 'Troca (Caixa de Troco)' ? <span style={{fontSize: '0.8rem'}}><b>{row.origem}</b> ➔ {row.destino}</span> : 'Caixa de Troco' },
     { header: 'Valor Trocado', render: (row) => <strong style={{ color: '#0f172a' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong> },
     { header: 'Status', render: (row) => {
+        if (row.detalhes_troca?.estornada) return <span style={{ color: '#b45309', fontWeight: 'bold' }}>↩ Estornada</span>
         if (row.categoria === 'Troca (Caixa de Troco)') return <span style={{ color: '#16a34a', fontWeight: 'bold' }}>✓ Concluída</span>
         if (row.status_troca === 'PENDENTE') return <span style={{ color: '#d97706', fontWeight: 'bold' }}>⏳ Pendente</span>
         return <span style={{ color: '#16a34a', fontWeight: 'bold', display: 'flex', flexDirection: 'column' }}>✓ Recebido <span style={{fontSize: '0.7rem', color: '#64748b'}}>por {formatRecebedor(row.recebido_por)}</span></span>
@@ -48,7 +49,7 @@ export const Exchanges = () => {
             </Button>
           )}
 
-          {user.role === 'ADMIN' && (
+          {user.role === 'ADMIN' && !row.detalhes_troca?.estornada && (
             <>
               <button onClick={() => handleEdit()} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }}><Pencil size={18} /></button>
               <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }}><Trash2 size={18} /></button>

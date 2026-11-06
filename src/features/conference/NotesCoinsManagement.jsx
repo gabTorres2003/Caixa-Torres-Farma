@@ -205,11 +205,17 @@ export const NotesCoinsManagement = () => {
         const operadorRef = row.detalhamento?.operador ? `\n\nOperador de Caixa: ${row.detalhamento.operador}` : '';
         const dataRef = row.detalhamento?.data_referente ? `\nData Ref.: ${new Date(row.detalhamento.data_referente).toLocaleDateString('pt-BR')}` : '';
         const detalhamentoValores = formatarValoresMovimentados(row.detalhamento);
-        const isRevertible = row.tipo_movimento !== 'CONTAGEM_INICIAL' && !row.origem?.includes('ESTORNO') && !row.destino?.includes('ESTORNO');
+        const isRevertible = row.tipo_movimento !== 'CONTAGEM_INICIAL'
+          && !row.origem?.includes('ESTORNO')
+          && !row.destino?.includes('ESTORNO')
+          && !row.detalhamento?.estornada;
 
         return (
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button onClick={() => alert(`=== DETALHES DA MOVIMENTAÇÃO ===\n\n${detalhamentoValores}${obs}${operadorRef}${dataRef}`)} style={{ background: 'none', border: 'none', color: '#0369a1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}><Info size={16} /> Ver</button>
+            {row.detalhamento?.estornada && (
+              <span style={{ color: '#b45309', fontWeight: 'bold', fontSize: '0.8rem' }}>ESTORNADA</span>
+            )}
             {isRevertible && (
               <button onClick={() => handleRevert(row)} title="Desfazer e Estornar Valores" style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}><Undo2 size={16} /> Desfazer</button>
             )}

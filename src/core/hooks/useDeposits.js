@@ -37,28 +37,43 @@ export const useDeposits = (user, dataFiltro) => {
         await DepositRepository.updateDeposit(editingId, payload)
       } else {
         const isOrigemCofre = payload.origem?.includes('Troco') || payload.origem?.includes('Cofre');
+        let financialOperationIds = [];
 
         if (payload.categoria === 'Troca (Caixa de Troco)') {
-          await SupabaseCashRepository.registerInternalExchange(
+          const result = await SupabaseCashRepository.registerInternalExchange(
             user.store_id, user.id,
             payload.detalhes_troca?.notas, payload.detalhes_troca?.moedas,
             payload.detalhes_troca?.notasEntrada, payload.detalhes_troca?.moedasEntrada
           );
+          financialOperationIds = [result.operationId];
         } 
         else if (payload.categoria === 'Moedas (Crédito)') {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca?.moedas);
+          const result = await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, null, 0, payload.valor, 'Caixa Atual', payload.detalhes_troca?.moedas);
+          financialOperationIds = [result.operationId];
         }
         else if (payload.categoria === 'Sangria de Moedas') {
-          await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payload.valor, 'Sangria do Caixa Atual', payload.detalhes_troca?.moedas);
+          const result = await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payload.valor, 'Sangria do Caixa Atual', payload.detalhes_troca?.moedas);
+          financialOperationIds = [result.operationId];
         }
         else if (payload.categoria === 'Moedas (Troca Externa)' && isOrigemCofre) {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, 0, payload.valor, `${payload.categoria} (${payload.destino})`, null);
+          const result = await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, 0, payload.valor, `${payload.categoria} (${payload.destino})`, null);
+          financialOperationIds = [result.operationId];
         }
         else if (isOrigemCofre && payload.categoria !== 'Moedas (Troca Externa)') {
-          await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, payload.detalhes_troca?.moedasValor, payload.valor, payload.categoria === 'Depósito' ? 'Depósito Bancário' : `${payload.categoria} (${payload.destino})`, payload.detalhes_troca?.moedas);
+          const result = await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, payload.detalhes_troca?.notas, payload.detalhes_troca?.moedasValor, payload.valor, payload.categoria === 'Depósito' ? 'Depósito Bancário' : `${payload.categoria} (${payload.destino})`, payload.detalhes_troca?.moedas);
+          financialOperationIds = [result.operationId];
         }
         
-        await DepositRepository.addDeposit({ ...payload, store_id: user.store_id, created_by: user.id })
+        const depositPayload = financialOperationIds.length > 0
+          ? {
+              ...payload,
+              detalhes_troca: {
+                ...(payload.detalhes_troca || {}),
+                operacao_ids: financialOperationIds
+              }
+            }
+          : payload
+        await DepositRepository.addDeposit({ ...depositPayload, store_id: user.store_id, created_by: user.id })
       }
       await carregarDepositos()
     } catch (err) {
@@ -75,8 +90,36 @@ export const useDeposits = (user, dataFiltro) => {
       const depositToDelete = depositsList.find(d => d.id === id);
       
       if (depositToDelete) {
+        const operationIds = depositToDelete.detalhes_troca?.operacao_ids || []
+        if (depositToDelete.detalhes_troca?.estornada) {
+          throw new Error('Esta movimentação já foi desfeita.')
+        }
         const isOrigemCofre = depositToDelete.origem?.includes('Troco') || depositToDelete.origem?.includes('Cofre');
+        const hasFinancialReversal = depositToDelete.categoria === 'Troca (Caixa de Troco)'
+          || depositToDelete.categoria === 'Moedas (Crédito)'
+          || depositToDelete.categoria === 'Sangria de Moedas'
+          || (depositToDelete.categoria === 'Moedas (Troca Externa)' && isOrigemCofre)
+          || isOrigemCofre
+
+        if (hasFinancialReversal && operationIds.length === 0) {
+          throw new Error('Esta movimentação antiga não possui vínculo financeiro para estorno seguro. Não foi excluída para preservar o saldo e o histórico.')
+        }
         
+        if (operationIds.length > 0) {
+          for (const operationId of operationIds) {
+            try {
+              await SupabaseCashRepository.reverseOperation(user.store_id, user.id, operationId)
+            } catch (error) {
+              if (!error.message.includes('já foi desfeita')) throw error
+            }
+          }
+          await DepositRepository.updateDeposit(id, {
+            detalhes_troca: { ...depositToDelete.detalhes_troca, estornada: true, estornada_em: new Date().toISOString() }
+          })
+          await carregarDepositos()
+          return
+        }
+
         if (depositToDelete.categoria === 'Troca (Caixa de Troco)') {
            await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, depositToDelete.detalhes_troca?.notas, depositToDelete.detalhes_troca?.moedasValor || 0, depositToDelete.valor, `Estorno Exclusão Troca Interna (Saída)`, depositToDelete.detalhes_troca?.moedas);
            await SupabaseCashRepository.registerOutflowFromVault(user.store_id, user.id, depositToDelete.detalhes_troca?.notasEntrada, depositToDelete.detalhes_troca?.moedasValorEntrada || 0, depositToDelete.valor, `Estorno Exclusão Troca Interna (Entrada)`, depositToDelete.detalhes_troca?.moedasEntrada);
@@ -129,19 +172,26 @@ export const useDeposits = (user, dataFiltro) => {
           detalhes_troca: mergedDetalhes 
       };
 
-      await DepositRepository.receiveExchange(id, payloadToDb)
-
       const vaiParaCofre = registroOriginal?.origem !== 'Caixa Atual';
 
       if (vaiParaCofre) {
           if (inflowDetails && inflowDetails.notas && registroOriginal.categoria !== 'Moedas (Troca Externa)') {
-              await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, inflowDetails.notas, inflowDetails.moedasValor || 0, payloadEntrada.valor_recebido, `Retorno de ${registroOriginal.categoria} (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+              const result = await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, inflowDetails.notas, inflowDetails.moedasValor || 0, payloadEntrada.valor_recebido, `Retorno de ${registroOriginal.categoria} (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+              payloadToDb.detalhes_troca.operacao_ids = [
+                ...(registroOriginal.detalhes_troca?.operacao_ids || []),
+                result.operationId
+              ];
           }
           else if (inflowDetails && inflowDetails.moedas && registroOriginal.categoria === 'Moedas (Troca Externa)') {
-              await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+              const result = await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
+              payloadToDb.detalhes_troca.operacao_ids = [
+                ...(registroOriginal.detalhes_troca?.operacao_ids || []),
+                result.operationId
+              ];
           }
       }
 
+      await DepositRepository.receiveExchange(id, payloadToDb)
       await carregarDepositos()
       alert('Recebimento confirmado e baixado com sucesso!')
     } catch (err) {

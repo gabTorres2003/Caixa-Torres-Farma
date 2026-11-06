@@ -262,13 +262,14 @@ ${totalTrocas > 0 ? ` *Abatido de Troca:* ${valorTroca}\n` : ''} *TOTAL LÍQUIDO
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <strong style={{ color: '#dc2626' }}>R$ {row.valor.toFixed(2).replace('.', ',')}</strong>
           {row.detalhes_troca?.observacao_ajuste && <span style={{fontSize:'0.7rem', color: '#d97706'}}>*Ajustado: {row.detalhes_troca.observacao_ajuste}</span>}
+          {row.detalhes_troca?.estornada && <span style={{fontSize:'0.7rem', color: '#b45309', fontWeight: 'bold'}}>↩ ESTORNADA</span>}
         </div>
     )},
     { header: 'Ações', render: (row) => (
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button onClick={() => imprimirComprovante(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)' }} title="Imprimir"><Printer size={20} /></button>
           <button onClick={() => handleSendRowWhatsApp(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a' }} title="Enviar p/ WhatsApp"><Send size={18} /></button>
-          {user.role === 'ADMIN' && (
+          {user.role === 'ADMIN' && !row.detalhes_troca?.estornada && (
             <>
               <button onClick={() => handleEdit(row)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706' }} title="Editar"><Pencil size={18} /></button>
               <button onClick={() => handleDelete(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626' }} title="Deletar"><Trash2 size={18} /></button>

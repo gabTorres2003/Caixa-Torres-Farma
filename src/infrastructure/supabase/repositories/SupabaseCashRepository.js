@@ -6,6 +6,8 @@ const findDenomination = (stocks, type, value) => stocks.find((stock) =>
   stock.tipo === type && toCents(stock.valor) === toCents(value)
 )
 
+const createOperationId = () => crypto.randomUUID()
+
 export const SupabaseCashRepository = {
   async getDenominations(storeId) {
     const { data, error } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId).order('valor', { ascending: false })
@@ -26,8 +28,13 @@ export const SupabaseCashRepository = {
   },
 
   async registerMovement(payload) {
-    const { error } = await supabase.from('cash_movements').insert([payload])
+    const operationId = payload.detalhamento?.operacao_id || createOperationId()
+    const { data, error } = await supabase.from('cash_movements')
+      .insert([{ ...payload, detalhamento: { ...(payload.detalhamento || {}), operacao_id: operationId } }])
+      .select('id')
+      .single()
     if (error) throw error
+    return { operationId, movementIds: [data.id] }
   },
 
   async registerInternalExchange(storeId, userId, notasOut, moedasOut, notasIn, moedasIn) {
@@ -64,7 +71,7 @@ export const SupabaseCashRepository = {
       if (change.newQuantity < 0) throw new Error('A operação deixaria uma denominação com saldo negativo.')
     })
 
-    const operationId = crypto.randomUUID()
+    const operationId = createOperationId()
     const now = new Date().toISOString()
     const updates = await Promise.all(changes.map((change) =>
       supabase.from('cash_denominations').update({ quantidade_atual: change.newQuantity, updated_at: now }).eq('id', change.id)
@@ -77,15 +84,19 @@ export const SupabaseCashRepository = {
         store_id: storeId, created_by: userId, tipo_movimento: 'SAIDA', valor_total: totalOut / 100,
         origem: 'Caixa de Troco', destino: 'Gaveta do Operador (Troca Interna)',
         detalhamento: { operacao: 'TROCA_INTERNA', operacao_id: operationId, notas: notasOut || {}, moedas: moedasOut || {} }
-      }]),
+      }]).select('id').single(),
       supabase.from('cash_movements').insert([{
         store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', valor_total: totalIn / 100,
         origem: 'Gaveta do Operador (Troca Interna)', destino: 'Caixa de Troco',
         detalhamento: { operacao: 'TROCA_INTERNA', operacao_id: operationId, notas: notasIn || {}, moedas: moedasIn || {} }
-      }])
+      }]).select('id').single()
     ])
     const movementError = movements.find((result) => result.error)?.error
     if (movementError) throw movementError
+    return {
+      operationId,
+      movementIds: movements.map((result) => result.data.id)
+    }
   },
 
   async getLastConference(storeId) {
@@ -138,13 +149,15 @@ export const SupabaseCashRepository = {
       if (error) throw error;
     }
 
+    const operationId = createOperationId()
     const payloadMovimento = { 
         store_id: storeId, created_by: userId, tipo_movimento: 'SAIDA', 
         valor_total: totalValue, origem: 'Caixa de Troco', destino: destino, 
-        detalhamento: { notas, moedas: moedasIndividuais, moedasValor } 
+        detalhamento: { operacao_id: operationId, notas, moedas: moedasIndividuais, moedasValor }
     };
-    const { error } = await supabase.from('cash_movements').insert([payloadMovimento]);
+    const { data, error } = await supabase.from('cash_movements').insert([payloadMovimento]).select('id').single();
     if (error) throw error;
+    return { operationId, movementIds: [data.id] }
   },
 
   // === INCLUIDO AS MOEDAS ===
@@ -177,19 +190,22 @@ export const SupabaseCashRepository = {
       if (error) throw error;
     }
 
+    const operationId = createOperationId()
     const payloadMovimento = { 
         store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', 
         valor_total: totalValue, origem: origem, destino: 'Caixa de Troco', 
-        detalhamento: { notas, moedas: moedasIndividuais, moedasValor } 
+        detalhamento: { operacao_id: operationId, notas, moedas: moedasIndividuais, moedasValor }
     };
-    const { error } = await supabase.from('cash_movements').insert([payloadMovimento]);
+    const { data, error } = await supabase.from('cash_movements').insert([payloadMovimento]).select('id').single();
     if (error) throw error;
+    return { operationId, movementIds: [data.id] }
   },
 
   async adjustBalance(storeId, userId, newQuantities, manualOriginDest, observation) {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     let totalDiferenca = 0;
-    const detalhamento = { notas: {}, moedas: {}, isAjuste: true, observacao: observation };
+    const operationId = createOperationId()
+    const detalhamento = { notas: {}, moedas: {}, isAjuste: true, observacao: observation, operacao_id: operationId };
 
     for (const stock of currentStocks) {
       const newVal = newQuantities[stock.valor];
@@ -207,8 +223,9 @@ export const SupabaseCashRepository = {
       await supabase.from('cash_movements').insert([{
         store_id: storeId, created_by: userId, tipo_movimento: tipo, valor_total: Math.abs(totalDiferenca),
         origem: tipo === 'ENTRADA' ? manualOriginDest : 'Caixa de Troco (Ajuste)', destino: tipo === 'ENTRADA' ? 'Caixa de Troco (Ajuste)' : manualOriginDest, detalhamento
-      }]);
+      }]).select('id').single();
     }
+    return { operationId }
   },
 
   async updateMetricsBatch(metricsData) {
@@ -224,7 +241,8 @@ export const SupabaseCashRepository = {
     const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
     let totalInflow = 0;
     
-    const detalhamento = { notas: {}, moedas: {}, observacao, operador, data_referente: dataReferente };
+    const operationId = createOperationId()
+    const detalhamento = { notas: {}, moedas: {}, observacao, operador, data_referente: dataReferente, operacao_id: operationId };
 
     for (const stock of currentStocks) {
       const extra = unidadesExtras[stock.valor];
@@ -244,47 +262,128 @@ export const SupabaseCashRepository = {
       await supabase.from('cash_movements').insert([{
         store_id: storeId, created_by: userId, tipo_movimento: 'ENTRADA', valor_total: totalInflow,
         origem: operador ? `${origemStr} (${operador})` : origemStr, destino: 'Cofre Central', detalhamento
-      }]);
+      }]).select('id').single();
     }
+    return { operationId }
+  },
+
+  async reverseOperation(storeId, userId, operationId) {
+    if (!operationId) throw new Error('Movimentação sem vínculo financeiro; não é possível estornar com segurança.')
+
+    const { data: originalMovements, error: movementError } = await supabase
+      .from('cash_movements')
+      .select('*')
+      .eq('store_id', storeId)
+      .contains('detalhamento', { operacao_id: operationId })
+    if (movementError) throw movementError
+    if (!originalMovements?.length) throw new Error('Movimentação financeira não encontrada.')
+    if (originalMovements.some((movement) => movement.detalhamento?.estornada || movement.detalhamento?.tipo_operacao === 'ESTORNO')) {
+      throw new Error('Esta movimentação já foi desfeita.')
+    }
+    if (originalMovements.some((movement) => movement.tipo_movimento === 'CONTAGEM_INICIAL')) {
+      throw new Error('Não é possível estornar o saldo inicial.')
+    }
+
+    const { data: currentStocks, error: stockError } = await supabase
+      .from('cash_denominations')
+      .select('*')
+      .eq('store_id', storeId)
+    if (stockError) throw stockError
+
+    const changes = []
+    originalMovements.forEach((movement) => {
+      const multiplier = movement.tipo_movimento === 'ENTRADA' ? -1 : 1
+      const values = [
+        ['NOTA', movement.detalhamento?.notas || {}],
+        ['MOEDA', movement.detalhamento?.moedas || {}]
+      ]
+      values.forEach(([type, denominations]) => {
+        Object.entries(denominations).forEach(([face, quantity]) => {
+          const qty = Number(quantity)
+          if (!Number.isInteger(qty) || qty < 0 || !qty) return
+          const stock = findDenomination(currentStocks, type, face)
+          if (!stock) throw new Error(`Denominação de ${type.toLowerCase()} não cadastrada: R$ ${face}.`)
+          const existing = changes.find((change) => change.id === stock.id)
+          const delta = multiplier * qty
+          if (existing) existing.newQuantity += delta
+          else changes.push({ id: stock.id, newQuantity: Number(stock.quantidade_atual || 0) + delta })
+        })
+      })
+    })
+
+    changes.forEach((change) => {
+      if (change.newQuantity < 0) throw new Error('Estorno bloqueado: o saldo da denominação ficaria negativo.')
+    })
+
+    const now = new Date().toISOString()
+    for (const change of changes) {
+      const { error } = await supabase.from('cash_denominations')
+        .update({ quantidade_atual: change.newQuantity, updated_at: now })
+        .eq('id', change.id)
+      if (error) throw error
+    }
+
+    const reversalRows = originalMovements.map((movement) => ({
+      store_id: storeId,
+      created_by: userId,
+      tipo_movimento: movement.tipo_movimento === 'ENTRADA' ? 'SAIDA' : 'ENTRADA',
+      valor_total: movement.valor_total,
+      origem: `ESTORNO: ${movement.destino || movement.origem}`,
+      destino: `ESTORNO: ${movement.origem || movement.destino}`,
+      detalhamento: {
+        ...movement.detalhamento,
+        tipo_operacao: 'ESTORNO',
+        estorno_de: movement.id,
+        operacao_id: operationId,
+        estornada_em: now
+      }
+    }))
+    const { data: reversals, error: reversalError } = await supabase
+      .from('cash_movements')
+      .insert(reversalRows)
+      .select('id')
+    if (reversalError) throw reversalError
+
+    for (const movement of originalMovements) {
+      const { error } = await supabase.from('cash_movements')
+        .update({
+          detalhamento: {
+            ...movement.detalhamento,
+            estornada: true,
+            estornada_em: now,
+            estorno_id: reversals?.find((reversal, index) => reversal && index === originalMovements.indexOf(movement))?.id || null
+          }
+        })
+        .eq('id', movement.id)
+      if (error) throw error
+    }
+    const { data: linkedDeposits, error: depositLookupError } = await supabase
+      .from('deposits')
+      .select('id, detalhes_troca')
+      .contains('detalhes_troca', { operacao_ids: [operationId] })
+    if (depositLookupError) throw depositLookupError
+    for (const deposit of linkedDeposits || []) {
+      const { error } = await supabase.from('deposits')
+        .update({
+          detalhes_troca: {
+            ...(deposit.detalhes_troca || {}),
+            estornada: true,
+            estornada_em: now
+          }
+        })
+        .eq('id', deposit.id)
+      if (error) throw error
+    }
+    return { operationId, reversalIds: (reversals || []).map((reversal) => reversal.id) }
   },
 
   async revertMovement(storeId, userId, movementId) {
-    const { data: mov, error: movError } = await supabase.from('cash_movements').select('*').eq('id', movementId).single();
-    if (movError || !mov) throw new Error("Movimentação não encontrada.");
-    
-    if (mov.tipo_movimento === 'CONTAGEM_INICIAL') throw new Error("Não é possível estornar o saldo inicial.");
-    if (mov.origem?.includes('ESTORNO') || mov.destino?.includes('ESTORNO')) throw new Error("Esta movimentação já é um estorno.");
-
-    const { data: currentStocks } = await supabase.from('cash_denominations').select('*').eq('store_id', storeId);
-    const isEntrada = mov.tipo_movimento === 'ENTRADA';
-    const multiplier = isEntrada ? -1 : 1; 
-
-    const notas = mov.detalhamento?.notas || {};
-    const moedas = mov.detalhamento?.moedas || {};
-    const updates = [];
-
-    for (const stock of currentStocks) {
-      let diff = 0;
-      if (stock.tipo === 'NOTA' && notas[stock.valor]) diff = notas[stock.valor] * multiplier;
-      if (stock.tipo === 'MOEDA' && moedas[stock.valor]) diff = moedas[stock.valor] * multiplier;
-
-      if (diff !== 0) {
-        const newQtd = stock.quantidade_atual + diff;
-        if (newQtd < 0) throw new Error(`Estorno bloqueado: Você não tem R$ ${stock.valor.toFixed(2)} suficientes no cofre para devolver.`);
-        updates.push({ id: stock.id, newQtd });
-      }
-    }
-
-    for (const u of updates) {
-      await supabase.from('cash_denominations').update({ quantidade_atual: u.newQtd, updated_at: new Date().toISOString() }).eq('id', u.id);
-    }
-
-    const inverseTipo = isEntrada ? 'SAIDA' : 'ENTRADA';
-    const newDetalhamento = { ...mov.detalhamento, observacao: `ESTORNO DA MOVIMENTAÇÃO ORIGINADA EM: ${new Date(mov.created_at).toLocaleString('pt-BR')}. Obs Original: ${mov.detalhamento?.observacao || 'N/A'}` };
-
-    await supabase.from('cash_movements').insert([{
-      store_id: storeId, created_by: userId, tipo_movimento: inverseTipo, valor_total: mov.valor_total,
-      origem: `ESTORNO: ${mov.destino || mov.origem}`, destino: `ESTORNO: ${mov.origem || mov.destino}`, detalhamento: newDetalhamento
-    }]);
+    const { data: movement, error } = await supabase
+      .from('cash_movements')
+      .select('detalhamento')
+      .eq('id', movementId)
+      .single()
+    if (error) throw error
+    return this.reverseOperation(storeId, userId, movement?.detalhamento?.operacao_id)
   }
 }
