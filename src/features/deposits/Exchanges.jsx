@@ -19,9 +19,9 @@ export const Exchanges = () => {
     formProps, isPageLoading, isActionLoading, trocasList,
     isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
     notas, notasIn,
-    isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec,
+    isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
     origemSelecionada, destinoSelecionado, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
-    formatRecebedor, handleNotaChange, handleNotaInChange, handleNotaRecChange,
+    formatRecebedor, handleNotaChange, handleNotaInChange, handleNotaRecChange, handleMoedaRecChange,
     handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
   } = useExchanges(user, dataFiltro)
 
@@ -218,6 +218,18 @@ export const Exchanges = () => {
                 <div key={nota} className="note-item">
                   <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Valor total em notas de R$ {nota}</label>
                   <input type="number" step="0.01" min="0" className="input-field note-input" value={notasRec[nota] || ''} onChange={(e) => handleNotaRecChange(nota, e.target.value)} placeholder="0,00" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="notes-container">
+            <label className="input-label" style={{ color: '#047857' }}>Informe também o valor recebido em moedas:</label>
+            <div className="notes-grid in">
+              {[1, 0.5, 0.25, 0.1, 0.05, 0.01].map(moeda => (
+                <div key={moeda} className="note-item">
+                  <label style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Valor total em moedas de R$ {moeda.toFixed(2).replace('.', ',')}</label>
+                  <input type="number" step="0.01" min="0" className="input-field note-input" value={moedasRec[moeda] || ''} onChange={(e) => handleMoedaRecChange(moeda, e.target.value)} placeholder="0,00" />
                 </div>
               ))}
             </div>

@@ -31,6 +31,7 @@ export const useExchanges = (user, dataFiltro) => {
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false)
   const [receivingTroca, setReceivingTroca] = useState(null)
   const [notasRec, setNotasRec] = useState({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+  const [moedasRec, setMoedasRec] = useState({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0, 0.01: 0 })
 
   const formProps = useForm()
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = formProps
@@ -44,11 +45,12 @@ export const useExchanges = (user, dataFiltro) => {
   const handleNotaChange = (nota, valor) => { setNotas(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleNotaInChange = (nota, valor) => { setNotasIn(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
   const handleNotaRecChange = (nota, valor) => { setNotasRec(prev => ({ ...prev, [nota]: parseFloat(valor) || 0 })) }
+  const handleMoedaRecChange = (moeda, valor) => { setMoedasRec(prev => ({ ...prev, [moeda]: parseFloat(valor) || 0 })) }
 
   const calcularCentavos = (valores) => Object.values(valores).reduce((total, valor) => total + Math.round((Number(valor) || 0) * 100), 0)
   const valorCalculadoOut = calcularCentavos(notas) / 100
   const valorCalculadoIn = calcularCentavos(notasIn) / 100
-  const somaRecebimento = calcularCentavos(notasRec) / 100
+  const somaRecebimento = (calcularCentavos(notasRec) + calcularCentavos(moedasRec)) / 100
   
   useEffect(() => {
     if (tipoTroca === 'INTERNA' || tipoTroca === 'TEMPORARIA' || origemSelecionada === 'Caixa de Troco') {
@@ -144,20 +146,22 @@ export const useExchanges = (user, dataFiltro) => {
   const handleOpenReceive = (troca) => {
     setReceivingTroca(troca)
     setNotasRec({ 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0 })
+    setMoedasRec({ 1: 0, 0.5: 0, 0.25: 0, 0.1: 0, 0.05: 0, 0.01: 0 })
     setIsReceiveModalOpen(true)
   }
 
   const onSubmitReceive = async (e) => {
     e.preventDefault()
     if (!isMatchRecebimento) return
-    if (!valoresPorDenominacaoValidos(notasRec)) {
+    if (!valoresPorDenominacaoValidos(notasRec) || !valoresPorDenominacaoValidos(moedasRec)) {
       return alert('Informe valores que sejam múltiplos exatos de cada denominação.')
     }
     
     await receberTroca(receivingTroca.id, {
       recebido_por: user?.nome || 'Operador',
       detalhes_troca: { 
-        notas: converterValoresParaQuantidades(notasRec)
+        notas: converterValoresParaQuantidades(notasRec),
+        moedas: converterValoresParaQuantidades(moedasRec)
       },
       valor_recebido: somaRecebimento
     }, receivingTroca)
@@ -230,9 +234,9 @@ export const useExchanges = (user, dataFiltro) => {
   return {
     user, formProps, isPageLoading, isActionLoading, trocasList,
     isModalOpen, setIsModalOpen, editingId, tipoTroca, setTipoTroca,
-    notas, notasIn, isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec,
+    notas, notasIn, isReceiveModalOpen, setIsReceiveModalOpen, receivingTroca, notasRec, moedasRec,
     origemSelecionada, destinoSelecionado, valorCalculadoOut, valorCalculadoIn, somaRecebimento, isMatchInterna, isMatchRecebimento,
-    formatRecebedor, handleNotaChange, handleNotaInChange, handleNotaRecChange,
+    formatRecebedor, handleNotaChange, handleNotaInChange, handleNotaRecChange, handleMoedaRecChange,
     handleEdit, handleDelete, fecharModal, onSubmitCreate, handleOpenReceive, onSubmitReceive, imprimirComprovante
   }
 }

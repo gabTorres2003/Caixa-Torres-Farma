@@ -161,14 +161,14 @@ export const useDeposits = (user, dataFiltro) => {
       }
 
       const inflowDetails = payloadEntrada.detalhes_troca;
-      const isTrocaMoedas = registroOriginal.categoria === 'Moedas (Troca Externa)';
-      const denominacoesRecebidas = isTrocaMoedas ? inflowDetails?.moedas : inflowDetails?.notas;
-      if (!denominacoesRecebidas || Object.keys(denominacoesRecebidas).length === 0) {
-        throw new Error(`Informe as ${isTrocaMoedas ? 'moedas' : 'notas'} recebidas por denominação.`)
+      const notasRecebidas = inflowDetails?.notas || {};
+      const moedasRecebidas = inflowDetails?.moedas || {};
+      if (!Object.keys(notasRecebidas).length && !Object.keys(moedasRecebidas).length) {
+        throw new Error('Informe as cédulas ou moedas recebidas por denominação.')
       }
 
       const valorRecebidoCentavos = Math.round(Number(payloadEntrada.valor_recebido) * 100)
-      const valorFisicoCentavos = Object.entries(denominacoesRecebidas).reduce((total, [face, quantidade]) => {
+      const valorFisicoCentavos = [...Object.entries(notasRecebidas), ...Object.entries(moedasRecebidas)].reduce((total, [face, quantidade]) => {
         const qtd = Number(quantidade)
         if (!Number.isInteger(qtd) || qtd < 0) {
           throw new Error('As quantidades físicas recebidas devem ser inteiras e não negativas.')
@@ -197,15 +197,8 @@ export const useDeposits = (user, dataFiltro) => {
       const vaiParaCofre = registroOriginal?.origem !== 'Caixa Atual';
 
       if (vaiParaCofre) {
-          if (inflowDetails && inflowDetails.notas && registroOriginal.categoria !== 'Moedas (Troca Externa)') {
+          if (Object.keys(notasRecebidas).length || Object.keys(moedasRecebidas).length) {
               const result = await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, inflowDetails.notas, inflowDetails.moedasValor || 0, payloadEntrada.valor_recebido, `Retorno de ${registroOriginal.categoria} (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
-              payloadToDb.detalhes_troca.operacao_ids = [
-                ...(registroOriginal.detalhes_troca?.operacao_ids || []),
-                result.operationId
-              ];
-          }
-          else if (inflowDetails && inflowDetails.moedas && registroOriginal.categoria === 'Moedas (Troca Externa)') {
-              const result = await SupabaseCashRepository.registerInflowToVault(user.store_id, user.id, null, 0, payloadEntrada.valor_recebido, `Retorno de Moedas (${registroOriginal?.origem || 'Rua'})`, inflowDetails.moedas);
               payloadToDb.detalhes_troca.operacao_ids = [
                 ...(registroOriginal.detalhes_troca?.operacao_ids || []),
                 result.operationId
