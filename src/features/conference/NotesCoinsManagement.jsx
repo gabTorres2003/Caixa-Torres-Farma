@@ -7,6 +7,13 @@ import { Modal } from '../../shared/components/modals/Modal'
 import { Table } from '../../shared/components/tables/Table'
 import { Edit, Save, PlusCircle, AlertTriangle, Loader2, Settings2, Info, Clock, ArrowDownCircle, Briefcase, Calendar, Undo2 } from 'lucide-react'
 
+const BOLSA_TEMPLATE_PADRAO = {
+  20: 140, 10: 110, 5: 100, 2: 50,
+  1: 5, 0.5: 10, 0.25: 10, 0.1: 3, 0.05: 2
+}
+
+const normalizarValorEmCentavos = (valor) => Math.round((Number(valor) || 0) * 100)
+
 export const NotesCoinsManagement = () => {
   const { user } = useAuth()
   
@@ -22,12 +29,12 @@ export const NotesCoinsManagement = () => {
 
   // Estados: Preparar Bolsas
   const [isBolsasModalOpen, setIsBolsasModalOpen] = useState(false)
+  const [isEditingBolsaTemplate, setIsEditingBolsaTemplate] = useState(false)
+  const [isEditingRetiradaAtual, setIsEditingRetiradaAtual] = useState(false)
   const [qtdBolsas, setQtdBolsas] = useState(1)
-  // Receita de bolo inicial convertida em REAIS (R$)
-  const [bolsaTemplate, setBolsaTemplate] = useState({
-    20: 140, 10: 110, 5: 100, 2: 50,
-    1: 5, 0.5: 10, 0.25: 10, 0.1: 3, 0.05: 2
-  })
+  const [bolsaTemplate, setBolsaTemplate] = useState(BOLSA_TEMPLATE_PADRAO)
+  const [bolsaTemplateDraft, setBolsaTemplateDraft] = useState(BOLSA_TEMPLATE_PADRAO)
+  const [bolsaRetiradaAtual, setBolsaRetiradaAtual] = useState(BOLSA_TEMPLATE_PADRAO)
 
   // Estados: Sobra de Caixa (Valores em Reais)
   const [isSobraModalOpen, setIsSobraModalOpen] = useState(false)
@@ -73,24 +80,86 @@ export const NotesCoinsManagement = () => {
   }
 
   // ================= FUNÇÕES DE PREPARAR BOLSAS =================
-  const handleTemplateChange = (valorFace, val) => setBolsaTemplate(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
+  const handleTemplateChange = (valorFace, val) => setBolsaTemplateDraft(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
+  const handleRetiradaAtualChange = (valorFace, val) => setBolsaRetiradaAtual(prev => ({ ...prev, [valorFace]: parseFloat(val) || 0 }))
+
+  useEffect(() => {
+    if (!user?.store_id) return
+    const storageKey = `caixa-bolsa-template-${user.store_id}`
+    try {
+      const savedTemplate = window.localStorage.getItem(storageKey)
+      const parsedTemplate = savedTemplate ? JSON.parse(savedTemplate) : null
+      if (parsedTemplate && typeof parsedTemplate === 'object') {
+        setBolsaTemplate({ ...BOLSA_TEMPLATE_PADRAO, ...parsedTemplate })
+      } else {
+        setBolsaTemplate(BOLSA_TEMPLATE_PADRAO)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar composição padrão das bolsas:', error)
+      setBolsaTemplate(BOLSA_TEMPLATE_PADRAO)
+    }
+  }, [user?.store_id])
+
+  const abrirModalBolsas = () => {
+    setBolsaRetiradaAtual({ ...bolsaTemplate })
+    setIsEditingRetiradaAtual(false)
+    setIsBolsasModalOpen(true)
+  }
+
+  const fecharModalBolsas = () => {
+    setIsBolsasModalOpen(false)
+    setIsEditingBolsaTemplate(false)
+    setIsEditingRetiradaAtual(false)
+    setBolsaRetiradaAtual({ ...bolsaTemplate })
+  }
+
+  const abrirEdicaoComposicao = () => {
+    setBolsaTemplateDraft({ ...bolsaTemplate })
+    setIsEditingBolsaTemplate(true)
+    setIsEditingRetiradaAtual(false)
+  }
+
+  const salvarComposicaoPadrao = () => {
+    const invalidFace = denominations.find(d => {
+      const valor = bolsaTemplateDraft[d.valor] || 0
+      return valor < 0 || normalizarValorEmCentavos(valor) % normalizarValorEmCentavos(d.valor) !== 0
+    })
+    if (invalidFace) {
+      return alert(`O valor da denominação R$ ${Number(invalidFace.valor).toFixed(2).replace('.', ',')} deve ser múltiplo exato da sua face.`)
+    }
+
+    try {
+      window.localStorage.setItem(`caixa-bolsa-template-${user.store_id}`, JSON.stringify(bolsaTemplateDraft))
+      setBolsaTemplate({ ...bolsaTemplateDraft })
+      setIsEditingBolsaTemplate(false)
+      setBolsaRetiradaAtual({ ...bolsaTemplateDraft })
+      alert('Composição padrão da bolsa salva. As próximas montagens utilizarão essa configuração.')
+    } catch (error) {
+      console.error('Erro ao salvar composição padrão das bolsas:', error)
+      alert('Não foi possível salvar a composição padrão da bolsa.')
+    }
+  }
 
   let hasBolsaError = false; let totalBolsaRetirada = 0;
   const impactList = denominations.map(d => {
-    const neededReais = (bolsaTemplate[d.valor] || 0) * qtdBolsas;
-    const neededUnits = Math.round(neededReais / d.valor);
+    const valuePerBag = bolsaRetiradaAtual[d.valor] || 0
+    const neededReais = valuePerBag * qtdBolsas;
+    const neededUnits = normalizarValorEmCentavos(d.valor) > 0
+      ? normalizarValorEmCentavos(neededReais) / normalizarValorEmCentavos(d.valor)
+      : 0;
     const stockUnits = d.quantidade_atual || 0;
     
-    const isInsufficient = neededUnits > stockUnits;
+    const isInvalidMultiple = valuePerBag < 0 || !Number.isInteger(neededUnits)
+    const isInsufficient = isInvalidMultiple || neededUnits > stockUnits;
     if (isInsufficient) hasBolsaError = true;
-    totalBolsaRetirada += (neededUnits * d.valor);
+    if (!isInvalidMultiple) totalBolsaRetirada += (neededUnits * d.valor);
     
-    return { valor: d.valor, tipo: d.tipo, neededUnits, neededReais, stockUnits, isInsufficient };
+    return { valor: d.valor, tipo: d.tipo, neededUnits, neededReais, stockUnits, isInsufficient, isInvalidMultiple };
   }).filter(item => item.neededUnits > 0);
 
   const handleSalvarBolsas = async (e) => {
     e.preventDefault();
-    if (hasBolsaError) return alert('Estoque insuficiente para preparar essa quantidade de bolsas.');
+    if (hasBolsaError) return alert('Corrija os valores incompatíveis com as denominações ou o estoque insuficiente antes de confirmar.');
     
     const notas = {}; const moedas = {}; let moedasValorTotal = 0;
     impactList.forEach(item => {
@@ -239,7 +308,7 @@ export const NotesCoinsManagement = () => {
       {/* BOTÕES DE AÇÃO: Alinhados Lado a Lado Horizontalmente */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', paddingBottom: '8px' }}>
         
-        <Button variant="primary" onClick={() => setIsBolsasModalOpen(true)} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none', width: 'auto' }}>
+        <Button variant="primary" onClick={abrirModalBolsas} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none', width: 'auto' }}>
           Preparar Bolsas
         </Button>
 
@@ -365,8 +434,22 @@ export const NotesCoinsManagement = () => {
       </Card>
 
       {/* MODAL: PREPARAR BOLSAS DE ABERTURA */}
-      <Modal isOpen={isBolsasModalOpen} onClose={() => setIsBolsasModalOpen(false)} title="Preparar Bolsas de Abertura">
+      <Modal isOpen={isBolsasModalOpen} onClose={fecharModalBolsas} title="Preparar Bolsas de Abertura">
         <form onSubmit={handleSalvarBolsas} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', padding: '12px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+            <Button type="button" variant="secondary" onClick={abrirEdicaoComposicao} icon={Settings2} style={{ width: 'auto' }}>
+              Editar Composição da Bolsa
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => { setIsEditingRetiradaAtual(true); setIsEditingBolsaTemplate(false) }} icon={Edit} style={{ width: 'auto' }}>
+              Editar Retirada Atual
+            </Button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: '#475569' }}>
+            <span><b>Composição padrão:</b> utilizada nas próximas montagens e persistida por loja.</span>
+            <span><b>Retirada atual:</b> alteração temporária somente para esta montagem.</span>
+          </div>
 
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', backgroundColor: '#eff6ff', padding: '16px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
             <Briefcase size={32} color="#1e40af" />
@@ -378,14 +461,14 @@ export const NotesCoinsManagement = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', backgroundColor: '#f8fafc' }}>
-               <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: 'var(--color-text-main)' }}>Composição de 1 Bolsa (Em R$)</h3>
+               <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '12px', color: 'var(--color-text-main)' }}>{isEditingRetiradaAtual ? 'Retirada Atual por Bolsa (Em R$)' : 'Composição Aplicada por Bolsa (Em R$)'}</h3>
                <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                  {denominations.map(d => (
                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>R$ {d.valor.toFixed(2).replace('.',',')}</span>
                       <div style={{ position: 'relative' }}>
                         <span style={{ position: 'absolute', left: 8, top: 10, color: '#94a3b8', fontSize: '0.8rem' }}>R$</span>
-                        <input type="number" step={d.valor} min="0" className="input-field" style={{ width: '85px', padding: '4px 4px 4px 26px', textAlign: 'center', height: '30px' }} value={bolsaTemplate[d.valor] ?? ''} onChange={(e) => handleTemplateChange(d.valor, e.target.value)} />
+                        <input type="number" step={d.valor} min="0" disabled={!isEditingRetiradaAtual} className="input-field" style={{ width: '85px', padding: '4px 4px 4px 26px', textAlign: 'center', height: '30px' }} value={bolsaRetiradaAtual[d.valor] ?? ''} onChange={(e) => handleRetiradaAtualChange(d.valor, e.target.value)} />
                       </div>
                    </div>
                  ))}
@@ -398,7 +481,7 @@ export const NotesCoinsManagement = () => {
                     <li key={item.valor} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px dashed ${hasBolsaError ? '#fca5a5' : '#bbf7d0'}` }}>
                       <span>{item.neededUnits} un. (R$ {item.neededReais.toFixed(2)})</span>
                       <span style={{ fontWeight: 'bold', color: item.isInsufficient ? '#dc2626' : '#059669' }}>
-                         {item.isInsufficient ? `Falta ${item.neededUnits - item.stockUnits}` : 'OK'}
+                         {item.isInvalidMultiple ? 'Valor inválido' : item.isInsufficient ? `Falta ${item.neededUnits - item.stockUnits}` : 'OK'}
                       </span>
                     </li>
                   ))}
@@ -411,12 +494,32 @@ export const NotesCoinsManagement = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-            <Button type="button" variant="secondary" onClick={() => setIsBolsasModalOpen(false)}>Cancelar</Button>
+            <Button type="button" variant="secondary" onClick={fecharModalBolsas}>Cancelar</Button>
             <Button type="submit" isLoading={isActionLoading} disabled={hasBolsaError} icon={Briefcase} style={{ backgroundColor: '#1e40af', border: 'none' }}>
               Confirmar Retirada
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal isOpen={isEditingBolsaTemplate} onClose={() => setIsEditingBolsaTemplate(false)} title="Editar Composição da Bolsa">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', padding: '12px', borderRadius: '8px', color: '#1e3a8a', fontSize: '0.85rem' }}>
+            Esta é uma mudança fixa. A composição salva será aplicada automaticamente às próximas bolsas e não altera montagens anteriores.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', maxHeight: '45vh', overflowY: 'auto' }}>
+            {denominations.map(d => (
+              <label key={d.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                R$ {d.valor.toFixed(2).replace('.', ',')}
+                <input type="number" step={d.valor} min="0" className="input-field" value={bolsaTemplateDraft[d.valor] ?? ''} onChange={(e) => handleTemplateChange(d.valor, e.target.value)} />
+              </label>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Button type="button" variant="secondary" onClick={() => setIsEditingBolsaTemplate(false)}>Cancelar</Button>
+            <Button type="button" onClick={salvarComposicaoPadrao} icon={Save}>Salvar Composição Padrão</Button>
+          </div>
+        </div>
       </Modal>
 
       {/* MODAL: ADICIONAR VALORES MANUALMENTE */}

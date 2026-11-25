@@ -181,7 +181,7 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
             horasTrabalhadas: dayData.hoursWorked,
             totalHorasDia: dayData.hoursWorked,
             saldoHoras: dayData.balance,
-            statusText: status || (entradaRecords.length || saidaRecords.length ? 'OK' : 'FALTA')
+            statusText: status || (dayRecords.length ? 'OK' : 'FALTA')
           }
         })
 
