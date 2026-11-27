@@ -1,12 +1,9 @@
 const SPECIAL_STATUSES = ['FERIAS', 'ATESTADO', 'FOLGA', 'TROCA_DE_ESCALA', 'FOLGA_FERIADO', 'FALTA']
+export const ATTENDANCE_TOLERANCE_MINUTES = 5
 
 export const FERIADO_SCHEDULE = { entrada: 8 * 60, saida: 20 * 60 }
 
-const getDefaultHolidaySchedule = (dateString) => (
-  new Date(`${dateString}T00:00:00`).getDay() === 0
-    ? { entrada: 8 * 60, saida: 14 * 60 }
-    : FERIADO_SCHEDULE
-)
+const getDefaultHolidaySchedule = () => FERIADO_SCHEDULE
 
 export const getLocalDateStr = (isoString) => {
   const date = new Date(isoString)
@@ -52,13 +49,14 @@ export const getScheduleForDate = (dateString, storedSchedule, holiday) => {
       || (holiday.horarioInicio && holiday.horarioFim
         ? { entrada: holiday.horarioInicio, saida: holiday.horarioFim }
         : null)
-    return manualSchedule || getDefaultHolidaySchedule(dateString)
+    return manualSchedule || getDefaultHolidaySchedule()
   }
 
   const day = new Date(`${dateString}T00:00:00`).getDay()
   const schedule = parseSchedule(storedSchedule)
   if (day === 0 && schedule.domingo) return parseRange(schedule.domingo)
   if (day === 6 && schedule.sabado) return parseRange(schedule.sabado)
+  if (day === 0 || day === 6) return null
   return schedule.semana ? parseRange(schedule.semana) : null
 }
 
@@ -68,11 +66,16 @@ export const getDayStatus = (records, dateString, schedule, holiday) => {
     .find(Boolean)
   if (explicitStatus) return explicitStatus.tipo_registro
   if (holiday?.status === 'CONFIRMADA' && !holiday.works) return 'FOLGA_FERIADO'
-  if (records.some((record) => ['ENTRADA', 'SAIDA'].includes(record.tipo_registro))) return null
+  const hasEntry = records.some((record) => record.tipo_registro === 'ENTRADA')
+  const hasExit = records.some((record) => record.tipo_registro === 'SAIDA')
+  if (hasEntry !== hasExit) return 'REGISTRO_INCOMPLETO'
+  if (hasEntry && hasExit) return null
 
-  const day = new Date(`${dateString}T00:00:00`).getDay()
-  if (day === 0 || day === 6) return 'FOLGA'
-  return schedule ? 'FALTA' : null
+  // Folga só é inferida quando existe marcação explícita ou quando o dia
+  // não tem jornada prevista. Dia escalado sem ponto aguarda conferência.
+  if (schedule) return 'PENDENTE_CONFERENCIA'
+  const weekday = new Date(`${dateString}T00:00:00`).getDay()
+  return weekday === 0 || weekday === 6 ? 'FOLGA' : 'SEM_ESCALA'
 }
 
 export const calculateDay = ({ dateString, records, storedSchedule, holiday }) => {
@@ -85,7 +88,22 @@ export const calculateDay = ({ dateString, records, storedSchedule, holiday }) =
   const realEntry = entry ? entry.getHours() * 60 + entry.getMinutes() : null
   const realExit = exit ? exit.getHours() * 60 + exit.getMinutes() : null
   const hoursExpected = schedule ? schedule.saida - schedule.entrada : 0
-  const hoursWorked = realEntry !== null && realExit !== null && !status ? Math.max(0, realExit - realEntry) : 0
+  // A troca é uma anotação explícita, não altera horas trabalhadas nem saldo.
+  const statusAffectsHours = status && status !== 'TROCA_DE_ESCALA'
+  const hoursWorked = realEntry !== null && realExit !== null && !statusAffectsHours ? Math.max(0, realExit - realEntry) : 0
+  // Ausências (férias, atestado, folga, folga feriado) não afetam saldo nem
+  // horas previstas: exibem apenas a situação visualmente, sem impacto no cálculo.
+  const NAO_AFETAM_SALDO = [
+    'PENDENTE_CONFERENCIA',
+    'REGISTRO_INCOMPLETO',
+    'FERIAS',
+    'ATESTADO',
+    'FOLGA',
+    'FOLGA_FERIADO'
+  ]
+  const balance = NAO_AFETAM_SALDO.includes(status)
+    ? null
+    : hoursWorked - hoursExpected
 
   return {
     schedule,
@@ -94,11 +112,26 @@ export const calculateDay = ({ dateString, records, storedSchedule, holiday }) =
     realExit,
     hoursExpected,
     hoursWorked,
-    balance: hoursWorked - hoursExpected,
-    entryDelay: realEntry !== null && schedule ? Math.max(0, realEntry - schedule.entrada) : 0,
+    balance,
+    // Atrasos de até cinco minutos são tolerados e não entram no total.
+    entryDelay: realEntry !== null && schedule
+      ? Math.max(0, realEntry - schedule.entrada - ATTENDANCE_TOLERANCE_MINUTES)
+      : 0,
     exitDifference: realExit !== null && schedule ? realExit - schedule.saida : 0
   }
 }
+
+export const getAttendanceStatusLabel = (status) => ({
+  FERIAS: 'FÉRIAS',
+  ATESTADO: 'ATESTADO',
+  FOLGA: 'FOLGA',
+  TROCA_DE_ESCALA: 'TROCA DE ESCALA',
+  FOLGA_FERIADO: 'FOLGA FERIADO',
+  FALTA: 'FALTA',
+  PENDENTE_CONFERENCIA: 'PENDENTE DE CONFERÊNCIA',
+  REGISTRO_INCOMPLETO: 'REGISTRO INCOMPLETO',
+  SEM_ESCALA: 'SEM ESCALA'
+}[status] || status || 'OK')
 
 export const formatMinutesClock = (minutes) => {
   if (minutes == null || Number.isNaN(minutes)) return '-'

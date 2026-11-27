@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { SupabaseMotoboyRepository } from '../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 
 export const useMotoboys = (user, dataFiltro) => {
+  const isAdmin = user?.role === 'ADMIN'
   const [motoboys, setMotoboys] = useState([])
   const [timeRecords, setTimeRecords] = useState([])
   const [routes, setRoutes] = useState([])
@@ -66,6 +67,10 @@ export const useMotoboys = (user, dataFiltro) => {
 
   // === REGISTRO DE PONTO MANUAL E AUSÊNCIAS ===
   const registrarHorarioManual = async ({ id, motoboy_id, tipo_registro, registro_time }) => {
+    if (id && !isAdmin) {
+      alert('Somente ADMIN pode corrigir registros de ponto.')
+      return false
+    }
     setIsActionLoading(true)
     try {
       const payload = {
@@ -150,6 +155,10 @@ export const useMotoboys = (user, dataFiltro) => {
   }
 
   const salvarObservacao = async (id, observacoes) => {
+    if (!isAdmin) {
+      alert('Somente ADMIN pode alterar dados de registros de ponto.')
+      return false
+    }
     setIsActionLoading(true)
     try {
       await SupabaseMotoboyRepository.updateTimeRecord(id, { observacoes })
@@ -164,83 +173,20 @@ export const useMotoboys = (user, dataFiltro) => {
   }
 
   const registrarTrocaTurno = async ({ motoboyIds, modo, dataInicio, dataFim }) => {
-    setIsActionLoading(true)
-    try {
-      if (!motoboyIds || motoboyIds.length < 2) {
-        throw new Error('Selecione pelo menos 2 motoboys para a troca.')
-      }
-
-      const start = new Date(`${dataInicio}T00:00:00`)
-      const end = new Date(`${dataFim}T00:00:00`)
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
-        throw new Error('Periodo invalido.')
-      }
-
-      const allRecords = await SupabaseMotoboyRepository.getTimeTracking(user.store_id, dataInicio, dataFim)
-      let totalSwap = 0
-
-      const cursor = new Date(start)
-      while (cursor <= end) {
-        const dayStr = cursor.toISOString().slice(0, 10)
-        const dayRecords = allRecords.filter(r => {
-          if (!r.registro_time) return false
-          const d = new Date(r.registro_time)
-          const tzOffset = d.getTimezoneOffset() * 60000
-          const localDateStr = new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
-          return localDateStr === dayStr
-        })
-
-        for (let i = 0; i < motoboyIds.length; i++) {
-          const j = (i + 1) % motoboyIds.length
-          const idA = motoboyIds[i]
-          const idB = motoboyIds[j]
-
-          const entradasA = dayRecords.filter(r => r.motoboy_id === idA && r.tipo_registro === 'ENTRADA')
-          const entradasB = dayRecords.filter(r => r.motoboy_id === idB && r.tipo_registro === 'ENTRADA')
-          const saidasA = dayRecords.filter(r => r.motoboy_id === idA && r.tipo_registro === 'SAIDA')
-          const saidasB = dayRecords.filter(r => r.motoboy_id === idB && r.tipo_registro === 'SAIDA')
-
-          for (const rec of entradasA) {
-            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
-              motoboy_id: idB,
-              observacoes: `Troca de turno em ${dayStr}`
-            })
-            totalSwap++
-          }
-          for (const rec of entradasB) {
-            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
-              motoboy_id: idA,
-              observacoes: `Troca de turno em ${dayStr}`
-            })
-            totalSwap++
-          }
-          for (const rec of saidasA) {
-            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
-              motoboy_id: idB,
-              observacoes: `Troca de turno em ${dayStr}`
-            })
-            totalSwap++
-          }
-          for (const rec of saidasB) {
-            await SupabaseMotoboyRepository.updateTimeRecord(rec.id, {
-              motoboy_id: idA,
-              observacoes: `Troca de turno em ${dayStr}`
-            })
-            totalSwap++
-          }
-        }
-        cursor.setDate(cursor.getDate() + 1)
-      }
-
-      await carregarDados()
-      alert(`Troca de turno concluida! ${totalSwap} registros trocados.`)
-      return true
-    } catch (err) {
-      alert('Erro ao registrar troca de turno: ' + err.message)
+    // O schema atual não possui entidade para exceção temporal de escala.
+    // Não reatribui batidas nem grava em observacoes, que não modela reversão.
+    if (!motoboyIds || motoboyIds.length < 2) {
+      alert('Selecione pelo menos 2 motoboys para a troca.')
       return false
-    } finally {
-      setIsActionLoading(false)
     }
+    const start = new Date(`${dataInicio}T00:00:00`)
+    const end = new Date(`${dataFim}T00:00:00`)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+      alert('Periodo invalido.')
+      return false
+    }
+    alert('A troca não foi registrada: o schema atual não possui estrutura para persistir uma exceção temporal de escala com reversão.')
+    return false
   }
 
   const registrarAusenciaMulti = async ({ motoboyIds, tipoRegistro, dataInicio, dataFim }) => {
@@ -282,6 +228,10 @@ export const useMotoboys = (user, dataFiltro) => {
   }
 
   const excluirPonto = async (id) => {
+    if (!isAdmin) {
+      alert('Somente ADMIN pode excluir registros de ponto.')
+      return
+    }
     if(!window.confirm("Deseja mesmo excluir este registro de ponto?")) return;
     setIsActionLoading(true)
     try {

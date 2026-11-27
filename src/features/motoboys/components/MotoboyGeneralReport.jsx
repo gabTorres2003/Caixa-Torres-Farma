@@ -5,7 +5,7 @@ import { FileBarChart, Download, Users } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 import { BalcaoHolidayRepository } from '../../../infrastructure/supabase/repositories/BalcaoHolidayRepository'
 import { generateGeneralReportPdf } from '../../../core/utils/pdfGenerator'
-import { calculateDay, getLocalDateStr as getAttendanceDate } from '../utils/attendance'
+import { calculateDay, getAttendanceStatusLabel, getLocalDateStr as getAttendanceDate } from '../utils/attendance'
 
 const getLocalDateStr = (isoString) => {
   const d = new Date(isoString)
@@ -124,7 +124,6 @@ export const MotoboyGeneralReport = ({ user, motoboys }) => {
 
           const dayRows = days.map(dayStr => {
             const dayRecords = motoboyRecords.filter(r => r.registro_time && getAttendanceDate(r.registro_time) === dayStr)
-            const hasWorkRecords = dayRecords.some(r => ['ENTRADA', 'SAIDA'].includes(r.tipo_registro))
             const holiday = holidayData.find((item) => item.data === dayStr)
             const dayData = calculateDay({
               dateString: dayStr,
@@ -146,7 +145,7 @@ export const MotoboyGeneralReport = ({ user, motoboys }) => {
               atrasoEntrada: entryDelay,
               diferencaSaida: exitDifference,
               saldoHoras: balance,
-              statusText: status || (hasWorkRecords ? 'OK' : 'FALTA')
+              statusText: getAttendanceStatusLabel(status)
             }
           })
 
@@ -270,7 +269,7 @@ export const MotoboyGeneralReport = ({ user, motoboys }) => {
                             <td style={{ border: '1px solid #e2e8f0', padding: '6px' }}>{d.realSaida}</td>
                             <td style={{ border: '1px solid #e2e8f0', padding: '6px', color: d.diferencaSaida > 0 ? '#16a34a' : d.diferencaSaida < 0 ? '#dc2626' : undefined }}>{formatMinutesClock(d.diferencaSaida)}</td>
                             <td style={{ border: '1px solid #e2e8f0', padding: '6px', color: d.horasTrabalhadas > d.horasPrevistas ? '#16a34a' : d.horasTrabalhadas < d.horasPrevistas ? '#dc2626' : undefined }}>{formatMinutes(d.horasTrabalhadas)}</td>
-                            <td style={{ border: '1px solid #e2e8f0', padding: '6px', fontWeight: 'bold', color: d.saldoHoras >= 0 ? '#16a34a' : '#dc2626' }}>{formatMinutes(d.saldoHoras)}</td>
+                            <td style={{ border: '1px solid #e2e8f0', padding: '6px', fontWeight: 'bold', color: d.saldoHoras == null ? undefined : d.saldoHoras >= 0 ? '#16a34a' : '#dc2626' }}>{d.saldoHoras == null ? '-' : formatMinutes(d.saldoHoras)}</td>
                             <td style={{ border: '1px solid #e2e8f0', padding: '6px', color: d.statusText === 'OK' ? '#16a34a' : d.statusText === 'FALTA' ? '#dc2626' : '#d97706' }}>{d.statusText}</td>
                           </tr>
                         ))}

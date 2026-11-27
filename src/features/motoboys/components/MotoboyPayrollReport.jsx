@@ -4,7 +4,7 @@ import { Button } from '../../../shared/components/buttons/Button'
 import { FileText, CalendarRange } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 import { BalcaoHolidayRepository } from '../../../infrastructure/supabase/repositories/BalcaoHolidayRepository'
-import { calculateDay, formatMinutes as formatHours, formatMinutesClock, getLocalDateStr } from '../utils/attendance'
+import { calculateDay, formatMinutes as formatHours, formatMinutesClock, getAttendanceStatusLabel, getLocalDateStr } from '../utils/attendance'
 
 const PERIOD_OPTIONS = [
   { value: 'SEMANAL', label: 'Semanal' },
@@ -166,11 +166,12 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
             holiday: holiday ? { ...holiday, motoboyId: selectedMotoboy, works: holiday.works(selectedMotoboy) } : null
           })
           const status = dayData.status
+          const statusText = getAttendanceStatusLabel(status)
 
           return {
             date: dayString,
             diaSemana: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][getTimeValue(dayString)],
-            status,
+            status: statusText,
             previstoEntrada: dayData.schedule ? `${String(Math.floor(dayData.schedule.entrada / 60)).padStart(2, '0')}:${String(dayData.schedule.entrada % 60).padStart(2, '0')}` : '-',
             realEntrada: dayData.realEntry != null ? `${String(Math.floor(dayData.realEntry / 60)).padStart(2, '0')}:${String(dayData.realEntry % 60).padStart(2, '0')}` : '-',
             atrasoEntrada: dayData.entryDelay,
@@ -181,7 +182,7 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
             horasTrabalhadas: dayData.hoursWorked,
             totalHorasDia: dayData.hoursWorked,
             saldoHoras: dayData.balance,
-            statusText: status || (dayRecords.length ? 'OK' : 'FALTA')
+            statusText
           }
         })
 
@@ -316,7 +317,7 @@ export const MotoboyPayrollReport = ({ user, motoboys }) => {
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.realSaida}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px', color: row.diferencaSaida > 0 ? '#16a34a' : row.diferencaSaida < 0 ? '#dc2626' : undefined }}>{formatMinutesClock(row.diferencaSaida)}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px', color: row.horasTrabalhadas > row.horasPrevistas ? '#16a34a' : row.horasTrabalhadas < row.horasPrevistas ? '#dc2626' : undefined }}>{formatHours(row.horasTrabalhadas)}</td>
-                          <td style={{ border: '1px solid #e2e8f0', padding: '8px', fontWeight: 'bold', color: row.saldoHoras >= 0 ? '#16a34a' : '#dc2626' }}>{formatHours(row.saldoHoras)}</td>
+                          <td style={{ border: '1px solid #e2e8f0', padding: '8px', fontWeight: 'bold', color: row.saldoHoras == null ? undefined : row.saldoHoras >= 0 ? '#16a34a' : '#dc2626' }}>{row.saldoHoras == null ? '-' : formatHours(row.saldoHoras)}</td>
                           <td style={{ border: '1px solid #e2e8f0', padding: '8px' }}>{row.status || row.statusText}</td>
                         </tr>
                       ))}

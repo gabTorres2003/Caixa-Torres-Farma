@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Card } from '../../../shared/components/cards/Card'
 import { Table } from '../../../shared/components/tables/Table'
 import { Button } from '../../../shared/components/buttons/Button'
+import { calculateDay } from '../utils/attendance'
 import { Clock, Calendar, Trash2, ArrowRightCircle, ArrowLeftCircle, MessageSquare, ArrowLeftRight, CheckSquare } from 'lucide-react'
 
 const getLocalDateTimeValue = () => {
@@ -60,7 +61,6 @@ export const TimeTracking = ({
   registrarAusencia,
   excluirPonto,
   salvarObservacao,
-  registrarTrocaTurno,
   registrarAusenciaMulti,
   isActionLoading,
   dataFiltro,
@@ -83,13 +83,6 @@ export const TimeTracking = ({
   })
   const [selectedMotoboyIds, setSelectedMotoboyIds] = useState([])
   const [obsModal, setObsModal] = useState({ open: false, recordId: null, value: '' })
-  const [trocaForm, setTrocaForm] = useState({
-    motoboyIds: [],
-    modo: 'HOJE',
-    dataInicio: getTodayStr(),
-    dataFim: getTodayStr()
-  })
-
   const resetManualForm = () => {
     setManualForm({ motoboy_id: '', tipo_registro: 'ENTRADA', registro_time: getLocalDateTimeValue() })
     setEditingManualId(null)
@@ -162,35 +155,24 @@ export const TimeTracking = ({
     setObsModal({ open: false, recordId: null, value: '' })
   }
 
-  const handleTrocaTurno = async () => {
-    if (trocaForm.motoboyIds.length < 2) {
-      return alert('Selecione pelo menos 2 motoboys para a troca.')
-    }
-    const dataInicio = trocaForm.modo === 'HOJE' ? getTodayStr() : trocaForm.dataInicio
-    const dataFim = trocaForm.modo === 'HOJE' ? getTodayStr() : trocaForm.dataFim
-    await registrarTrocaTurno({
-      motoboyIds: trocaForm.motoboyIds,
-      modo: trocaForm.modo,
-      dataInicio,
-      dataFim
-    })
-    setTrocaForm({ motoboyIds: [], modo: 'HOJE', dataInicio: getTodayStr(), dataFim: getTodayStr() })
-  }
-
-  const toggleTrocaMotoboy = (motoboyId) => {
-    setTrocaForm(prev => ({
-      ...prev,
-      motoboyIds: prev.motoboyIds.includes(motoboyId)
-        ? prev.motoboyIds.filter(id => id !== motoboyId)
-        : [...prev.motoboyIds, motoboyId]
-    }))
-  }
-
   const toggleMotoboySelection = (motoboyId) => {
     setSelectedMotoboyIds(prev =>
       prev.includes(motoboyId) ? prev.filter(id => id !== motoboyId) : [...prev, motoboyId]
     )
   }
+
+  const attendanceByMotoboy = motoboys.map((motoboy) => {
+    const records = timeRecords.filter((record) => record.motoboy_id === motoboy.id)
+    const day = calculateDay({
+      dateString: dataFiltro,
+      records,
+      storedSchedule: motoboy.horario_trabalho
+    })
+    const hasEntry = records.some((record) => record.tipo_registro === 'ENTRADA')
+    const hasExit = records.some((record) => record.tipo_registro === 'SAIDA')
+    const status = hasEntry !== hasExit ? 'REGISTRO_INCOMPLETO' : day.status
+    return status ? { id: motoboy.id, nome: motoboy.nome, status } : null
+  }).filter(Boolean)
 
   const columns = [
     { header: 'Data/Hora', render: (row) => new Date(row.registro_time).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
@@ -206,10 +188,12 @@ export const TimeTracking = ({
       )
     },
     { header: 'Obs', render: (row) => (
+        isAdmin ? (
         <button onClick={() => handleOpenObs(row)} style={{ background: 'none', border: 'none', color: row.observacoes ? '#2563eb' : '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} title={row.observacoes || 'Adicionar observacao'}>
           <MessageSquare size={16} />
           {row.observacoes && <span style={{ fontSize: '0.75rem', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}>{row.observacoes}</span>}
         </button>
+        ) : <span>{row.observacoes || '—'}</span>
       )
     },
     { header: 'Registrado por', render: (row) => <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{row.users?.nome}</span> },
@@ -220,9 +204,9 @@ export const TimeTracking = ({
               Editar
             </button>
           )}
-          <button onClick={() => excluirPonto(row.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }} title="Excluir Registro">
+          {isAdmin && <button onClick={() => excluirPonto(row.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer' }} title="Excluir Registro">
             <Trash2 size={18} />
-          </button>
+          </button>}
         </div>
       )
     }
@@ -245,7 +229,7 @@ export const TimeTracking = ({
           </div>
         </div>
 
-        <div style={{ marginTop: '20px', padding: '16px', border: '1px solid #dbeafe', borderRadius: '10px', backgroundColor: '#eff6ff' }}>
+        {isAdmin && <div style={{ marginTop: '20px', padding: '16px', border: '1px solid #dbeafe', borderRadius: '10px', backgroundColor: '#eff6ff' }}>
           <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold', color: '#1d4ed8' }}>Inserir / Editar Horario Manual</h4>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', alignItems: 'end' }}>
             <div>
@@ -275,78 +259,16 @@ export const TimeTracking = ({
               )}
             </div>
           </div>
+        </div>}
+      </Card>
+
+      <Card title="Exceção de escala" icon={ArrowLeftRight}>
+        <div role="status" style={{ padding: '14px 16px', border: '1px solid #fcd34d', borderRadius: '10px', backgroundColor: '#fffbeb', color: '#92400e' }}>
+          O registro de troca reversível ficará disponível após a estrutura de persistência da fase 2. Nenhuma batida será movida ou alterada por esta tela.
         </div>
       </Card>
 
-      {isAdmin && (
-        <Card title="Troca de Turno (Rodizio)" icon={ArrowLeftRight}>
-          <div style={{ padding: '16px', border: '1px solid #fef3c7', borderRadius: '10px', backgroundColor: '#fffbeb' }}>
-            <h4 style={{ margin: '0 0 8px', fontSize: '1rem', fontWeight: 'bold', color: '#92400e' }}>Troca de Horario entre Motoboys</h4>
-            <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#78716c' }}>
-              Selecione os motoboys que vao trocar o turno. Os registros de ENTRADA e SAIDA (incluindo os cadastrados manualmente) serao trocados entre si.
-            </p>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#92400e' }}>Selecione os Motoboys para a troca:</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {motoboys.map(m => (
-                  <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', backgroundColor: trocaForm.motoboyIds.includes(m.id) ? '#fef3c7' : '#fff', fontSize: '0.9rem' }}>
-                    <input type="checkbox" checked={trocaForm.motoboyIds.includes(m.id)} onChange={() => toggleTrocaMotoboy(m.id)} />
-                    {m.nome}
-                  </label>
-                ))}
-              </div>
-              {trocaForm.motoboyIds.length > 0 && (
-                <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#92400e' }}>
-                  {trocaForm.motoboyIds.length} motoboys selecionados para troca.
-                </p>
-              )}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', alignItems: 'end' }}>
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Periodo</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => setTrocaForm({ ...trocaForm, modo: 'HOJE' })}
-                    style={{ padding: '8px 16px', fontSize: '0.85rem', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', backgroundColor: trocaForm.modo === 'HOJE' ? '#d97706' : '#fff', color: trocaForm.modo === 'HOJE' ? '#fff' : '#475569' }}
-                  >
-                    Apenas hoje
-                  </button>
-                  <button
-                    onClick={() => setTrocaForm({ ...trocaForm, modo: 'PERSONALIZADO' })}
-                    style={{ padding: '8px 16px', fontSize: '0.85rem', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', backgroundColor: trocaForm.modo === 'PERSONALIZADO' ? '#d97706' : '#fff', color: trocaForm.modo === 'PERSONALIZADO' ? '#fff' : '#475569' }}
-                  >
-                    Periodo personalizado
-                  </button>
-                </div>
-              </div>
-
-              {trocaForm.modo === 'PERSONALIZADO' && (
-                <>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data inicio</label>
-                    <input type="date" className="input-field" value={trocaForm.dataInicio} onChange={(e) => setTrocaForm({ ...trocaForm, dataInicio: e.target.value })} style={{ width: '100%' }} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Data fim</label>
-                    <input type="date" className="input-field" value={trocaForm.dataFim} onChange={(e) => setTrocaForm({ ...trocaForm, dataFim: e.target.value })} style={{ width: '100%' }} />
-                  </div>
-                </>
-              )}
-
-              <div>
-                <Button onClick={handleTrocaTurno} isLoading={isActionLoading} style={{ backgroundColor: '#d97706', border: 'none' }} icon={ArrowLeftRight}>
-                  {trocaForm.modo === 'HOJE' ? 'Trocar hoje' : 'Trocar no periodo'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {isAdmin && (
-        <Card title="Gerenciamento de Ausencias e Folgas" icon={CheckSquare}>
+      <Card title="Exceções, ausências e folgas" icon={CheckSquare}>
           <div style={{ display: 'grid', gap: '16px' }}>
             <div style={{ padding: '14px', border: '1px solid #dbeafe', borderRadius: '10px', backgroundColor: '#eff6ff' }}>
               <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontWeight: 'bold', color: '#1d4ed8' }}>Selecionar Motoboys para Ausencia</h4>
@@ -380,9 +302,8 @@ export const TimeTracking = ({
                   <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px' }}>Situacao</label>
                   <select className="input-field" value={absenceForm.tipoRegistro} onChange={(e) => setAbsenceForm({ ...absenceForm, tipoRegistro: e.target.value })} style={{ width: '100%' }}>
                     <option value="FOLGA">Folga</option>
-                    <option value="FALTA">Confirmar Falta</option>
+                    {isAdmin && <option value="FALTA">Confirmar Falta</option>}
                     <option value="ATESTADO">Atestado</option>
-                    <option value="TROCA_DE_ESCALA">Troca de Escala</option>
                     <option value="FOLGA_FERIADO">Folga Feriado</option>
                     <option value="FERIAS">Ferias</option>
                   </select>
@@ -400,10 +321,19 @@ export const TimeTracking = ({
               )}
             </div>
           </div>
-        </Card>
-      )}
+      </Card>
 
       <Card title="Registros de Ponto do Dia">
+        {attendanceByMotoboy.length > 0 && (
+          <div role="status" aria-live="polite" style={{ marginBottom: '14px', padding: '12px 14px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', color: '#92400e' }}>
+            <strong>Conferência necessária</strong>
+            <ul style={{ margin: '8px 0 0', paddingLeft: '20px' }}>
+              {attendanceByMotoboy.map(({ id, nome, status }) => (
+                <li key={id}>{nome}: {status === 'PENDENTE_CONFERENCIA' ? 'pendente de conferência' : 'registro incompleto (entrada ou saída sem par)'}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
           <label style={{ fontSize: '0.875rem', fontWeight: 'bold', color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Calendar size={18} color="var(--color-primary)"/> Filtrar:

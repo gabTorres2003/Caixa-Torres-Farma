@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form'
 import { useAuth } from '../../core/hooks/useAuth'
 import { useMotoboys } from '../../core/hooks/useMotoboys'
 import { TimeTracking } from './components/TimeTracking'
-import { RouteManager } from './components/RouteManager'
 import { MotoboyReports } from './components/MotoboyReports'
 import { MotoboyPayrollReport } from './components/MotoboyPayrollReport'
 import { MotoboyGeneralReport } from './components/MotoboyGeneralReport'
@@ -12,7 +11,7 @@ import { Modal } from '../../shared/components/modals/Modal'
 import { FormInput } from '../../shared/components/forms/FormInput'
 import { Card } from '../../shared/components/cards/Card'
 import { Table } from '../../shared/components/tables/Table'
-import { Loader2, Clock, Map, FileBarChart, FileText, UserPlus, Users, Pencil, Trash2, BarChart3 } from 'lucide-react'
+import { Loader2, Clock, FileBarChart, FileText, UserPlus, Users, Pencil, Trash2, BarChart3 } from 'lucide-react'
 
 const parseHorarioTrabalho = (texto) => {
   const padrao = {
@@ -67,12 +66,13 @@ export const Motoboys = () => {
 
   const hookData = useMotoboys(user, dataFiltro)
   const [activeTab, setActiveTab] = useState('PONTO')
+  const [activeReport, setActiveReport] = useState('ESPELHO')
   
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingMotoboyId, setEditingMotoboyId] = useState(null)
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm()
 
-  const visibleTabs = isAdmin ? ['PONTO', 'ROTAS', 'RELATORIOS', 'PAGAMENTOS', 'RELATORIO_GERAL', 'EQUIPE'] : ['PONTO', 'RELATORIOS', 'EQUIPE']
+  const visibleTabs = ['PONTO', 'RELATORIOS', 'EQUIPE']
   const equipeColumns = [
     { header: 'Nome', accessorKey: 'nome' },
     { header: 'Horário de Trabalho', render: (row) => row.horario_trabalho || '-' },
@@ -133,7 +133,7 @@ export const Motoboys = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '1.875rem', color: 'var(--color-primary)', fontWeight: 'bold' }}>Gestão de Motoboys</h1>
-          <p style={{ color: 'var(--color-text-muted)' }}>Controle de ponto, rotas de entrega e relatórios operacionais.</p>
+          <p style={{ color: 'var(--color-text-muted)' }}>Controle de ponto, equipe e relatórios operacionais.</p>
         </div>
         <Button onClick={() => handleOpenCadastro()} icon={UserPlus}>Cadastrar Motoboy</Button>
       </div>
@@ -147,36 +147,12 @@ export const Motoboys = () => {
             <Clock size={18} /> Registro de Ponto
           </button>
         )}
-        {isAdmin && (
-          <button 
-            onClick={() => setActiveTab('ROTAS')}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: activeTab === 'ROTAS' ? 'var(--color-primary)' : 'transparent', color: activeTab === 'ROTAS' ? '#fff' : '#64748b', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
-          >
-            <Map size={18} /> Gestão de Rotas
-          </button>
-        )}
         {visibleTabs.includes('RELATORIOS') && (
           <button 
             onClick={() => setActiveTab('RELATORIOS')}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: activeTab === 'RELATORIOS' ? '#16a34a' : 'transparent', color: activeTab === 'RELATORIOS' ? '#fff' : '#64748b', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            <FileBarChart size={18} /> Imprimir Folha de Ponto
-          </button>
-        )}
-        {isAdmin && (
-          <button 
-            onClick={() => setActiveTab('PAGAMENTOS')}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: activeTab === 'PAGAMENTOS' ? '#0f766e' : 'transparent', color: activeTab === 'PAGAMENTOS' ? '#fff' : '#64748b', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
-          >
-            <FileText size={18} /> Relatorios & Pagamentos
-          </button>
-        )}
-        {isAdmin && (
-          <button 
-            onClick={() => setActiveTab('RELATORIO_GERAL')}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', backgroundColor: activeTab === 'RELATORIO_GERAL' ? '#7c3aed' : 'transparent', color: activeTab === 'RELATORIO_GERAL' ? '#fff' : '#64748b', fontWeight: 'bold', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
-          >
-            <BarChart3 size={18} /> Relatorio Geral
+            <FileBarChart size={18} /> Relatórios
           </button>
         )}
         {visibleTabs.includes('EQUIPE') && (
@@ -190,11 +166,24 @@ export const Motoboys = () => {
       </div>
 
       {activeTab === 'PONTO' && <TimeTracking {...hookData} userRole={user?.role} dataFiltro={dataFiltro} setDataFiltro={setDataFiltro} />}
-      {isAdmin && activeTab === 'ROTAS' && <RouteManager {...hookData} dataFiltro={dataFiltro} setDataFiltro={setDataFiltro} />}
-      {activeTab === 'RELATORIOS' && <MotoboyReports user={user} motoboys={hookData.motoboys} />}
-      {isAdmin && activeTab === 'PAGAMENTOS' && <MotoboyPayrollReport user={user} motoboys={hookData.motoboys} />}
-      {isAdmin && activeTab === 'RELATORIO_GERAL' && <MotoboyGeneralReport user={user} motoboys={hookData.motoboys} />}
-      
+      {activeTab === 'RELATORIOS' && (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div role="tablist" aria-label="Tipos de relatórios" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {[
+              ['ESPELHO', 'Espelho de ponto', FileBarChart],
+              ...(isAdmin ? [['PAGAMENTOS', 'Resumo de pagamentos', FileText], ['GERAL', 'Consolidado da equipe', BarChart3]] : [])
+            ].map(([value, label, Icon]) => (
+              <button key={value} role="tab" aria-selected={activeReport === value} onClick={() => setActiveReport(value)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, background: activeReport === value ? 'var(--color-primary)' : '#fff', color: activeReport === value ? '#fff' : '#475569' }}>
+                <Icon size={17} />{label}
+              </button>
+            ))}
+          </div>
+          {activeReport === 'ESPELHO' && <MotoboyReports user={user} motoboys={hookData.motoboys} />}
+          {isAdmin && activeReport === 'PAGAMENTOS' && <MotoboyPayrollReport user={user} motoboys={hookData.motoboys} />}
+          {isAdmin && activeReport === 'GERAL' && <MotoboyGeneralReport user={user} motoboys={hookData.motoboys} />}
+        </div>
+      )}
       {activeTab === 'EQUIPE' && (
         <Card title="Motoboys Cadastrados" icon={Users}>
           <Table 

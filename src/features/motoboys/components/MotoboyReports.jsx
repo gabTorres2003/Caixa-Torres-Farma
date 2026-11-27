@@ -5,17 +5,7 @@ import { FileBarChart, Printer, Download } from 'lucide-react'
 import { SupabaseMotoboyRepository } from '../../../infrastructure/supabase/repositories/SupabaseMotoboyRepository'
 import { BalcaoHolidayRepository } from '../../../infrastructure/supabase/repositories/BalcaoHolidayRepository'
 import { generateMotoboyPdf } from '../../../core/utils/pdfGenerator'
-import { calculateDay, formatMinutesClock } from '../utils/attendance'
-
-const getLocalDateStr = (isoString) => {
-  const d = new Date(isoString)
-  const tzOffset = d.getTimezoneOffset() * 60000
-  return new Date(d.getTime() - tzOffset).toISOString().split('T')[0]
-}
-
-const getLocalTimeStr = (isoString) => {
-  return new Date(isoString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
+import { calculateDay, formatMinutesClock, getAttendanceStatusLabel, getLocalDateStr } from '../utils/attendance'
 
 export const MotoboyReports = ({ user, motoboys }) => {
   const [selectedMotoboy, setSelectedMotoboy] = useState('')
@@ -71,21 +61,6 @@ export const MotoboyReports = ({ user, motoboys }) => {
     if (dia === 6 && horarios.sabado) return horarios.sabado
     if (horarios.semana) return horarios.semana
     return horarios.semana || horarios.sabado || horarios.domingo || 'NÃO INFORMADO'
-  }
-
-  const obterStatusDoDia = (dayString, recordsOfDay) => {
-    if (recordsOfDay.some(r => r.tipo_registro === 'FERIAS')) return 'FÉRIAS'
-    if (recordsOfDay.some(r => r.tipo_registro === 'ATESTADO')) return 'ATESTADO'
-    if (recordsOfDay.some(r => r.tipo_registro === 'FOLGA')) return 'FOLGA'
-    if (recordsOfDay.some(r => r.tipo_registro === 'TROCA_DE_ESCALA')) return 'TROCA DE ESCALA'
-    if (recordsOfDay.some(r => r.tipo_registro === 'FOLGA_FERIADO')) return 'FOLGA FERIADO'
-    if (recordsOfDay.some(r => r.tipo_registro === 'FALTA')) return 'FALTA'
-    if (recordsOfDay.some(r => r.tipo_registro === 'ENTRADA' || r.tipo_registro === 'SAIDA')) return null
-
-    const dia = new Date(`${dayString}T00:00:00`).getDay()
-    if (dia === 0 || dia === 6) return 'FOLGA'
-
-    return 'FALTA'
   }
 
   const handleGenerateReport = async () => {
@@ -168,30 +143,20 @@ export const MotoboyReports = ({ user, motoboys }) => {
               storedSchedule: reportData.motoboy.horario_trabalho,
               holiday: holidayForMotoboy
             })
-            statusDoDia = dayData.status === 'FERIAS' ? 'FÉRIAS'
-              : dayData.status === 'ATESTADO' ? 'ATESTADO'
-                : dayData.status === 'FOLGA_FERIADO' ? 'FOLGA FERIADO'
-                  : dayData.status === 'TROCA_DE_ESCALA' ? 'TROCA DE ESCALA'
-                    : dayData.status === 'FOLGA' ? 'FOLGA'
-                      : dayData.status === 'FALTA' ? 'FALTA'
-                        : null;
+            statusDoDia = dayData.status ? getAttendanceStatusLabel(dayData.status) : null
             balanceDoDia = dayData.balance;
-            
-            const entradas = recordsOfDay.filter(t => t.tipo_registro === 'ENTRADA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
-            const saidas = recordsOfDay.filter(t => t.tipo_registro === 'SAIDA').sort((a,b) => new Date(a.registro_time) - new Date(b.registro_time));
 
-            if (entradas.length > 0) entradaTime = getLocalTimeStr(entradas[0].registro_time);
-            if (saidas.length > 0) saidaTime = getLocalTimeStr(saidas[saidas.length - 1].registro_time);
+            if (dayData.realEntry != null) entradaTime = formatMinutesClock(dayData.realEntry)
+            if (dayData.realExit != null) saidaTime = formatMinutesClock(dayData.realExit)
 
-            if (statusDoDia) {
+            if (statusDoDia === 'REGISTRO INCOMPLETO') {
+                if (dayData.realEntry != null) saidaTime = statusDoDia
+                else entradaTime = statusDoDia
+            } else if (statusDoDia) {
                 entradaTime = statusDoDia;
                 saidaTime = statusDoDia;
             }
 
-            if (statusDoDia === 'FALTA') {
-                entradaTime = 'FALTA';
-                saidaTime = 'FALTA';
-            }
         }
 
         rowsHtml += `
@@ -199,7 +164,7 @@ export const MotoboyReports = ({ user, motoboys }) => {
                 <td class="bold">${i}</td>
                 <td>${entradaTime}</td>
                 <td>${saidaTime}</td>
-            <td>${statusDoDia ? '00:00' : formatMinutesClock(balanceDoDia)}</td>
+            <td>${formatMinutesClock(balanceDoDia)}</td>
         </tr>
         `;
     }
